@@ -28,17 +28,11 @@ typedef struct OptionInfo_t {
     const char*     help;
 } OptionInfo;
 
-typedef struct data_crc_t {
-    RK_U32          len;
-    RK_U32          sum_cnt;
-    RK_ULONG        *sum;
-    RK_U32          vor; // value of the xor
-} DataCrc;
+typedef void* DataCrc;
+typedef void* FrmCrc;
 
-typedef struct frame_crc_t {
-    DataCrc         luma;
-    DataCrc         chroma;
-} FrmCrc;
+typedef void* DataCrcStb;
+typedef void* FrmCrcStb;
 
 #define show_options(opt) \
     do { \
@@ -57,13 +51,29 @@ extern "C" {
 void _show_options(int count, OptionInfo *options);
 void dump_mpp_frame_to_file(MppFrame frame, FILE *fp);
 
-void calc_data_crc(RK_U8 *dat, RK_U32 len, DataCrc *crc);
-void write_data_crc(FILE *fp, DataCrc *crc);
-void read_data_crc(FILE *fp, DataCrc *crc);
+MPP_RET crc_data_init(DataCrc *ctx);
+MPP_RET crc_data_deinit(DataCrc *ctx);
+MPP_RET crc_data_calc(DataCrc ctx, RK_U8 *dat, RK_U32 len);
+MPP_RET crc_data_write(DataCrc ctx, FILE *fp);
+MPP_RET crc_data_read(DataCrc ctx, FILE *fp);
 
-void calc_frm_crc(MppFrame frame, FrmCrc *crc);
-void write_frm_crc(FILE *fp, FrmCrc *crc);
-void read_frm_crc(FILE *fp, FrmCrc *crc);
+MPP_RET crc_frm_init(FrmCrc *ctx);
+MPP_RET crc_frm_deinit(FrmCrc *ctx);
+MPP_RET crc_frm_calc(FrmCrc ctx, MppFrame frame);
+MPP_RET crc_frm_write(FrmCrc ctx, FILE *fp);
+MPP_RET crc_frm_read(FrmCrc ctx, FILE *fp);
+
+MPP_RET crc_data_stb_init(DataCrcStb *ctx);
+MPP_RET crc_data_stb_deinit(DataCrcStb *ctx);
+MPP_RET crc_data_stb_calc(DataCrcStb ctx, RK_U8 *dat, RK_U32 len);
+MPP_RET crc_data_stb_write(DataCrcStb ctx, FILE *fp);
+MPP_RET crc_data_stb_read(DataCrcStb ctx, FILE *fp);
+
+MPP_RET crc_frm_stb_init(FrmCrcStb *ctx);
+MPP_RET crc_frm_stb_deinit(FrmCrcStb *ctx);
+MPP_RET crc_frm_stb_calc(FrmCrcStb ctx, MppFrame frame);
+MPP_RET crc_frm_stb_write(FrmCrcStb ctx, FILE *fp);
+MPP_RET crc_frm_stb_read(FrmCrcStb ctx, FILE *fp);
 
 MPP_RET read_image(RK_U8 *buf, FILE *fp, RK_U32 width, RK_U32 height,
                    RK_U32 hor_stride, RK_U32 ver_stride,

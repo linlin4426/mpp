@@ -59,7 +59,7 @@ static int dec_loop(MpiDecLoopData *data)
     MppPacket packet = data->packet;
     FileBufSlot *slot = NULL;
     RK_U32 quiet = data->quiet;
-    FrmCrc *checkcrc = &data->checkcrc;
+    FrmCrc checkcrc = data->checkcrc;
 
     // when packet size is valid read the input binary file
     ret = reader_read(cmd->reader, &slot);
@@ -199,8 +199,8 @@ static int dec_loop(MpiDecLoopData *data)
                     dump_mpp_frame_to_file(frame, data->fp_output);
 
                 if (data->fp_verify) {
-                    calc_frm_crc(frame, checkcrc);
-                    write_frm_crc(data->fp_verify, checkcrc);
+                    crc_frm_calc(checkcrc, frame);
+                    crc_frm_write(checkcrc, data->fp_verify);
                 }
 
                 fps_calc_inc(cmd->fps);
@@ -277,9 +277,7 @@ void *thread_decode(void *arg)
     MpiDecLoopData *data = (MpiDecLoopData *)arg;
     RK_S64 t_s, t_e;
 
-    memset(&data->checkcrc, 0, sizeof(data->checkcrc));
-    data->checkcrc.luma.sum = mpp_malloc(RK_ULONG, 512);
-    data->checkcrc.chroma.sum = mpp_malloc(RK_ULONG, 512);
+    crc_frm_init(&data->checkcrc);
 
     t_s = mpp_time();
 
@@ -295,8 +293,7 @@ void *thread_decode(void *arg)
             data->frame_count, (RK_S64)(data->elapsed_time / 1000),
             (RK_S32)(data->delay / 1000), data->frame_rate);
 
-    MPP_FREE(data->checkcrc.luma.sum);
-    MPP_FREE(data->checkcrc.chroma.sum);
+    crc_frm_deinit(&data->checkcrc);
 
     return NULL;
 }

@@ -28,9 +28,39 @@
 #include "mpp_common.h"
 #include "utils.h"
 
+#define CRC_SUB_BUF_SZ (sizeof(RK_ULONG) * 512)
 #define MAX_HALF_WORD_SUM_CNT \
     ((RK_ULONG)((0-1) / ((1UL << ((__SIZEOF_POINTER__ * 8) / 2)) - 1)))
 #define CAL_BYTE (__SIZEOF_POINTER__ >> 1)
+
+#define CRC_RES_LEN  3
+
+typedef RK_U32 SLT_BASE_TYPE;
+
+typedef struct DataCrcImpl_t {
+    RK_U32          len;
+    RK_U32          sum_cnt;
+    RK_U32          buf_size;
+    RK_ULONG        *sum;
+    RK_U32          vor; // value of the xor
+} DataCrcImpl;
+
+typedef struct FrmCrcImpl_t {
+    DataCrcImpl         luma;
+    DataCrcImpl         chroma;
+} FrmCrcImpl;
+
+typedef struct DataCrcStbImpl_t {
+    RK_U32          len;
+    RK_U32          sum_consume;
+    SLT_BASE_TYPE   sum[CRC_RES_LEN];
+    RK_U32          vor; // value of the xor
+} DataCrcStbImpl;
+
+typedef struct FrmCrcStbImpl_t {
+    DataCrcStbImpl      luma;
+    DataCrcStbImpl      chroma;
+} FrmCrcStbImpl;
 
 void _show_options(int count, OptionInfo *options)
 {
@@ -302,21 +332,72 @@ void wide_bit_sum(RK_U8 *data, RK_U32 len, RK_ULONG *sum)
     return;
 }
 
-void calc_data_crc(RK_U8 *dat, RK_U32 len, DataCrc *crc)
+MPP_RET crc_data_init(DataCrc *ctx)
+{
+    DataCrcImpl *p = NULL;
+    RK_U32 size = sizeof(DataCrcImpl) + CRC_SUB_BUF_SZ;
+
+    *ctx = NULL;
+    p = mpp_calloc_size(DataCrcImpl, size);
+    if (p == NULL) {
+        mpp_loge_f("malloc DataCrcImpl failed, size:%d\n", size);
+        return MPP_ERR_MALLOC;
+    }
+
+    p->sum = (RK_ULONG *)(p + 1);
+    p->buf_size = CRC_SUB_BUF_SZ;
+    *ctx = p;
+
+    return MPP_OK;
+}
+
+MPP_RET crc_data_deinit(DataCrc *ctx)
+{
+    if (NULL == ctx) {
+        mpp_loge_f("invalid NULL pointer input\n");
+        return MPP_ERR_NULL_PTR;
+    }
+
+    MPP_FREE(*ctx);
+
+    return MPP_OK;
+}
+
+static MPP_RET crc_data_reset(DataCrc ctx)
+{
+    DataCrcImpl *p = (DataCrcImpl *)ctx;
+
+    p->len = 0;
+    p->sum_cnt = 0;
+    p->vor = 0;
+    memset(p->sum, 0, p->buf_size);
+
+    return MPP_OK;
+}
+
+MPP_RET crc_data_calc(DataCrc ctx, RK_U8 *dat, RK_U32 len)
 {
     RK_ULONG data_grp_byte_cnt = MAX_HALF_WORD_SUM_CNT * CAL_BYTE;
+    DataCrcImpl *p = (DataCrcImpl *)ctx;
     RK_U32 i = 0, grp_loop = 0;
     RK_U8 *dat8 = NULL;
     RK_U32 *dat32 = NULL;
     RK_U32 xor = 0;
 
+    if (NULL == p) {
+        mpp_loge_f("invalid NULL pointer input\n");
+        return MPP_ERR_NULL_PTR;
+    }
+
+    crc_data_reset(ctx);
+
     /*calc sum */
-    crc->sum_cnt = (len + data_grp_byte_cnt - 1) / data_grp_byte_cnt;
+    p->sum_cnt = (len + data_grp_byte_cnt - 1) / data_grp_byte_cnt;
     for (grp_loop = 0; grp_loop < len / data_grp_byte_cnt; grp_loop++) {
-        wide_bit_sum(&dat[grp_loop * data_grp_byte_cnt], data_grp_byte_cnt, &crc->sum[grp_loop]);
+        wide_bit_sum(&dat[grp_loop * data_grp_byte_cnt], data_grp_byte_cnt, &p->sum[grp_loop]);
     }
     if (len % data_grp_byte_cnt) {
-        wide_bit_sum(&dat[grp_loop * data_grp_byte_cnt], len % data_grp_byte_cnt, &crc->sum[grp_loop]);
+        wide_bit_sum(&dat[grp_loop * data_grp_byte_cnt], len % data_grp_byte_cnt, &p->sum[grp_loop]);
     }
 
     /*calc xor */
@@ -332,43 +413,116 @@ void calc_data_crc(RK_U8 *dat, RK_U32 len, DataCrc *crc)
         xor ^= val;
     }
 
-    crc->len = len;
-    crc->vor = xor;
+    p->len = len;
+    p->vor = xor;
+
+    return MPP_OK;
 }
 
-void write_data_crc(FILE *fp, DataCrc *crc)
+MPP_RET crc_data_write(DataCrc ctx, FILE *fp)
 {
+    DataCrcImpl *p = (DataCrcImpl *)ctx;
     RK_U32 loop = 0;
 
-    if (fp) {
-        fprintf(fp, "%08d,", crc->len);
-        for (loop = 0; loop < crc->sum_cnt; loop++) {
-            fprintf(fp, " %lx,", crc->sum[loop]);
-        }
-        fprintf(fp, " %08x\n", crc->vor);
-        fflush(fp);
+    if (NULL == p || NULL == fp) {
+        mpp_loge_f("invalid NULL pointer input\n");
+        return MPP_ERR_NULL_PTR;
     }
+
+    fprintf(fp, "%08u,", p->len);
+    fprintf(fp, " %u,", p->sum_cnt);
+    for (loop = 0; loop < p->sum_cnt; loop++) {
+        fprintf(fp, " %lx,", p->sum[loop]);
+    }
+    fprintf(fp, " %08x\n", p->vor);
+    fflush(fp);
+
+    return MPP_OK;
 }
 
-void read_data_crc(FILE *fp, DataCrc *crc)
+MPP_RET crc_data_read(DataCrc ctx, FILE *fp)
 {
+    DataCrcImpl *p = (DataCrcImpl *)ctx;
     RK_U32 loop = 0;
+    RK_S32 ret = 0;
 
-    if (fp) {
-        RK_S32 ret = 0;
-        ret = fscanf(fp, "%8d", &crc->len);
-        for (loop = 0; loop < crc->sum_cnt; loop++) {
-            ret |= fscanf(fp, "%lx", &crc->sum[loop]);
-        }
-        ret |= fscanf(fp, "%08x", &crc->vor);
-        if (ret == EOF)
-            mpp_err_f("unexpected EOF found\n");
+    if (NULL == p || NULL == fp) {
+        mpp_loge_f("invalid NULL pointer input\n");
+        return MPP_ERR_NULL_PTR;
     }
+
+    ret = fscanf(fp, "%u,", &p->len);
+    ret |= fscanf(fp, " %u,", &p->sum_cnt);
+    for (loop = 0; loop < p->sum_cnt; loop++) {
+        ret |= fscanf(fp, "%lx,", &p->sum[loop]);
+    }
+    ret |= fscanf(fp, "%08x,", &p->vor);
+    if (ret == EOF)
+        mpp_loge_f("unexpected EOF found\n");
+
+    return MPP_OK;
 }
 
-void calc_frm_crc(MppFrame frame, FrmCrc *crc)
+MPP_RET crc_frm_init(FrmCrc *ctx)
 {
+    FrmCrcImpl *p = NULL;
+    RK_U32 size = sizeof(FrmCrcImpl) + CRC_SUB_BUF_SZ * 2;
+
+    *ctx = NULL;
+    p = mpp_calloc_size(FrmCrcImpl, size);
+    if (NULL == p) {
+        mpp_loge_f("invalid NULL pointer input, size:%d\n", size);
+        return MPP_ERR_MALLOC;
+    }
+
+    p->luma.sum = (RK_ULONG *)(p + 1);
+    p->luma.buf_size = CRC_SUB_BUF_SZ;
+    p->chroma.sum = (RK_ULONG *)((RK_U8 *)p->luma.sum + CRC_SUB_BUF_SZ);
+    p->chroma.buf_size = CRC_SUB_BUF_SZ;
+
+    *ctx = p;
+
+    return MPP_OK;
+}
+
+MPP_RET crc_frm_deinit(FrmCrc *ctx)
+{
+    if (NULL == ctx) {
+        mpp_loge_f("invalid NULL pointer input\n");
+        return MPP_ERR_NULL_PTR;
+    }
+
+    MPP_FREE(*ctx);
+
+    return MPP_OK;
+}
+
+static MPP_RET crc_frm_reset(FrmCrc ctx)
+{
+    FrmCrcImpl *p = (FrmCrcImpl *)ctx;
+
+    p->luma.len = 0;
+    p->luma.sum_cnt = 0;
+    p->luma.vor = 0;
+    memset(p->luma.sum, 0, p->luma.buf_size);
+
+    p->chroma.len = 0;
+    p->chroma.sum_cnt = 0;
+    p->chroma.vor = 0;
+    memset(p->chroma.sum, 0, p->chroma.buf_size);
+
+    return MPP_OK;
+}
+
+MPP_RET crc_frm_calc(FrmCrc ctx, MppFrame frame)
+{
+    if (NULL == ctx) {
+        mpp_loge_f("invalid NULL pointer input\n");
+        return MPP_ERR_NULL_PTR;
+    }
+
     RK_ULONG data_grp_byte_cnt = MAX_HALF_WORD_SUM_CNT * CAL_BYTE;
+    FrmCrcImpl *p = (FrmCrcImpl *)ctx;
     RK_U32 grp_line_cnt = 0;
     RK_U32 grp_cnt = 0;
 
@@ -379,103 +533,582 @@ void calc_frm_crc(MppFrame frame, FrmCrc *crc)
 
     RK_U32 width  = mpp_frame_get_width(frame);
     RK_U32 height = mpp_frame_get_height(frame);
-    RK_U32 stride = mpp_frame_get_hor_stride(frame);
+    RK_U32 v_stride = mpp_frame_get_ver_stride(frame);
+    RK_U32 h_stride = mpp_frame_get_hor_stride(frame);
     RK_U8 *buf = (RK_U8 *)mpp_buffer_get_ptr(mpp_frame_get_buffer(frame));
+    MppFrameFormat raw_fmt = mpp_frame_get_fmt(frame);
+    MppFrameFormat fmt = raw_fmt & MPP_FRAME_FMT_MASK;
+    RK_U32 depth = MPP_FRAME_FMT_IS_YUV_10BIT(fmt) ? 10 : 8;
+    RK_U32 width_byte = 0;
+    RK_U32 height_byte = 0;
+    RK_U32 luma_height_grp = 0;
+    RK_U32 luma_height_rest = 0;
+    RK_U32 chrome_height_grp = 0;
+    RK_U32 chrome_height_rest = 0;
 
-    grp_line_cnt = data_grp_byte_cnt / ((width + CAL_BYTE - 1) / CAL_BYTE * CAL_BYTE);
+    crc_frm_reset(ctx);
 
     /* luma */
-    grp_cnt = (height + grp_line_cnt - 1) / grp_line_cnt;
-    crc->luma.sum_cnt = grp_cnt;
+    width_byte = width * depth / 8;
+    height_byte = height;
+    grp_line_cnt = data_grp_byte_cnt / MPP_ALIGN(width_byte, CAL_BYTE);
+    luma_height_grp = height_byte / grp_line_cnt * grp_line_cnt;
+    luma_height_rest = height_byte % grp_line_cnt;
+
+    grp_cnt = (height_byte + grp_line_cnt - 1) / grp_line_cnt;
+    p->luma.sum_cnt = grp_cnt;
 
     dat8 = buf;
-    for (y = 0; y <  height / grp_line_cnt * grp_line_cnt; y++) {
-        wide_bit_sum(&dat8[y * stride], width, &crc->luma.sum[y / grp_line_cnt]);
-    }
-    if (height % grp_line_cnt) {
-        for (y = height / grp_line_cnt * grp_line_cnt; y < height; y++) {
-            wide_bit_sum(&dat8[y * stride], width, &crc->luma.sum[y / grp_line_cnt]);
-        }
-    }
+    /* Complete Group */
+    for (y = 0; y <  luma_height_grp; y++)
+        wide_bit_sum(&dat8[y * h_stride], width_byte, &p->luma.sum[y / grp_line_cnt]);
+    /* The remaining rows */
+    for (y = luma_height_grp; y < luma_height_grp + luma_height_rest; y++)
+        wide_bit_sum(&dat8[y * h_stride], width_byte, &p->luma.sum[y / grp_line_cnt]);
 
+    /* vor */
     dat8 = buf;
-    for (y = 0; y < height; y++) {
-        dat32 = (RK_U32 *)&dat8[y * stride];
-        for (x = 0; x < width / 4; x++)
+    for (y = 0; y < height_byte; y++) {
+        dat32 = (RK_U32 *)&dat8[y * h_stride];
+        for (x = 0; x < width_byte / 4; x++)
             xor ^= dat32[x];
     }
-    crc->luma.len = height * width;
-    crc->luma.vor = xor;
+    p->luma.len = height_byte * width_byte;
+    p->luma.vor = xor;
 
     /* chroma */
-    grp_cnt = (height / 2 + grp_line_cnt - 1) / grp_line_cnt;
-    crc->chroma.sum_cnt = grp_cnt;
-
-    dat8 = buf + height * stride;
-    for (y = 0; y <  height / 2 / grp_line_cnt * grp_line_cnt; y++) {
-        wide_bit_sum(&dat8[y * stride], width, &crc->chroma.sum[y / grp_line_cnt]);
+    switch (fmt) {
+    case MPP_FMT_YUV400: {
+        /* no chroma plane, skip */
+        return MPP_OK;
+    } break;
+    case MPP_FMT_YUV420SP:
+    case MPP_FMT_YUV420SP_10BIT: {
+        width_byte = width * depth / 8;
+        height_byte = height / 2;
+    } break;
+    case MPP_FMT_YUV422SP:
+    case MPP_FMT_YUV422SP_10BIT: {
+        width_byte = width * depth / 8;
+        height_byte = height;
+    } break;
+    case MPP_FMT_YUV444SP:
+    case MPP_FMT_YUV444SP_10BIT: {
+        width_byte = width * depth / 8 * 2;
+        height_byte = height;
+    } break;
+    default: {
+        mpp_loge_f("frame crc calc: unsupported format %x", fmt);
+        return MPP_NOK;
+    } break;
     }
-    if (height / 2 % grp_line_cnt) {
-        for (y = height / 2 / grp_line_cnt * grp_line_cnt; y < height / 2; y++) {
-            wide_bit_sum(&dat8[y * stride], width, &crc->chroma.sum[y / grp_line_cnt]);
-        }
-    }
+    grp_line_cnt = data_grp_byte_cnt / MPP_ALIGN(width_byte, CAL_BYTE);
+    chrome_height_grp = height_byte / grp_line_cnt * grp_line_cnt;
+    chrome_height_rest = height_byte % grp_line_cnt;
 
-    dat8 = buf + height * stride;
-    for (y = 0; y < height / 2; y++) {
-        dat32 = (RK_U32 *)&dat8[y * stride];
-        for (x = 0; x < width / 4; x++)
+    grp_cnt = (height_byte + grp_line_cnt - 1) / grp_line_cnt;
+    p->chroma.sum_cnt = grp_cnt;
+
+    dat8 = buf + v_stride * h_stride;
+    /* Complete Group */
+    for (y = 0; y <  chrome_height_grp; y++)
+        wide_bit_sum(&dat8[y * h_stride], width_byte, &p->chroma.sum[y / grp_line_cnt]);
+    /* The remaining rows */
+    for (y = chrome_height_grp; y < chrome_height_grp + chrome_height_rest; y++)
+        wide_bit_sum(&dat8[y * h_stride], width_byte, &p->chroma.sum[y / grp_line_cnt]);
+
+    /* vor */
+    xor = 0;
+    dat8 = buf + v_stride * h_stride;
+    for (y = 0; y < height_byte; y++) {
+        dat32 = (RK_U32 *)&dat8[y * h_stride];
+        for (x = 0; x < width_byte / 4; x++)
             xor ^= dat32[x];
     }
-    crc->chroma.len = height * width / 2;
-    crc->chroma.vor = xor;
+    p->chroma.len = height_byte * width_byte;
+    p->chroma.vor = xor;
+
+    return MPP_OK;
 }
 
-void write_frm_crc(FILE *fp, FrmCrc *crc)
+MPP_RET crc_frm_write(FrmCrc ctx, FILE *fp)
 {
+    FrmCrcImpl *p = (FrmCrcImpl *)ctx;
     RK_U32 loop = 0;
 
-    if (fp) {
-        // luma
-        fprintf(fp, "%d,", crc->luma.len);
-        for (loop = 0; loop < crc->luma.sum_cnt; loop++) {
-            fprintf(fp, " %lx,", crc->luma.sum[loop]);
-        }
-        fprintf(fp, " %08x,", crc->luma.vor);
+    if (NULL == p || NULL == fp) {
+        mpp_loge_f("invalid NULL pointer input\n");
+        return MPP_ERR_NULL_PTR;
+    }
 
-        // chroma
-        fprintf(fp, " %d,", crc->chroma.len);
-        for (loop = 0; loop < crc->chroma.sum_cnt; loop++) {
-            fprintf(fp, " %lx,", crc->chroma.sum[loop]);
-        }
-        fprintf(fp, " %08x\n", crc->chroma.vor);
+    // luma
+    fprintf(fp, "%u,", p->luma.len);
+    fprintf(fp, " %u,", p->luma.sum_cnt);
+    for (loop = 0; loop < p->luma.sum_cnt; loop++) {
+        fprintf(fp, " %lx,", p->luma.sum[loop]);
+    }
+    fprintf(fp, " %08x,", p->luma.vor);
 
-        fflush(fp);
+    // chroma
+    fprintf(fp, " %u,", p->chroma.len);
+    fprintf(fp, " %u,", p->chroma.sum_cnt);
+    for (loop = 0; loop < p->chroma.sum_cnt; loop++) {
+        fprintf(fp, " %lx,", p->chroma.sum[loop]);
+    }
+    fprintf(fp, " %08x\n", p->chroma.vor);
+
+    fflush(fp);
+
+    return MPP_OK;
+}
+
+MPP_RET crc_frm_read(FrmCrc ctx, FILE *fp)
+{
+    FrmCrcImpl *p = (FrmCrcImpl *)ctx;
+    RK_U32 loop = 0;
+    RK_S32 ret = 0;
+
+    if (NULL == p || NULL == fp) {
+        mpp_loge_f("invalid NULL pointer input\n");
+        return MPP_ERR_NULL_PTR;
+    }
+
+    // luma
+    ret = fscanf(fp, "%u,", &p->luma.len);
+    ret |= fscanf(fp, " %u,", &p->luma.sum_cnt);
+    for (loop = 0; loop < p->luma.sum_cnt; loop++) {
+        ret |= fscanf(fp, " %lx,", &p->luma.sum[loop]);
+    }
+    ret |= fscanf(fp, " %08x,", &p->luma.vor);
+
+    // chroma
+    ret |= fscanf(fp, " %u,", &p->chroma.len);
+    ret |= fscanf(fp, " %u,", &p->chroma.sum_cnt);
+    for (loop = 0; loop < p->chroma.sum_cnt; loop++) {
+        ret |= fscanf(fp, " %lx,", &p->chroma.sum[loop]);
+    }
+    ret |= fscanf(fp, " %08x\n", &p->chroma.vor);
+
+    if (ret == EOF)
+        mpp_loge_f("unexpected EOF found\n");
+
+    return MPP_OK;
+}
+
+static MPP_RET calc_carry(SLT_BASE_TYPE *res, RK_S32 res_cap_cnt, RK_S32 *consume)
+{
+    SLT_BASE_TYPE old_val;
+
+    (*consume)++;
+    if (*consume <= res_cap_cnt) {
+        res++;
+        old_val = *res;
+        (*res)++;
+        if (*res < old_val) {
+            /* Handling new carry */
+            return calc_carry(res, res_cap_cnt, consume);
+        } else {
+            /* normal finish */
+            return MPP_OK;
+        }
+    } else {
+        /* res_cap_cnt is not enough */
+        mpp_loge_f("res_cap_cnt is not enough cap:%d consume:%d\n", res_cap_cnt, *consume);
+        return MPP_NOK;
     }
 }
 
-void read_frm_crc(FILE *fp, FrmCrc *crc)
+static MPP_RET calc_sum_with_carry(unsigned char *data8_list, RK_U32 byte_len,
+                                   SLT_BASE_TYPE *res, RK_S32 res_cap_cnt, RK_U32 *consume)
 {
+    SLT_BASE_TYPE *data = (SLT_BASE_TYPE *)data8_list;
+    RK_U32 loop, ret;
+    RK_U32 loop_cnt = byte_len / sizeof(SLT_BASE_TYPE);
+    SLT_BASE_TYPE remain_data = 0;
+    SLT_BASE_TYPE old_val;
+    RK_S32 cur_consume = 0;
+    RK_S32 max_consume = 0;
+
+    for (loop = 0; loop < loop_cnt; loop++) {
+        old_val = *res;
+        *res += *data++;
+        cur_consume = 1;
+        if (*res < old_val) {
+            ret = calc_carry(res, res_cap_cnt, &cur_consume);
+            if (ret) {
+                mpp_loge_f("res space is not enough, cur:%d", res_cap_cnt);
+                return MPP_NOK;
+            }
+        }
+        max_consume = cur_consume > max_consume ? cur_consume : max_consume;
+    }
+
+    if (byte_len % sizeof(SLT_BASE_TYPE)) {
+        memcpy(&remain_data, data, byte_len % sizeof(SLT_BASE_TYPE));
+        old_val = *res;
+        *res += remain_data;
+        cur_consume = 1;
+        if (*res < old_val) {
+            ret = calc_carry(res, res_cap_cnt, &cur_consume);
+            if (ret) {
+                mpp_loge_f("res space is not enough, cur:%d", res_cap_cnt);
+                return MPP_NOK;
+            }
+        }
+        max_consume = cur_consume > max_consume ? cur_consume : max_consume;
+    }
+
+    *consume = max_consume;
+
+    return MPP_OK;
+}
+
+MPP_RET crc_data_stb_init(DataCrcStb *ctx)
+{
+    DataCrcStbImpl *p = NULL;
+    RK_U32 size = sizeof(DataCrcStbImpl);
+
+    p = mpp_calloc_size(DataCrcStbImpl, size);
+    if (p == NULL) {
+        mpp_loge_f("malloc DataCrcStbImpl failed, size:%d\n", size);
+        return MPP_ERR_MALLOC;
+    }
+
+    *ctx = p;
+
+    return MPP_OK;
+}
+
+MPP_RET crc_data_stb_deinit(DataCrcStb *ctx)
+{
+    if (NULL == ctx) {
+        mpp_loge_f("invalid NULL pointer input\n");
+        return MPP_ERR_NULL_PTR;
+    }
+
+    MPP_FREE(*ctx);
+
+    return MPP_OK;
+}
+
+static MPP_RET crc_data_stb_reset(DataCrcStb ctx)
+{
+    DataCrcStbImpl *p = (DataCrcStbImpl *)ctx;
+
+    p->len = 0;
+    p->sum_consume = 0;
+    p->vor = 0;
+    memset(p->sum, 0, CRC_RES_LEN * sizeof(SLT_BASE_TYPE));
+
+    return MPP_OK;
+}
+
+MPP_RET crc_data_stb_calc(DataCrcStb ctx, RK_U8 *dat, RK_U32 len)
+{
+    DataCrcStbImpl *p = (DataCrcStbImpl *)ctx;
+    RK_U8 *dat8 = NULL;
+    RK_U32 *dat32 = NULL;
+    RK_U32 xor = 0;
+    RK_U32 i = 0;
+
+    if (NULL == p) {
+        mpp_loge_f("invalid crc data context");
+        return MPP_ERR_NULL_PTR;
+    }
+
+    crc_data_stb_reset(ctx);
+
+    /*calc sum */
+    memset(p->sum, 0, sizeof(p->sum));
+    p->sum_consume = 0;
+    if (calc_sum_with_carry(dat, len, p->sum, CRC_RES_LEN, &p->sum_consume)) {
+        mpp_loge_f("calc crc sum error!\n");
+        return MPP_ERR_VALUE;
+    }
+
+    /*calc xor */
+    dat32 = (RK_U32 *)dat;
+    for (i = 0; i < len / 4; i++)
+        xor ^= dat32[i];
+
+    if (len % 4) {
+        RK_U32 val = 0;
+        dat8 = (RK_U8 *)&val;
+        for (i = (len / 4) * 4; i < len; i++)
+            dat8[i % 4] = dat[i];
+        xor ^= val;
+    }
+
+    p->len = len;
+    p->vor = xor;
+
+    return MPP_OK;
+}
+
+MPP_RET crc_data_stb_write(DataCrcStb ctx, FILE *fp)
+{
+    DataCrcStbImpl *p = (DataCrcStbImpl *)ctx;
     RK_U32 loop = 0;
 
-    if (fp) {
-        RK_S32 ret = 0;
-        // luma
-        ret = fscanf(fp, "%d", &crc->luma.len);
-        for (loop = 0; loop < crc->luma.sum_cnt; loop++) {
-            ret |= fscanf(fp, "%lx", &crc->luma.sum[loop]);
-        }
-        ret |= fscanf(fp, "%08x", &crc->luma.vor);
-
-        // chroma
-        ret |= fscanf(fp, "%d", &crc->chroma.len);
-        for (loop = 0; loop < crc->chroma.sum_cnt; loop++) {
-            ret |= fscanf(fp, "%lx", &crc->chroma.sum[loop]);
-        }
-        ret |= fscanf(fp, "%08x", &crc->chroma.vor);
-        if (ret == EOF)
-            mpp_err_f("unexpected EOF found\n");
+    if (NULL == p || NULL == fp) {
+        mpp_loge_f("invalid crc data context");
+        return MPP_ERR_NULL_PTR;
     }
+
+    fprintf(fp, "%08u,", p->len);
+    fprintf(fp, " %u,", p->sum_consume);
+    for (loop = 0; loop < p->sum_consume; loop++) {
+        fprintf(fp, " %x,", p->sum[loop]);
+    }
+    fprintf(fp, " %08x\n", p->vor);
+    fflush(fp);
+
+    return MPP_OK;
+}
+
+MPP_RET crc_data_stb_read(DataCrcStb ctx, FILE *fp)
+{
+    DataCrcStbImpl *p = (DataCrcStbImpl *)ctx;
+    RK_U32 loop = 0;
+    RK_S32 ret = 0;
+
+    if (NULL == p || NULL == fp) {
+        mpp_loge_f("invalid crc data context");
+        return MPP_ERR_NULL_PTR;
+    }
+
+    ret = fscanf(fp, "%u,", &p->len);
+    ret |= fscanf(fp, " %u,", &p->sum_consume);
+    if (p->sum_consume > CRC_RES_LEN) {
+        mpp_loge_f("crc sum consume %d > %d", p->sum_consume, CRC_RES_LEN);
+        return MPP_NOK;
+    }
+    for (loop = 0; loop < p->sum_consume; loop++) {
+        ret |= fscanf(fp, "%x,", &p->sum[loop]);
+    }
+    ret |= fscanf(fp, "%08x,", &p->vor);
+    if (ret == EOF) {
+        mpp_loge_f("unexpected EOF found\n");
+        return MPP_NOK;
+    }
+
+    return MPP_OK;
+}
+
+MPP_RET crc_frm_stb_init(FrmCrcStb *ctx)
+{
+    FrmCrcStbImpl *p = NULL;
+    RK_U32 size = sizeof(FrmCrcStbImpl);
+
+    p = mpp_calloc_size(FrmCrcStbImpl, size);
+    if (NULL == p) {
+        mpp_loge_f("invalid NULL pointer input, size:%d\n", size);
+        return MPP_ERR_MALLOC;
+    }
+
+    *ctx = p;
+
+    return MPP_OK;
+}
+
+MPP_RET crc_frm_stb_deinit(FrmCrcStb *ctx)
+{
+    if (NULL == ctx) {
+        mpp_loge_f("invalid NULL pointer input\n");
+        return MPP_ERR_NULL_PTR;
+    }
+
+    MPP_FREE(*ctx);
+
+    return MPP_OK;
+}
+
+static MPP_RET crc_frm_stb_reset(FrmCrcStb ctx)
+{
+    FrmCrcStbImpl *p = (FrmCrcStbImpl *)ctx;
+
+    p->luma.len = 0;
+    p->luma.sum_consume = 0;
+    p->luma.vor = 0;
+    memset(p->luma.sum, 0, CRC_RES_LEN * sizeof(SLT_BASE_TYPE));
+
+    p->chroma.len = 0;
+    p->chroma.sum_consume = 0;
+    p->chroma.vor = 0;
+    memset(p->chroma.sum, 0, CRC_RES_LEN * sizeof(SLT_BASE_TYPE));
+
+    return MPP_OK;
+}
+
+MPP_RET crc_frm_stb_calc(FrmCrcStb ctx, MppFrame frame)
+{
+    if (NULL == ctx) {
+        mpp_loge_f("invalid crc data context");
+        return MPP_ERR_NULL_PTR;
+    }
+
+    FrmCrcStbImpl *p = (FrmCrcStbImpl *)ctx;
+    RK_U32 y = 0, x = 0;
+    RK_U8 *dat8 = NULL;
+    RK_U32 *dat32 = NULL;
+    RK_U32 xor = 0;
+
+    RK_U32 width  = mpp_frame_get_width(frame);
+    RK_U32 height = mpp_frame_get_height(frame);
+    RK_U32 h_stride = mpp_frame_get_hor_stride(frame);
+    RK_U32 v_stride = mpp_frame_get_ver_stride(frame);
+    RK_U8 *buf = (RK_U8 *)mpp_buffer_get_ptr(mpp_frame_get_buffer(frame));
+    MppFrameFormat raw_fmt = mpp_frame_get_fmt(frame);
+    MppFrameFormat fmt = raw_fmt & MPP_FRAME_FMT_MASK;
+    RK_U32 depth = MPP_FRAME_FMT_IS_YUV_10BIT(fmt) ? 10 : 8;
+    RK_U32 width_byte = 0;
+    RK_U32 height_byte = 0;
+
+    crc_frm_stb_reset(ctx);
+
+    /* luma */
+    dat8 = buf;
+    width_byte = width * depth / 8;
+    height_byte = height;
+    memset(p->luma.sum, 0, sizeof(p->luma.sum));
+    p->luma.sum_consume = 0;
+    for (y = 0; y < height_byte; y++) {
+        if (calc_sum_with_carry(&dat8[y * h_stride], width_byte, p->luma.sum, CRC_RES_LEN,
+                                &p->luma.sum_consume)) {
+            mpp_loge_f("calc crc sum error!\n");
+            return MPP_NOK;
+        }
+    }
+
+    dat8 = buf;
+    for (y = 0; y < height_byte; y++) {
+        dat32 = (RK_U32 *)&dat8[y * h_stride];
+        for (x = 0; x < width_byte / 4; x++)
+            xor ^= dat32[x];
+    }
+    p->luma.len = height_byte * width_byte;
+    p->luma.vor = xor;
+
+    /* chroma */
+    switch (fmt) {
+    case MPP_FMT_YUV400: {
+        width_byte = 0;
+        height_byte = 0;
+    } break;
+    case MPP_FMT_YUV420SP:
+    case MPP_FMT_YUV420SP_10BIT: {
+        width_byte = width * depth / 8;
+        height_byte = height / 2;
+    } break;
+    case MPP_FMT_YUV422SP:
+    case MPP_FMT_YUV422SP_10BIT: {
+        width_byte = width * depth / 8;
+        height_byte = height;
+    } break;
+    case MPP_FMT_YUV444SP:
+    case MPP_FMT_YUV444SP_10BIT: {
+        width_byte = width * depth / 8 * 2;
+        height_byte = height;
+    } break;
+    default: {
+        mpp_logi_f("frame crc calc: unsupported format %x", fmt);
+        return MPP_NOK;
+    } break;
+    }
+    dat8 = buf + v_stride * h_stride;
+    memset(p->chroma.sum, 0, sizeof(p->chroma.sum));
+    p->chroma.sum_consume = 0;
+    for (y = 0; y < height_byte; y++) {
+        if (calc_sum_with_carry(&dat8[y * h_stride], width_byte, p->chroma.sum, CRC_RES_LEN,
+                                &p->chroma.sum_consume)) {
+            mpp_loge_f("calc crc sum error!\n");
+            return MPP_NOK;
+        }
+    }
+
+    dat8 = buf + v_stride * h_stride;
+    for (y = 0; y < height_byte; y++) {
+        dat32 = (RK_U32 *)&dat8[y * h_stride];
+        for (x = 0; x < width_byte / 4; x++)
+            xor ^= dat32[x];
+    }
+    p->chroma.len = height_byte * width_byte;
+    p->chroma.vor = xor;
+
+    return MPP_OK;
+}
+
+MPP_RET crc_frm_stb_write(FrmCrcStb ctx, FILE *fp)
+{
+    FrmCrcStbImpl *p = (FrmCrcStbImpl *)ctx;
+    RK_U32 loop = 0;
+
+    if (NULL == p || NULL == fp) {
+        mpp_loge_f("invalid crc data context");
+        return MPP_ERR_NULL_PTR;
+    }
+
+    // luma
+    fprintf(fp, "%u,", p->luma.len);
+    fprintf(fp, " %u,", p->luma.sum_consume);
+    for (loop = 0; loop < p->luma.sum_consume; loop++) {
+        fprintf(fp, " %x,", p->luma.sum[loop]);
+    }
+    fprintf(fp, " %08x,", p->luma.vor);
+
+    // chroma
+    fprintf(fp, " %u,", p->chroma.len);
+    fprintf(fp, " %u,", p->chroma.sum_consume);
+    for (loop = 0; loop < p->chroma.sum_consume; loop++) {
+        fprintf(fp, " %x,", p->chroma.sum[loop]);
+    }
+    fprintf(fp, " %08x\n", p->chroma.vor);
+
+    fflush(fp);
+
+    return MPP_OK;
+}
+
+MPP_RET crc_frm_stb_read(FrmCrcStb ctx, FILE *fp)
+{
+    FrmCrcStbImpl *p = (FrmCrcStbImpl *)ctx;
+    RK_U32 loop = 0;
+    RK_S32 ret = 0;
+
+    if (NULL == p || NULL == fp) {
+        mpp_loge_f("invalid crc data context");
+        return MPP_ERR_NULL_PTR;
+    }
+
+    // luma
+    ret = fscanf(fp, "%u,", &p->luma.len);
+    ret |= fscanf(fp, " %u,", &p->luma.sum_consume);
+    if (p->luma.sum_consume > CRC_RES_LEN) {
+        mpp_loge_f("luma crc sum consume %d > %d", p->luma.sum_consume, CRC_RES_LEN);
+        return MPP_NOK;
+    }
+    for (loop = 0; loop < p->luma.sum_consume; loop++) {
+        ret |= fscanf(fp, "%x,", &p->luma.sum[loop]);
+    }
+    ret |= fscanf(fp, "%08x,", &p->luma.vor);
+
+    // chroma
+    ret |= fscanf(fp, "%u,", &p->chroma.len);
+    ret |= fscanf(fp, " %u,", &p->chroma.sum_consume);
+    if (p->chroma.sum_consume > CRC_RES_LEN) {
+        mpp_loge_f("chroma crc sum consume %d > %d", p->chroma.sum_consume, CRC_RES_LEN);
+        return MPP_NOK;
+    }
+    for (loop = 0; loop < p->chroma.sum_consume; loop++) {
+        ret |= fscanf(fp, "%x,", &p->chroma.sum[loop]);
+    }
+    ret |= fscanf(fp, "%08x,", &p->chroma.vor);
+    if (ret == EOF) {
+        mpp_loge_f("unexpected EOF found\n");
+        return MPP_NOK;
+    }
+
+    return MPP_OK;
 }
 
 static MPP_RET read_with_pixel_width(RK_U8 *buf, RK_S32 width, RK_S32 height,

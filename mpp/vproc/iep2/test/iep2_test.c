@@ -225,8 +225,7 @@ void iep2_test(iep2_test_cfg *cfg)
         mpp_assert(0);
     }
 
-    memset(&checkcrc, 0, sizeof(checkcrc));
-    checkcrc.sum = mpp_malloc(RK_ULONG, 512);
+    crc_data_init(&checkcrc);
 
     mpp_buffer_get(memGroup, &srcbuf[0], srcfrmsize);
     mpp_buffer_get(memGroup, &srcbuf[1], srcfrmsize);
@@ -323,10 +322,10 @@ void iep2_test(iep2_test_cfg *cfg)
         iep2->ops->control(iep2->priv, IEP_CMD_RUN_SYNC, &dei_info);
 
         if (cfg->fp_slt) {
-            calc_data_crc(pdst[out_order], dstfrmsize, &checkcrc);
-            write_data_crc(cfg->fp_slt, &checkcrc);
-            calc_data_crc(pdst[1 - out_order], dstfrmsize, &checkcrc);
-            write_data_crc(cfg->fp_slt, &checkcrc);
+            crc_data_calc(&checkcrc, pdst[out_order], dstfrmsize);
+            crc_data_write(&checkcrc, cfg->fp_slt);
+            crc_data_calc(&checkcrc, pdst[1 - out_order], dstfrmsize);
+            crc_data_write(&checkcrc, cfg->fp_slt);
         }
 
         out_order = dei_info.dil_order == IEP2_FIELD_ORDER_BFF ? 1 : 0;
@@ -354,7 +353,7 @@ ret:
     mpp_buffer_put(dstbuf[0]);
     mpp_buffer_put(dstbuf[1]);
 
-    MPP_FREE(checkcrc.sum);
+    crc_data_deinit(&checkcrc);
 
     if (memGroup) {
         mpp_buffer_group_put(memGroup);

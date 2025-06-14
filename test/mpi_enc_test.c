@@ -136,8 +136,7 @@ MPP_RET test_mpp_run(MpiEncMultiCtxInfo *info)
     RK_U32 sse_unit_in_pixel = 0;
     RK_U32 soc_type;
 
-    memset(&checkcrc, 0, sizeof(checkcrc));
-    checkcrc.sum = mpp_malloc(RK_ULONG, 512);
+    crc_data_init(&checkcrc);
     soc_type = mpp_get_soc_type();
 
     if (p->type == MPP_VIDEO_CodingAVC || p->type == MPP_VIDEO_CodingHEVC) {
@@ -425,9 +424,9 @@ MPP_RET test_mpp_run(MpiEncMultiCtxInfo *info)
                     fwrite(ptr, 1, len, p->fp_output[chn]);
 
                 if (p->fp_verify && !p->pkt_eos) {
-                    calc_data_crc((RK_U8 *)ptr, (RK_U32)len, &checkcrc);
+                    crc_data_calc(&checkcrc, (RK_U8 *)ptr, (RK_U32)len);
                     mpp_log("p->frm_cnt_out=%d, len=%d\n", p->frm_cnt_out, len);
-                    write_data_crc(p->fp_verify, &checkcrc);
+                    crc_data_write(&checkcrc, p->fp_verify);
                 }
 
                 log_len += snprintf(log_buf + log_len, log_size - log_len,
@@ -508,7 +507,7 @@ MPP_RET test_mpp_run(MpiEncMultiCtxInfo *info)
             break;
     }
 RET:
-    MPP_FREE(checkcrc.sum);
+    crc_data_deinit(&checkcrc);
 
     return ret;
 }

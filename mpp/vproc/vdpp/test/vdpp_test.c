@@ -535,8 +535,7 @@ int vdpp_test(VdppComCtx *vdppCtx, VdppTestCfg *cfg)
     pyrSizes[1] = pyrWids[1] * pyrHgts[1];
     pyrSizes[2] = pyrWids[2] * pyrHgts[2];
 
-    memset(&checkcrc, 0, sizeof(checkcrc));
-    checkcrc.sum = mpp_malloc(RK_ULONG, 512);
+    crc_data_init(&checkcrc);
 
     srcfrmsize = get_src_frm_size(cfg->src_format, cfg->src_width_vir, cfg->src_height_vir);
     dstfrmsize = get_dst_frm_size(cfg->dst_fmt, cfg->dst_width_vir, cfg->dst_height_vir);
@@ -842,16 +841,16 @@ int vdpp_test(VdppComCtx *vdppCtx, VdppTestCfg *cfg)
         // write crc, DONOT modify the code here!
         if (cfg->fp_slt) {
             if (pdst && cfg->work_mode != VDPP_WORK_MODE_DCI) {
-                calc_data_crc(pdst, dstfrmsize, &checkcrc);
-                write_data_crc(cfg->fp_slt, &checkcrc);
+                crc_data_calc(&checkcrc, pdst, dstfrmsize);
+                crc_data_write(&checkcrc, cfg->fp_slt);
             }
             if (pdst_c && yuv_out_diff && cfg->work_mode != VDPP_WORK_MODE_DCI) {
-                calc_data_crc(pdst_c, dstfrmsize_c, &checkcrc);
-                write_data_crc(cfg->fp_slt, &checkcrc);
+                crc_data_calc(&checkcrc, pdst_c, dstfrmsize_c);
+                crc_data_write(&checkcrc, cfg->fp_slt);
             }
             if (phist) {
-                calc_data_crc(phist, DCI_HIST_SIZE, &checkcrc);
-                write_data_crc(cfg->fp_slt, &checkcrc);
+                crc_data_calc(&checkcrc, phist, DCI_HIST_SIZE);
+                crc_data_write(&checkcrc, cfg->fp_slt);
             }
         }
 
@@ -891,7 +890,7 @@ int vdpp_test(VdppComCtx *vdppCtx, VdppTestCfg *cfg)
     if (pyrbuf_l3)
         mpp_buffer_put(pyrbuf_l3);
 
-    MPP_FREE(checkcrc.sum);
+    crc_data_deinit(&checkcrc);
 
     if (memGroup) {
         mpp_buffer_group_put(memGroup);
