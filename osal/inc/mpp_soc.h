@@ -8,6 +8,11 @@
 
 #include "mpp_dev_defs.h"
 
+#define SOC_CAP_FBC_NONE       0
+#define SOC_CAP_AFBC_V1        (1 << 0)
+#define SOC_CAP_AFBC_V2        (1 << 1)
+#define SOC_CAP_RKFBC          (1 << 2)
+
 /* Do NOT use this outside MPP it may be changed in new version */
 typedef enum RockchipSocType_e {
     ROCKCHIP_SOC_AUTO,

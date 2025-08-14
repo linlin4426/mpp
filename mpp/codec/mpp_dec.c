@@ -76,11 +76,39 @@ static MPP_RET mpp_dec_check_fbc_cap(MppDecImpl *p)
     MppDecBaseCfg *base = &p->cfg->base;
 
     if (MPP_FRAME_FMT_IS_FBC(base->out_fmt)) {
-        RK_U32 fbc = (RK_U32)base->out_fmt & MPP_FRAME_FBC_MASK;
-        RK_U32 fmt = base->out_fmt - fbc;
+        RK_U32 fbc_s = (RK_U32)base->out_fmt & MPP_FRAME_FBC_MASK;
+        RK_U32 fmt = base->out_fmt - fbc_s;
+        RK_U32 fbc_d = 0;
 
-        if (p->hw_info && p->hw_info->cap_fbc)
-            fmt |= fbc;
+        if (!p->hw_info) {
+            base->out_fmt = (MppFrameFormat)fmt;
+            return MPP_OK;
+        }
+
+        if ((p->hw_info->cap_fbc << MPP_FRAME_FBC_SHIFT) & fbc_s) {
+            if (MPP_FRAME_FMT_IS_AFBC_V1(fbc_s))
+                fbc_d |= MPP_FRAME_FBC_AFBC_V1;
+            if (MPP_FRAME_FMT_IS_AFBC_V2(fbc_s))
+                fbc_d |= MPP_FRAME_FBC_AFBC_V2;
+            if (MPP_FRAME_FMT_IS_RKFBC(fbc_s))
+                fbc_d |= MPP_FRAME_FBC_RKFBC;
+
+            if ((MPP_FRAME_FMT_IS_AFBC_V1(fbc_d) || MPP_FRAME_FMT_IS_AFBC_V2(fbc_d))
+                && MPP_FRAME_FMT_IS_RKFBC(fbc_d)) {
+                mpp_err_f("can not support AFBC and RKFBC at the same time\n");
+                fbc_d = 0;
+            }
+        } else {
+            if (MPP_FRAME_FMT_IS_RKFBC(p->hw_info->cap_fbc << MPP_FRAME_FBC_SHIFT))
+                fbc_d = MPP_FRAME_FBC_RKFBC;
+            else if (MPP_FRAME_FMT_IS_AFBC_V2(p->hw_info->cap_fbc << MPP_FRAME_FBC_SHIFT))
+                fbc_d = MPP_FRAME_FBC_AFBC_V2;
+            else if (MPP_FRAME_FMT_IS_AFBC_V1(p->hw_info->cap_fbc << MPP_FRAME_FBC_SHIFT))
+                fbc_d = MPP_FRAME_FBC_AFBC_V1;
+            mpp_err_f("fbc not support, fbc_s 0x%x platform support 0x%x set to 0x%x\n",
+                      fbc_s, p->hw_info->cap_fbc << MPP_FRAME_FBC_SHIFT, fbc_d);
+        }
+        fmt |= fbc_d;
 
         base->out_fmt = (MppFrameFormat)fmt;
     }
