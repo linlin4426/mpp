@@ -158,11 +158,16 @@ typedef struct KmppObjDefImpl_t {
     /* properties */
     rk_s32 disable_mismatch_log;
 
+    struct list_head    ioc_list_used;
+    struct list_head    ioc_list_unused;
+    spinlock_t          lock;
+
     const char *name;
 } KmppObjDefImpl;
 
 typedef struct KmppObjImpl_t {
     const char *name;
+    struct list_head list;
     /* class infomation link */
     KmppObjDefImpl *def;
     /* trie for fast access */
@@ -532,6 +537,25 @@ rk_s32 kmpp_objdef_put(KmppObjDef def)
     if (impl) {
         rk_s32 release = 0;
 
+        if (!list_empty(&impl->ioc_list_used)) {
+            KmppObjImpl *ioc = NULL, *n = NULL;
+
+            list_for_each_entry_safe(ioc, n, &impl->ioc_list_used, KmppObjImpl, list) {
+                obj_dbg_flow("deinit leak ioc %p\n", ioc);
+                list_del_init(&ioc->list);
+                kmpp_obj_put_f((KmppObj)ioc);
+            }
+        }
+
+        if (!list_empty(&impl->ioc_list_unused)) {
+            KmppObjImpl *ioc = NULL, *n = NULL;
+
+            list_for_each_entry_safe(ioc, n, &impl->ioc_list_unused, KmppObjImpl, list) {
+                list_del_init(&ioc->list);
+                kmpp_obj_put_f((KmppObj)ioc);
+            }
+        }
+
         if (impl->is_kobj) {
             impl->ref_cnt--;
             if (!impl->ref_cnt)
@@ -597,6 +621,10 @@ rk_s32 kmpp_objdef_register(KmppObjDef *def, rk_s32 priv_size, rk_s32 size, cons
     impl->entry_size = size;
     impl->buf_size = size + sizeof(KmppObjImpl);
     impl->ref_cnt = 1;
+
+    INIT_LIST_HEAD(&impl->ioc_list_used);
+    INIT_LIST_HEAD(&impl->ioc_list_unused);
+    mpp_spinlock_init(&impl->lock);
 
     obj_dbg_flow("objdef %-16s registered size %4d\n", name, size, impl);
 
@@ -690,6 +718,10 @@ rk_s32 kmpp_objdef_get(KmppObjDef *def, rk_s32 priv_size, const char *name)
         mpp_logw_f("objdef %-16s already get ref %d\n", name, impl->ref_cnt);
     else
         impl->ref_cnt++;
+
+    INIT_LIST_HEAD(&impl->ioc_list_used);
+    INIT_LIST_HEAD(&impl->ioc_list_unused);
+    mpp_spinlock_init(&impl->lock);
 
     *def = impl;
 
@@ -1352,6 +1384,47 @@ rk_s32 kmpp_obj_check(KmppObj obj, const char *caller)
     return rk_ok;
 }
 
+static KmppObj kmpp_ioc_get_from_objdef(void)
+{
+    KmppObjDefImpl *def_ioc = kmpp_ioc_objdef();
+    KmppObjImpl *ioc = NULL;
+    rk_s32 ret;
+
+    mpp_spinlock_lock(&def_ioc->lock);
+    if (!list_empty(&def_ioc->ioc_list_unused)) {
+        ioc = list_first_entry(&def_ioc->ioc_list_unused, KmppObjImpl, list);
+        list_move_tail(&ioc->list, &def_ioc->ioc_list_used);
+        mpp_spinlock_unlock(&def_ioc->lock);
+        return (KmppObj)ioc;
+    }
+    mpp_spinlock_unlock(&def_ioc->lock);
+
+    ret = kmpp_obj_get_f((KmppObj *)&ioc, def_ioc);
+    if (ret) {
+        mpp_loge("failed to get KmppIoc ret %d\n", ret);
+        return NULL;
+    }
+    INIT_LIST_HEAD(&ioc->list);
+    mpp_spinlock_lock(&def_ioc->lock);
+    list_add_tail(&ioc->list, &def_ioc->ioc_list_used);
+    mpp_spinlock_unlock(&def_ioc->lock);
+
+    return (KmppObj)ioc;
+}
+
+static void kmpp_ioc_put_to_objdef(KmppObj ioc)
+{
+    KmppObjDefImpl *def_ioc = kmpp_ioc_objdef();
+    KmppObjImpl *impl = (KmppObjImpl*)ioc;
+
+    if (!impl)
+        return;
+
+    mpp_spinlock_lock(&def_ioc->lock);
+    list_move_tail(&impl->list, &def_ioc->ioc_list_unused);
+    mpp_spinlock_unlock(&def_ioc->lock);
+}
+
 rk_s32 kmpp_obj_ioctl(KmppObj ctx, rk_s32 cmd, KmppObj in, KmppObj *out, const char *caller)
 {
     KmppObjs *p = get_objs_f();
@@ -1387,9 +1460,9 @@ rk_s32 kmpp_obj_ioctl(KmppObj ctx, rk_s32 cmd, KmppObj in, KmppObj *out, const c
     obj_dbg_ioctl("ioctl def %s:%d cmd %d ctx %p in %p out %p at %s\n",
                   def->name, def->defs_idx, cmd, ctx, in, out, caller);
 
-    ret = kmpp_obj_get((KmppObj *)&ioc, def_ioc, caller);
-    if (ret) {
-        mpp_loge("failed to get KmppIoc ret %d\n", ret);
+    ioc = kmpp_ioc_get_from_objdef();
+    if (!ioc) {
+        mpp_loge("failed to get ioctl obj at %s\n", caller);
         return rk_nok;
     }
 
@@ -1447,7 +1520,7 @@ rk_s32 kmpp_obj_ioctl(KmppObj ctx, rk_s32 cmd, KmppObj in, KmppObj *out, const c
         }
     }
 
-    kmpp_obj_put(ioc, caller);
+    kmpp_ioc_put_to_objdef(ioc);
 
     return ret;
 }
