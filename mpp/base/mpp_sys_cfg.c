@@ -402,12 +402,13 @@ MPP_RET mpp_sys_dec_buf_chk_proc(MppSysDecBufChkCfg *cfg)
             && type != MPP_VIDEO_CodingMJPEG) {
             switch (soc_type) {
             case ROCKCHIP_SOC_RK3399 :
-            case ROCKCHIP_SOC_RK3568 :
             case ROCKCHIP_SOC_RK3562 :
             case ROCKCHIP_SOC_RK3528 :
             case ROCKCHIP_SOC_RK3588 : {
                 aligned_byte = mpp_sys_cfg_align(SYS_CFG_ALIGN_256_ODD, aligned_byte);
             } break;
+            case ROCKCHIP_SOC_RK3566 :
+            case ROCKCHIP_SOC_RK3568 :
             case ROCKCHIP_SOC_RK3576 : {
                 aligned_byte = mpp_sys_cfg_align(SYS_CFG_ALIGN_128_ODD_PLUS_64, aligned_byte);
             } break;
