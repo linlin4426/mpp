@@ -309,44 +309,22 @@ MPP_RET vdpu383_av1d_gen_regs(void *hal, HalTaskInfo *task)
 
     /* set reg -> para (stride, len) */
     {
+        MppFrameFormat fmt = 0;
+        RK_U32 mapped_idx;
         RK_U32 hor_virstride = 0;
         RK_U32 ver_virstride = 0;
         RK_U32 y_virstride = 0;
-        RK_U32 uv_virstride = 0;
-        RK_U32 mapped_idx;
+        RK_U32 fbc_head_stride = 0;
+        RK_U32 fbc_pld_stride = 0;
+        RK_U32 fbc_offset = 0;
+        RK_U32 tile4x4_coeff = 0;
 
-        mpp_buf_slot_get_prop(cfg->frame_slots, dxva->CurrPic.Index7Bits, SLOT_FRAME_PTR, &mframe);
-        if (mframe) {
-            hor_virstride = mpp_frame_get_hor_stride(mframe);
-            ver_virstride = mpp_frame_get_ver_stride(mframe);
-            y_virstride = hor_virstride * ver_virstride;
-            uv_virstride = hor_virstride * ver_virstride / 2;
-
-            if (MPP_FRAME_FMT_IS_FBC(mpp_frame_get_fmt(mframe))) {
-                RK_U32 fbd_offset;
-                RK_U32 fbc_hdr_stride = mpp_frame_get_fbc_hdr_stride(mframe);
-                RK_U32 h = MPP_ALIGN(mpp_frame_get_height(mframe), 64);
-
-                regs->ctrl_regs.reg9.fbc_e = 1;
-                regs->comm_paras.reg68_hor_virstride = fbc_hdr_stride / 64;
-                fbd_offset = regs->comm_paras.reg68_hor_virstride * h * 4;
-                regs->comm_addrs.reg193_fbc_payload_offset = fbd_offset;
-            } else if (MPP_FRAME_FMT_IS_TILE(mpp_frame_get_fmt(mframe))) {
-                regs->ctrl_regs.reg9.tile_e = 1;
-                regs->comm_paras.reg68_hor_virstride = MPP_ALIGN(hor_virstride * 6, 16) >> 4;
-                regs->comm_paras.reg70_y_virstride = (y_virstride + uv_virstride) >> 4;
-            } else {
-                regs->ctrl_regs.reg9.fbc_e = 0;
-                regs->comm_paras.reg68_hor_virstride = hor_virstride >> 4;
-                regs->comm_paras.reg69_raster_uv_hor_virstride = hor_virstride >> 4;
-                regs->comm_paras.reg70_y_virstride = y_virstride >> 4;
-            }
-            /* error */
-            regs->comm_paras.reg80_error_ref_hor_virstride = regs->comm_paras.reg68_hor_virstride;
-            regs->comm_paras.reg81_error_ref_raster_uv_hor_virstride = regs->comm_paras.reg69_raster_uv_hor_virstride;
-            regs->comm_paras.reg82_error_ref_virstride = regs->comm_paras.reg70_y_virstride;
+        if (vdpu383_setup_cur_stride_info(mframe, regs, 1)) {
+            mpp_err_f("failed to setup stride info for current frame\n");
+            return MPP_NOK;
         }
 
+        fmt = mpp_frame_get_fmt(mframe);
         for (i = 0; i < AV1_REFS_PER_FRAME; ++i) {
             mapped_idx = dxva->ref_frame_idx[i];
             if (dxva->frame_refs[mapped_idx].Index != (RK_S8)0xff && dxva->frame_refs[mapped_idx].Index != 0x7f) {
@@ -356,14 +334,24 @@ MPP_RET vdpu383_av1d_gen_regs(void *hal, HalTaskInfo *task)
                     ver_virstride = mpp_frame_get_ver_stride(mframe);
                     y_virstride = hor_virstride * ver_virstride;
                     if (MPP_FRAME_FMT_IS_FBC(mpp_frame_get_fmt(mframe))) {
-                        hor_virstride = mpp_frame_get_fbc_hdr_stride(mframe) / 4;
+                        vdpu38x_get_fbc_off(mframe, &fbc_head_stride, &fbc_pld_stride, &fbc_offset);
+                        regs->comm_paras.ref_stride[mapped_idx].hor_y_stride = fbc_head_stride;
+                        regs->comm_paras.ref_stride[mapped_idx].hor_uv_stride = fbc_pld_stride;
                     } else if (MPP_FRAME_FMT_IS_TILE(mpp_frame_get_fmt(mframe))) {
-                        hor_virstride = MPP_ALIGN(hor_virstride * 6, 16);
+                        if (vdpu38x_get_tile4x4_h_stride_coeff(fmt, &tile4x4_coeff)) {
+                            mpp_err("get tile 4x4 coeff failed\n");
+                            return MPP_NOK;
+                        }
+                        hor_virstride = MPP_ALIGN(hor_virstride * tile4x4_coeff, 16);
                         y_virstride += y_virstride / 2;
+                        regs->comm_paras.ref_stride[mapped_idx].hor_y_stride = hor_virstride >> 4;
+                        regs->comm_paras.ref_stride[mapped_idx].hor_uv_stride = hor_virstride >> 4;
+                        regs->comm_paras.ref_stride[mapped_idx].y_stride = y_virstride >> 4;
+                    } else {
+                        regs->comm_paras.ref_stride[mapped_idx].hor_y_stride = hor_virstride >> 4;
+                        regs->comm_paras.ref_stride[mapped_idx].hor_uv_stride = hor_virstride >> 4;
+                        regs->comm_paras.ref_stride[mapped_idx].y_stride = y_virstride >> 4;
                     }
-                    regs->comm_paras.ref_stride[mapped_idx].hor_y_stride = hor_virstride >> 4;
-                    regs->comm_paras.ref_stride[mapped_idx].hor_uv_stride = hor_virstride >> 4;
-                    regs->comm_paras.ref_stride[mapped_idx].y_stride = y_virstride >> 4;
                 }
             }
         }

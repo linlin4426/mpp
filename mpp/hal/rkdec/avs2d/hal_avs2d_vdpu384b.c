@@ -136,57 +136,11 @@ static MPP_RET fill_registers(Avs2dHalCtx_t *p_hal, Vdpu38xRegSet *regs, HalTask
     RK_U32 i;
     MPP_RET ret = MPP_OK;
 
-    mpp_buf_slot_get_prop(cfg->frame_slots, task_dec->output, SLOT_FRAME_PTR, &mframe);
-
     //!< caculate the yuv_frame_size
-    {
-        MppFrameFormat fmt;
-        RK_U32 hor_virstride = 0;
-        RK_U32 ver_virstride = 0;
-        RK_U32 y_virstride = 0;
-        RK_U32 uv_virstride = 0;
-        RK_U32 fbc_head_stride = 0;
-        RK_U32 fbc_pld_stride = 0;
-        RK_U32 fbc_offset = 0;
-        RK_U32 tile4x4_coeff = 0;
-
-        fmt = mpp_frame_get_fmt(mframe);
-        hor_virstride = mpp_frame_get_hor_stride(mframe);
-        ver_virstride = mpp_frame_get_ver_stride(mframe);
-        y_virstride = hor_virstride * ver_virstride;
-        uv_virstride = hor_virstride * ver_virstride / 2;
-        if (MPP_FRAME_FMT_IS_AFBC(fmt)) {
-            vdpu38x_get_fbc_off(mframe, &fbc_head_stride, &fbc_pld_stride, &fbc_offset);
-
-            regs->ctrl_regs.reg9.pp_output_mode = 3;
-            regs->comm_paras.reg68_pp_m_hor_stride = fbc_head_stride;
-            regs->comm_paras.reg69_pp_m_uv_hor_stride = fbc_pld_stride;
-            regs->comm_addrs.reg193_fbc_payload_offset = fbc_offset;
-        } else if (MPP_FRAME_FMT_IS_RKFBC(fmt)) {
-            vdpu38x_get_fbc_off(mframe, &fbc_head_stride, &fbc_pld_stride, &fbc_offset);
-
-            regs->ctrl_regs.reg9.pp_output_mode = 2;
-            regs->comm_paras.reg68_pp_m_hor_stride = fbc_head_stride;
-            regs->comm_paras.reg69_pp_m_uv_hor_stride = fbc_pld_stride;
-            regs->comm_addrs.reg193_fbc_payload_offset = fbc_offset;
-        } else if (MPP_FRAME_FMT_IS_TILE(fmt)) {
-            if (vdpu38x_get_tile4x4_h_stride_coeff(fmt, &tile4x4_coeff)) {
-                mpp_err("get tile 4x4 coeff failed\n");
-                return MPP_NOK;
-            }
-            regs->ctrl_regs.reg9.pp_output_mode = 1;
-            regs->comm_paras.reg68_pp_m_hor_stride = hor_virstride * tile4x4_coeff / 16;
-            regs->comm_paras.reg70_pp_m_y_virstride = (y_virstride + uv_virstride) / 16;
-        } else {
-            regs->ctrl_regs.reg9.pp_output_mode = 0;
-            regs->comm_paras.reg68_pp_m_hor_stride = hor_virstride / 16;
-            regs->comm_paras.reg69_pp_m_uv_hor_stride = hor_virstride / 16;
-            regs->comm_paras.reg70_pp_m_y_virstride = y_virstride / 16;
-        }
-        /* error stride */
-        regs->comm_paras.reg80_error_ref_hor_virstride = regs->comm_paras.reg68_pp_m_hor_stride;
-        regs->comm_paras.reg81_error_ref_raster_uv_hor_virstride = regs->comm_paras.reg69_pp_m_uv_hor_stride;
-        regs->comm_paras.reg82_error_ref_virstride = regs->comm_paras.reg70_pp_m_y_virstride;
+    mpp_buf_slot_get_prop(cfg->frame_slots, task_dec->output, SLOT_FRAME_PTR, &mframe);
+    if (vdpu38x_setup_cur_stride_info(mframe, regs, 1)) {
+        mpp_err_f("failed to setup stride info for current frame\n");
+        return MPP_NOK;
     }
 
     // set current

@@ -265,10 +265,6 @@ static MPP_RET hal_vp9d_vdpu383_gen_regs(void *hal, HalTaskInfo *task)
     RK_U32 y_hor_virstride, uv_hor_virstride, y_virstride;
     RK_U8  *bitstream = NULL;
     MppBuffer streambuf = NULL;
-    RK_U32 sw_y_hor_virstride;
-    RK_U32 sw_uv_hor_virstride;
-    RK_U32 sw_y_virstride;
-    RK_U32 sw_uv_virstride;
     RK_U8  ref_idx = 0;
     RK_U8  ref_frame_idx = 0;
     RK_U32 *reg_ref_base = NULL;
@@ -428,40 +424,9 @@ static MPP_RET hal_vp9d_vdpu383_gen_regs(void *hal, HalTaskInfo *task)
 
     {
         mpp_buf_slot_get_prop(cfg->frame_slots, task->dec.output, SLOT_FRAME_PTR, &mframe);
-        fbc_en = MPP_FRAME_FMT_IS_FBC(mpp_frame_get_fmt(mframe));
-
-        if (fbc_en) {
-            RK_U32 fbc_hdr_stride = mpp_frame_get_fbc_hdr_stride(mframe);
-            RK_U32 h = MPP_ALIGN(mpp_frame_get_height(mframe), 64);
-            RK_U32 fbd_offset;
-
-            regs->ctrl_regs.reg9.fbc_e = 1;
-            regs->comm_paras.reg68_hor_virstride = fbc_hdr_stride / 64;
-            fbd_offset = regs->comm_paras.reg68_hor_virstride * h * 4;
-            regs->comm_addrs.reg193_fbc_payload_offset = fbd_offset;
-            /* error stride */
-            regs->comm_paras.reg80_error_ref_hor_virstride = fbc_hdr_stride / 64;
-        } else {
-            sw_y_hor_virstride = mpp_frame_get_hor_stride(mframe) >> 4;
-            sw_uv_hor_virstride = sw_y_hor_virstride;
-            sw_y_virstride = mpp_frame_get_ver_stride(mframe) * sw_y_hor_virstride;
-            sw_uv_virstride = sw_y_virstride / 2;
-
-            regs->ctrl_regs.reg9.fbc_e = 0;
-            if (MPP_FRAME_FMT_IS_TILE(mpp_frame_get_fmt(mframe))) {
-                regs->ctrl_regs.reg9.tile_e = 1;
-                regs->comm_paras.reg68_hor_virstride = sw_y_hor_virstride * 6;
-                regs->comm_paras.reg70_y_virstride = sw_y_virstride + sw_uv_virstride;
-            } else {
-                regs->ctrl_regs.reg9.tile_e = 0;
-                regs->comm_paras.reg68_hor_virstride = sw_y_hor_virstride;
-                regs->comm_paras.reg69_raster_uv_hor_virstride = sw_uv_hor_virstride;
-                regs->comm_paras.reg70_y_virstride = sw_y_virstride;
-            }
-            /* error stride */
-            regs->comm_paras.reg80_error_ref_hor_virstride = sw_y_hor_virstride;
-            regs->comm_paras.reg81_error_ref_raster_uv_hor_virstride = sw_uv_hor_virstride;
-            regs->comm_paras.reg82_error_ref_virstride = sw_y_virstride;
+        if (vdpu383_setup_cur_stride_info(mframe, regs, 1)) {
+            mpp_err_f("failed to setup stride info for current frame\n");
+            return MPP_NOK;
         }
     }
     if (!pic_param->intra_only && pic_param->frame_type &&

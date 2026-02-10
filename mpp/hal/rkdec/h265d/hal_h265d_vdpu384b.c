@@ -194,6 +194,7 @@ static MPP_RET hal_h265d_vdpu384b_gen_regs(void *hal,  HalTaskInfo *syn)
     RK_S32 distance = INT_MAX;
     HalH265dCtx *reg_ctx = (HalH265dCtx *)hal;
     MppHalCfg *cfg = reg_ctx->cfg;
+    MppFrame mframe = NULL;
 
     if (syn->dec.flags.parse_err ||
         (syn->dec.flags.ref_err && !cfg->cfg->base.disable_error)) {
@@ -273,74 +274,20 @@ static MPP_RET hal_h265d_vdpu384b_gen_regs(void *hal,  HalTaskInfo *syn)
         hal_bufs_setup(reg_ctx->cmv_bufs, reg_ctx->mv_count, 1, &size);
     }
 
-    {
-        MppFrame mframe = NULL;
-        MppFrameFormat fmt = 0;
-        RK_U32 hor_virstride = 0;
-        RK_U32 ver_virstride = 0;
-        RK_U32 y_virstride = 0;
-        RK_U32 uv_virstride = 0;
-        RK_U32 uv_virstride_tile = 0;
-        RK_U32 chroma_fmt_idc = dxva_ctx->pp.chroma_format_idc;
-        RK_U32 fbc_head_stride = 0;
-        RK_U32 fbc_pld_stride = 0;
-        RK_U32 fbc_offset = 0;
-        RK_U32 tile4x4_coeff = 0;
-
-        mpp_buf_slot_get_prop(cfg->frame_slots, dxva_ctx->pp.CurrPic.Index7Bits,
-                              SLOT_FRAME_PTR, &mframe);
-        /* for 8K downscale mode*/
-        if (mpp_frame_get_thumbnail_en(mframe) == MPP_FRAME_THUMBNAIL_ONLY &&
-            reg_ctx->origin_bufs == NULL) {
-            vdpu38x_setup_scale_origin_bufs(mframe, &reg_ctx->origin_bufs,
-                                            mpp_buf_slot_get_count(cfg->frame_slots));
-        }
-
-        fmt = mpp_frame_get_fmt(mframe);
-        hor_virstride = mpp_frame_get_hor_stride(mframe);
-        ver_virstride = mpp_frame_get_ver_stride(mframe);
-        uv_virstride = hor_virstride;
-        y_virstride = ver_virstride * hor_virstride;
-
-        if (chroma_fmt_idc == 3)
-            uv_virstride *= 2;
-        if (chroma_fmt_idc == 3 || chroma_fmt_idc == 2)
-            uv_virstride_tile = uv_virstride * ver_virstride;
-        else
-            uv_virstride_tile = uv_virstride * ver_virstride / 2;
-        if (MPP_FRAME_FMT_IS_AFBC(fmt)) {
-            vdpu38x_get_fbc_off(mframe, &fbc_head_stride, &fbc_pld_stride, &fbc_offset);
-
-            hw_regs->ctrl_regs.reg9.pp_output_mode = 3;
-            hw_regs->comm_paras.reg68_pp_m_hor_stride = fbc_head_stride;
-            hw_regs->comm_paras.reg69_pp_m_uv_hor_stride = fbc_pld_stride;
-            hw_regs->comm_addrs.reg193_fbc_payload_offset = fbc_offset;
-        } else if (MPP_FRAME_FMT_IS_RKFBC(fmt)) {
-            vdpu38x_get_fbc_off(mframe, &fbc_head_stride, &fbc_pld_stride, &fbc_offset);
-
-            hw_regs->ctrl_regs.reg9.pp_output_mode = 2;
-            hw_regs->comm_paras.reg68_pp_m_hor_stride = fbc_head_stride;
-            hw_regs->comm_paras.reg69_pp_m_uv_hor_stride = fbc_pld_stride;
-            hw_regs->comm_addrs.reg193_fbc_payload_offset = fbc_offset;
-        } else if (MPP_FRAME_FMT_IS_TILE(fmt)) {
-            if (vdpu38x_get_tile4x4_h_stride_coeff(fmt, &tile4x4_coeff)) {
-                mpp_err("get tile 4x4 coeff failed\n");
-                return MPP_NOK;
-            }
-            hw_regs->ctrl_regs.reg9.pp_output_mode = 1;
-            hw_regs->comm_paras.reg68_pp_m_hor_stride = hor_virstride * tile4x4_coeff / 16;
-            hw_regs->comm_paras.reg70_pp_m_y_virstride = (y_virstride + uv_virstride_tile) / 16;
-        } else {
-            hw_regs->ctrl_regs.reg9.pp_output_mode = 0;
-            hw_regs->comm_paras.reg68_pp_m_hor_stride = hor_virstride >> 4;
-            hw_regs->comm_paras.reg69_pp_m_uv_hor_stride = uv_virstride >> 4;
-            hw_regs->comm_paras.reg70_pp_m_y_virstride = y_virstride >> 4;
-        }
-        /* error */
-        hw_regs->comm_paras.reg80_error_ref_hor_virstride = hw_regs->comm_paras.reg68_pp_m_hor_stride;
-        hw_regs->comm_paras.reg81_error_ref_raster_uv_hor_virstride = hw_regs->comm_paras.reg69_pp_m_uv_hor_stride;
-        hw_regs->comm_paras.reg82_error_ref_virstride = hw_regs->comm_paras.reg70_pp_m_y_virstride;
+    mpp_buf_slot_get_prop(cfg->frame_slots, dxva_ctx->pp.CurrPic.Index7Bits,
+                          SLOT_FRAME_PTR, &mframe);
+    if (vdpu38x_setup_cur_stride_info(mframe, hw_regs, dxva_ctx->pp.chroma_format_idc)) {
+        mpp_err_f("failed to setup stride info for current frame\n");
+        return MPP_NOK;
     }
+
+    /* for 8K downscale mode*/
+    if (mpp_frame_get_thumbnail_en(mframe) == MPP_FRAME_THUMBNAIL_ONLY &&
+        reg_ctx->origin_bufs == NULL) {
+        vdpu38x_setup_scale_origin_bufs(mframe, &reg_ctx->origin_bufs,
+                                        mpp_buf_slot_get_count(cfg->frame_slots));
+    }
+
     mpp_buf_slot_get_prop(cfg->frame_slots, dxva_ctx->pp.CurrPic.Index7Bits,
                           SLOT_BUFFER, &framebuf);
 
@@ -409,7 +356,6 @@ static MPP_RET hal_h265d_vdpu384b_gen_regs(void *hal,  HalTaskInfo *syn)
         if (dxva_ctx->pp.RefPicList[i].bPicEntry != 0xff &&
             dxva_ctx->pp.RefPicList[i].bPicEntry != 0x7f) {
 
-            MppFrame mframe = NULL;
             mpp_buf_slot_get_prop(cfg->frame_slots,
                                   dxva_ctx->pp.RefPicList[i].Index7Bits,
                                   SLOT_BUFFER, &framebuf);

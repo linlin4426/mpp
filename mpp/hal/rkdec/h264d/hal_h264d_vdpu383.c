@@ -135,44 +135,18 @@ static MPP_RET set_registers(H264dHalCtx_t *p_hal, Vdpu383RegSet *regs, HalTaskI
     HalBuf *origin_buf = NULL;
     Vdpu3xxH264dRegCtx *ctx = (Vdpu3xxH264dRegCtx *)p_hal->reg_ctx;
     MppHalCfg *cfg = p_hal->cfg;
+    MppFrame mframe = NULL;
 
     // memset(regs, 0, sizeof(Vdpu383RegSet));
     regs->comm_paras.reg66_stream_len = p_hal->strm_len;
 
     //!< caculate the yuv_frame_size
-    {
-        MppFrame mframe = NULL;
-        RK_U32 hor_virstride = 0;
-        RK_U32 ver_virstride = 0;
-        RK_U32 y_virstride = 0;
-        RK_U32 uv_virstride = 0;
-
-        mpp_buf_slot_get_prop(cfg->frame_slots, pp->CurrPic.Index7Bits, SLOT_FRAME_PTR, &mframe);
-        hor_virstride = mpp_frame_get_hor_stride(mframe);
-        ver_virstride = mpp_frame_get_ver_stride(mframe);
-        y_virstride = hor_virstride * ver_virstride;
-        uv_virstride = hor_virstride * ver_virstride / 2;
-
-        if (MPP_FRAME_FMT_IS_FBC(mpp_frame_get_fmt(mframe))) {
-            RK_U32 fbc_hdr_stride = mpp_frame_get_fbc_hdr_stride(mframe);
-            RK_U32 fbd_offset;
-
-            fbd_offset = fbc_hdr_stride * MPP_ALIGN(ver_virstride, 64) / 16;
-
-            regs->ctrl_regs.reg9.fbc_e = 1;
-            regs->comm_paras.reg68_hor_virstride = fbc_hdr_stride / 64;
-            regs->comm_addrs.reg193_fbc_payload_offset = fbd_offset;
-        } else if (MPP_FRAME_FMT_IS_TILE(mpp_frame_get_fmt(mframe))) {
-            regs->ctrl_regs.reg9.tile_e = 1;
-            regs->comm_paras.reg68_hor_virstride = hor_virstride * 6 / 16;
-            regs->comm_paras.reg70_y_virstride = (y_virstride + uv_virstride) / 16;
-        } else {
-            regs->ctrl_regs.reg9.fbc_e = 0;
-            regs->comm_paras.reg68_hor_virstride = hor_virstride / 16;
-            regs->comm_paras.reg69_raster_uv_hor_virstride = hor_virstride / 16;
-            regs->comm_paras.reg70_y_virstride = y_virstride / 16;
-        }
+    mpp_buf_slot_get_prop(cfg->frame_slots, pp->CurrPic.Index7Bits, SLOT_FRAME_PTR, &mframe);
+    if (vdpu383_setup_cur_stride_info(mframe, regs, 1)) {
+        mpp_err_f("failed to setup stride info for current frame\n");
+        return MPP_NOK;
     }
+
     //!< set current
     {
         MppBuffer mbuffer = NULL;
@@ -196,7 +170,6 @@ static MPP_RET set_registers(H264dHalCtx_t *p_hal, Vdpu383RegSet *regs, HalTaskI
         RK_S32 near_index = -1;
         MppBuffer mbuffer = NULL;
         RK_U32 min_frame_num  = 0;
-        MppFrame mframe = NULL;
 
         for (i = 0; i < 15; i++) {
             if (pp->RefFrameList[i].bPicEntry != 0xff) {

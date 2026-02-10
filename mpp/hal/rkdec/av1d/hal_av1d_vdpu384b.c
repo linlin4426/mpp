@@ -527,55 +527,22 @@ MPP_RET vdpu384b_av1d_gen_regs(void *hal, HalTaskInfo *task)
 
     /* set reg -> para (stride, len) */
     {
-        MppFrameFormat fmt;
+        MppFrameFormat fmt = 0;
+        RK_U32 mapped_idx = 0;
         RK_U32 hor_virstride = 0;
         RK_U32 ver_virstride = 0;
         RK_U32 y_virstride = 0;
-        RK_U32 uv_virstride = 0;
-        RK_U32 mapped_idx = 0;
         RK_U32 fbc_head_stride = 0;
         RK_U32 fbc_pld_stride = 0;
         RK_U32 fbc_offset = 0;
         RK_U32 tile4x4_coeff = 0;
 
-        fmt = mpp_frame_get_fmt(mframe);
-        hor_virstride = mpp_frame_get_hor_stride(mframe);
-        ver_virstride = mpp_frame_get_ver_stride(mframe);
-        y_virstride = hor_virstride * ver_virstride;
-        uv_virstride = hor_virstride * ver_virstride / 2;
-        if (MPP_FRAME_FMT_IS_AFBC(fmt)) {
-            vdpu38x_get_fbc_off(mframe, &fbc_head_stride, &fbc_pld_stride, &fbc_offset);
-
-            regs->ctrl_regs.reg9.pp_output_mode = 3;
-            regs->comm_paras.reg68_pp_m_hor_stride = fbc_head_stride;
-            regs->comm_paras.reg69_pp_m_uv_hor_stride = fbc_pld_stride;
-            regs->comm_addrs.reg193_fbc_payload_offset = fbc_offset;
-        } else if (MPP_FRAME_FMT_IS_RKFBC(fmt)) {
-            vdpu38x_get_fbc_off(mframe, &fbc_head_stride, &fbc_pld_stride, &fbc_offset);
-
-            regs->ctrl_regs.reg9.pp_output_mode = 2;
-            regs->comm_paras.reg68_pp_m_hor_stride = fbc_head_stride;
-            regs->comm_paras.reg69_pp_m_uv_hor_stride = fbc_pld_stride;
-            regs->comm_addrs.reg193_fbc_payload_offset = fbc_offset;
-        } else if (MPP_FRAME_FMT_IS_TILE(fmt)) {
-            if (vdpu38x_get_tile4x4_h_stride_coeff(fmt, &tile4x4_coeff)) {
-                mpp_err("get tile 4x4 coeff failed\n");
-                return MPP_NOK;
-            }
-            regs->ctrl_regs.reg9.pp_output_mode = 1;
-            regs->comm_paras.reg68_pp_m_hor_stride = hor_virstride * tile4x4_coeff >> 4;
-            regs->comm_paras.reg70_pp_m_y_virstride = (y_virstride + uv_virstride) >> 4;
-        } else {
-            regs->ctrl_regs.reg9.pp_output_mode = 0;
-            regs->comm_paras.reg68_pp_m_hor_stride = hor_virstride >> 4;
-            regs->comm_paras.reg69_pp_m_uv_hor_stride = hor_virstride >> 4;
-            regs->comm_paras.reg70_pp_m_y_virstride = y_virstride >> 4;
+        if (vdpu38x_setup_cur_stride_info(mframe, regs, 1)) {
+            mpp_err_f("failed to setup stride info for current frame\n");
+            return MPP_NOK;
         }
-        /* error */
-        regs->comm_paras.reg80_error_ref_hor_virstride = regs->comm_paras.reg68_pp_m_hor_stride;
-        regs->comm_paras.reg81_error_ref_raster_uv_hor_virstride = regs->comm_paras.reg69_pp_m_uv_hor_stride;
-        regs->comm_paras.reg82_error_ref_virstride = regs->comm_paras.reg70_pp_m_y_virstride;
 
+        fmt = mpp_frame_get_fmt(mframe);
         for (i = 0; i < AV1_REFS_PER_FRAME; ++i) {
             mapped_idx = dxva->ref_frame_idx[i];
             if (dxva->frame_refs[mapped_idx].Index != (RK_S8)0xff && dxva->frame_refs[mapped_idx].Index != 0x7f) {
@@ -589,7 +556,11 @@ MPP_RET vdpu384b_av1d_gen_regs(void *hal, HalTaskInfo *task)
                         regs->comm_paras.ref_stride[mapped_idx].hor_y_stride = fbc_head_stride;
                         regs->comm_paras.ref_stride[mapped_idx].hor_uv_stride = fbc_pld_stride;
                     } else if (MPP_FRAME_FMT_IS_TILE(mpp_frame_get_fmt(mframe))) {
-                        hor_virstride = MPP_ALIGN(hor_virstride * 6, 16);
+                        if (vdpu38x_get_tile4x4_h_stride_coeff(fmt, &tile4x4_coeff)) {
+                            mpp_err("get tile 4x4 coeff failed\n");
+                            return MPP_NOK;
+                        }
+                        hor_virstride = MPP_ALIGN(hor_virstride * tile4x4_coeff, 16);
                         y_virstride += y_virstride / 2;
                         regs->comm_paras.ref_stride[mapped_idx].hor_y_stride = hor_virstride >> 4;
                         regs->comm_paras.ref_stride[mapped_idx].hor_uv_stride = hor_virstride >> 4;

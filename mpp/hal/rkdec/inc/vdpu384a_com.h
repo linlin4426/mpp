@@ -667,6 +667,7 @@ extern "C" {
 
 void vdpu384a_init_ctrl_regs(Vdpu384aRegSet *regs, MppCodingType codec_t);
 void vdpu384a_setup_statistic(Vdpu384aCtrlReg *com);
+MPP_RET vdpu384a_setup_cur_stride_info(MppFrame mframe, Vdpu384aRegSet *regs, RK_U32 chroma_fmt_idc);
 void vdpu384a_setup_down_scale(MppFrame frame, MppDev dev, Vdpu384aCtrlReg *com, void* comParas);
 void vdpu384a_update_thumbnail_frame_info(MppFrame frame);
 

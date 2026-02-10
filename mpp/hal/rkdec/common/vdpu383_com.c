@@ -14,6 +14,7 @@
 #include "mpp_frame_impl.h"
 
 #include "vdpu_com.h"
+#include "vdpu38x_com.h"
 #include "vdpu383_com.h"
 
 void vdpu383_init_ctrl_regs(Vdpu383RegSet *regs, MppCodingType codec_t)
@@ -89,6 +90,70 @@ void vdpu383_setup_statistic(Vdpu383CtrlReg *ctrl_regs)
     /* set hurry */
     ctrl_regs->reg30.axi_wr_qos = 0;
     ctrl_regs->reg30.axi_rd_qos = 0;
+}
+
+/*
+ * chroma_fmt_idc:
+ * 0 - 4:0:0
+ * 1 - 4:2:0
+ * 2 - 4:2:2
+ * 3 - 4:4:4
+ */
+MPP_RET vdpu383_setup_cur_stride_info(MppFrame mframe, Vdpu383RegSet *regs, RK_U32 chroma_fmt_idc)
+{
+    MppFrameFormat fmt = 0;
+    RK_U32 hor_virstride = 0;
+    RK_U32 ver_virstride = 0;
+    RK_U32 y_virstride = 0;
+    RK_U32 uv_virstride = 0;
+    RK_U32 uv_virstride_tile = 0;
+    RK_U32 fbc_head_stride = 0;
+    RK_U32 fbc_pld_stride = 0;
+    RK_U32 fbc_offset = 0;
+    RK_U32 tile4x4_coeff = 0;
+
+    fmt = mpp_frame_get_fmt(mframe);
+    hor_virstride = mpp_frame_get_hor_stride(mframe);
+    ver_virstride = mpp_frame_get_ver_stride(mframe);
+    uv_virstride = chroma_fmt_idc == 3 ? hor_virstride * 2 : hor_virstride;
+    y_virstride = hor_virstride * ver_virstride;
+
+    if (chroma_fmt_idc == 3 || chroma_fmt_idc == 2)
+        uv_virstride_tile = uv_virstride * ver_virstride;
+    else
+        uv_virstride_tile = uv_virstride * ver_virstride / 2;
+    if (MPP_FRAME_FMT_IS_AFBC(fmt)) {
+        mpp_err("AFBC format is not supported in vdpu383\n");
+        return MPP_NOK;
+    } else if (MPP_FRAME_FMT_IS_RKFBC(fmt)) {
+        vdpu38x_get_fbc_off(mframe, &fbc_head_stride, &fbc_pld_stride, &fbc_offset);
+
+        regs->ctrl_regs.reg9.fbc_e = 1;
+        regs->ctrl_regs.reg9.tile_e = 0;
+        regs->comm_paras.reg68_hor_virstride = fbc_head_stride;
+        regs->comm_addrs.reg193_fbc_payload_offset = fbc_offset;
+    } else if (MPP_FRAME_FMT_IS_TILE(fmt)) {
+        if (vdpu38x_get_tile4x4_h_stride_coeff(fmt, &tile4x4_coeff)) {
+            mpp_err("get tile 4x4 coeff failed\n");
+            return MPP_NOK;
+        }
+        regs->ctrl_regs.reg9.fbc_e = 0;
+        regs->ctrl_regs.reg9.tile_e = 1;
+        regs->comm_paras.reg68_hor_virstride = hor_virstride * tile4x4_coeff >> 4;
+        regs->comm_paras.reg70_y_virstride = (y_virstride + uv_virstride_tile) >> 4;
+    } else {
+        regs->ctrl_regs.reg9.fbc_e = 0;
+        regs->ctrl_regs.reg9.tile_e = 0;
+        regs->comm_paras.reg68_hor_virstride = hor_virstride >> 4;
+        regs->comm_paras.reg69_raster_uv_hor_virstride = uv_virstride >> 4;
+        regs->comm_paras.reg70_y_virstride = y_virstride >> 4;
+    }
+    /* error stride */
+    regs->comm_paras.reg80_error_ref_hor_virstride = regs->comm_paras.reg68_hor_virstride;
+    regs->comm_paras.reg81_error_ref_raster_uv_hor_virstride = regs->comm_paras.reg69_raster_uv_hor_virstride;
+    regs->comm_paras.reg82_error_ref_virstride = regs->comm_paras.reg70_y_virstride;
+
+    return MPP_OK;
 }
 
 void vdpu383_update_thumbnail_frame_info(MppFrame frame)
