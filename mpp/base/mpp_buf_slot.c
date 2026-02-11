@@ -12,6 +12,7 @@
 #include "mpp_list.h"
 #include "mpp_debug.h"
 #include "mpp_common.h"
+#include "mpp_soc.h"
 
 #include "mpp_frame_impl.h"
 #include "mpp_buf_slot.h"
@@ -408,6 +409,69 @@ static void prepare_info_set_by_sys_cfg(MppBufSlotsImpl *impl, MppFrame frame,
     return;
 }
 
+RK_U32 mpp_buf_slots_setup_thumbnail_frame(MppFrame frame, RK_U32 *hor_y_stride, RK_U32 *y_stride,
+                                           RK_U32 update_frm_info)
+{
+    /*
+     * The decode hw only support 1/2 scaling in width and height,
+     * vdpu383/RK3576 downscale output image only support raster
+     * mode with 8bit depth.
+     * vdpu384a/vdpu384b downscale output image support 10bit / 8bit / 10bit -> 8bit.
+     */
+    const MppFrameFormat fmt = mpp_frame_get_fmt(frame);
+    RockchipSocType soc_type = mpp_get_soc_type();
+    RK_U32 sd_w = mpp_frame_get_width(frame) >> 1;
+    RK_U32 sd_h = mpp_frame_get_height(frame) >> 1;
+    RK_U32 sd_hor = MPP_ALIGN(sd_w, 16);
+    RK_U32 sd_ver = MPP_ALIGN(sd_h, 16);
+    RK_U32 sd_y_virstride;
+    RK_U32 sd_buf_size;
+
+    if (soc_type == ROCKCHIP_SOC_RK3576 && !MPP_FRAME_FMT_IS_FBC(fmt)) {
+        sd_hor = mpp_align_128_odd_plus_64(sd_hor);
+        sd_ver = mpp_frame_get_ver_stride(frame) >> 1;
+    }
+    sd_y_virstride = sd_ver * sd_hor;
+
+    switch ((fmt & MPP_FRAME_FMT_MASK)) {
+    case MPP_FMT_YUV400 : {
+        sd_buf_size = sd_y_virstride;
+    } break;
+    case MPP_FMT_YUV420SP_10BIT :
+    case MPP_FMT_YUV420SP : {
+        sd_buf_size = sd_y_virstride * 3 / 2;
+    } break;
+    case MPP_FMT_YUV422SP_10BIT :
+    case MPP_FMT_YUV422SP : {
+        sd_buf_size = sd_y_virstride * 2;
+    } break;
+    case MPP_FMT_YUV444SP_10BIT :
+    case MPP_FMT_YUV444SP : {
+        sd_buf_size = sd_y_virstride * 3;
+    } break;
+    default : {
+        sd_buf_size = sd_y_virstride * 3 / 2;
+    } break;
+    }
+    sd_buf_size = MPP_ALIGN(sd_buf_size, 16);
+
+    if (update_frm_info) {
+        mpp_frame_set_fmt(frame, MPP_FMT_YUV420SP);
+        mpp_frame_set_width(frame, sd_w);
+        mpp_frame_set_height(frame, sd_h);
+        mpp_frame_set_hor_stride(frame, sd_hor);
+        mpp_frame_set_ver_stride(frame, sd_ver);
+        mpp_frame_set_buf_size(frame, sd_buf_size);
+    }
+
+    if (NULL != hor_y_stride)
+        *hor_y_stride = sd_hor;
+    if (NULL != y_stride)
+        *y_stride = sd_y_virstride;
+
+    return sd_buf_size;
+}
+
 static void generate_info_set(MppBufSlotsImpl *impl, MppFrame frame, RK_U32 force_def_align)
 {
     const RK_U32 width  = mpp_frame_get_width(frame);
@@ -429,48 +493,14 @@ static void generate_info_set(MppBufSlotsImpl *impl, MppFrame frame, RK_U32 forc
     mpp_frame_set_hor_stride(impl->info_set, info_set_ptr->h_stride_by_byte);
     mpp_frame_set_ver_stride(impl->info_set, info_set_ptr->v_stride);
     mpp_frame_set_hor_stride_pixel(impl->info_set, info_set_ptr->h_stride_by_pixel);
-    mpp_frame_set_buf_size(impl->info_set, info_set_ptr->size_total);
-    mpp_frame_set_buf_size(frame, info_set_ptr->size_total);
     mpp_frame_set_hor_stride(frame, info_set_ptr->h_stride_by_byte);
     mpp_frame_set_ver_stride(frame, info_set_ptr->v_stride);
     mpp_frame_set_hor_stride_pixel(frame, info_set_ptr->h_stride_by_pixel);
     impl->buf_size = info_set_ptr->size_total;
-
-    if (mpp_frame_get_thumbnail_en(frame) == MPP_FRAME_THUMBNAIL_MIXED) {
-        /*
-         * The decode hw only support 1/2 scaling in width and height,
-         * downscale output image only support raster mode with 8bit depth.
-         */
-        RK_U32 down_scale_ver = MPP_ALIGN(mpp_frame_get_height(frame) >> 1, 16);
-        RK_U32 down_scale_hor = MPP_ALIGN(mpp_frame_get_width(frame) >> 1, 16);
-        RK_U32 downscale_buf_size;
-        RK_U32 down_scale_y_virstride = down_scale_ver * down_scale_hor;
-
-        switch ((fmt & MPP_FRAME_FMT_MASK)) {
-        case MPP_FMT_YUV400 : {
-            downscale_buf_size = down_scale_y_virstride;
-        } break;
-        case MPP_FMT_YUV420SP_10BIT :
-        case MPP_FMT_YUV420SP : {
-            downscale_buf_size = down_scale_y_virstride * 3 / 2;
-        } break;
-        case MPP_FMT_YUV422SP_10BIT :
-        case MPP_FMT_YUV422SP : {
-            downscale_buf_size = down_scale_y_virstride * 2;
-        } break;
-        case MPP_FMT_YUV444SP_10BIT :
-        case MPP_FMT_YUV444SP : {
-            downscale_buf_size = down_scale_y_virstride * 3;
-        } break;
-        default : {
-            downscale_buf_size = down_scale_y_virstride * 3 / 2;
-        } break;
-        }
-        downscale_buf_size = MPP_ALIGN(downscale_buf_size, 16);
-        impl->buf_size += downscale_buf_size;
-        mpp_frame_set_buf_size(impl->info_set, impl->buf_size);
-        mpp_frame_set_buf_size(frame, impl->buf_size);
-    }
+    if (mpp_frame_get_thumbnail_en(frame) == MPP_FRAME_THUMBNAIL_MIXED)
+        impl->buf_size += mpp_buf_slots_setup_thumbnail_frame(frame, NULL, NULL, 0);
+    mpp_frame_set_buf_size(impl->info_set, impl->buf_size);
+    mpp_frame_set_buf_size(frame, impl->buf_size);
     info_set_impl = (MppFrameImpl *)impl->info_set;
     frame_impl    = (MppFrameImpl *)frame;
     info_set_impl->color_range      = frame_impl->color_range;

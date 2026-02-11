@@ -830,7 +830,6 @@ void vdpu384b_init_ctrl_regs(Vdpu38xRegSet *regs, MppCodingType codec_t);
 void vdpu38x_setup_statistic(Vdpu38xCtrlReg *com);
 MPP_RET vdpu38x_setup_cur_stride_info(MppFrame mframe, Vdpu38xRegSet *regs, RK_U32 chroma_fmt_idc);
 void vdpu38x_setup_down_scale(MppFrame frame, MppDev dev, Vdpu38xCtrlReg *com, void* comParas);
-void vdpu38x_update_thumbnail_frame_info(MppFrame frame);
 MPP_RET vdpu38x_setup_scale_origin_bufs(MppFrame mframe, HalBufs *org_bufs, RK_S32 max_cnt);
 RK_S32 hal_h265d_avs2d_calc_mv_size(RK_S32 pic_w, RK_S32 pic_h, RK_S32 ctu_w);
 RK_RET vdpu38x_dump_sw_regs(Vdpu38xRegSet *regs, HalDbgCtx *dbg_ctx);

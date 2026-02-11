@@ -142,91 +142,31 @@ MPP_RET vdpu384a_setup_cur_stride_info(MppFrame mframe, Vdpu384aRegSet *regs, RK
     return MPP_OK;
 }
 
-void vdpu384a_update_thumbnail_frame_info(MppFrame frame)
-{
-    RK_U32 down_scale_height = mpp_frame_get_height(frame) >> 1;
-    RK_U32 down_scale_width = mpp_frame_get_width(frame) >> 1;
-    RK_U32 down_scale_ver = MPP_ALIGN(down_scale_height, 16);
-    RK_U32 down_scale_hor = MPP_ALIGN(down_scale_width, 16);
-    RK_U32 down_scale_buf_size = 0;
-
-    if (!MPP_FRAME_FMT_IS_FBC(mpp_frame_get_fmt(frame))) {
-        down_scale_hor = mpp_align_128_odd_plus_64(down_scale_hor);
-        down_scale_ver = mpp_frame_get_ver_stride(frame) >> 1;
-    }
-
-    down_scale_buf_size = down_scale_hor * down_scale_ver *  3 / 2;
-    /*
-     *  no matter what format, scale down image will output as 8bit raster format;
-     */
-    mpp_frame_set_fmt(frame, MPP_FMT_YUV420SP);
-    mpp_frame_set_width(frame, down_scale_width);
-    mpp_frame_set_height(frame, down_scale_height);
-    mpp_frame_set_hor_stride(frame, down_scale_hor);
-    mpp_frame_set_ver_stride(frame, down_scale_ver);
-    mpp_frame_set_buf_size(frame, down_scale_buf_size);
-}
-
 void vdpu384a_setup_down_scale(MppFrame frame, MppDev dev, Vdpu384aCtrlReg *com, void* comParas)
 {
-    RK_U32 down_scale_height = mpp_frame_get_height(frame) >> 1;
-    RK_U32 down_scale_width = mpp_frame_get_width(frame) >> 1;
-    RK_U32 down_scale_ver = MPP_ALIGN(down_scale_height, 16);
-    RK_U32 down_scale_hor = MPP_ALIGN(down_scale_width, 16);
-
     Vdpu384aRegCommParas* paras = (Vdpu384aRegCommParas*)comParas;
     MppFrameFormat fmt = mpp_frame_get_fmt(frame);
     MppMeta meta = mpp_frame_get_meta(frame);
-    RK_U32 down_scale_y_offset = 0;
-    RK_U32 down_scale_uv_offset = 0;
-    RK_U32 down_scale_y_virstride = down_scale_ver * down_scale_hor;
-    RK_U32 downscale_buf_size;
+    RK_U32 sd_hor, sd_y_virstride, sd_buf_size;
 
-    if (!MPP_FRAME_FMT_IS_FBC(mpp_frame_get_fmt(frame))) {
-        down_scale_hor = mpp_align_128_odd_plus_64(down_scale_hor);
-        down_scale_ver = mpp_frame_get_ver_stride(frame) >> 1;
-        down_scale_y_virstride = down_scale_ver * down_scale_hor;
-    }
-    /*
-     *  no matter what format, scale down image will output as 8bit raster format;
-     *  down_scale image buffer size was already added to the buf_size of mpp_frame,
-     *  which was calculated in mpp_buf_slot.cpp: (size = original_size + scaledown_size)
-     */
-    switch ((fmt & MPP_FRAME_FMT_MASK)) {
-    case MPP_FMT_YUV400 : {
-        downscale_buf_size = down_scale_y_virstride;
-    } break;
-    case MPP_FMT_YUV420SP_10BIT :
-    case MPP_FMT_YUV420SP : {
-        downscale_buf_size = down_scale_y_virstride * 3 / 2;
-    } break;
-    case MPP_FMT_YUV422SP_10BIT :
-    case MPP_FMT_YUV422SP : {
-        downscale_buf_size = down_scale_y_virstride * 2;
-    } break;
-    case MPP_FMT_YUV444SP : {
-        downscale_buf_size = down_scale_y_virstride * 3;
-    } break;
-    default : {
-        downscale_buf_size = down_scale_y_virstride * 3 / 2;
-    } break;
-    }
-    downscale_buf_size = MPP_ALIGN(downscale_buf_size, 16);
-
-    down_scale_y_offset = MPP_ALIGN((mpp_frame_get_buf_size(frame) - downscale_buf_size), 16);
-    down_scale_uv_offset = down_scale_y_offset + down_scale_y_virstride;
+    sd_buf_size = mpp_buf_slots_setup_thumbnail_frame(frame, &sd_hor, &sd_y_virstride, 0);
 
     com->reg9.scale_down_en = 1;
     com->reg9.av1_fgs_en = 0;
-    paras->reg71_scl_ref_hor_virstride = down_scale_hor >> 4;
-    paras->reg72_scl_ref_raster_uv_hor_virstride = down_scale_hor >> 4;
+    paras->reg71_scl_ref_hor_virstride = sd_hor >> 4;
     if ((fmt & MPP_FRAME_FMT_MASK) == MPP_FMT_YUV444SP)
-        paras->reg72_scl_ref_raster_uv_hor_virstride = down_scale_hor >> 3;
-    paras->reg73_scl_ref_virstride = down_scale_y_virstride >> 4;
+        paras->reg72_scl_ref_raster_uv_hor_virstride = sd_hor >> 3;
+    else
+        paras->reg72_scl_ref_raster_uv_hor_virstride = sd_hor >> 4;
+    paras->reg73_scl_ref_virstride = sd_y_virstride >> 4;
+
     if (mpp_frame_get_thumbnail_en(frame) == MPP_FRAME_THUMBNAIL_MIXED) {
-        mpp_dev_set_reg_offset(dev, 133, down_scale_y_offset);
-        mpp_meta_set_s32(meta, KEY_DEC_TBN_Y_OFFSET, down_scale_y_offset);
-        mpp_meta_set_s32(meta, KEY_DEC_TBN_UV_OFFSET, down_scale_uv_offset);
+        RK_U32 sd_y_off = MPP_ALIGN((mpp_frame_get_buf_size(frame) - sd_buf_size), 16);
+        RK_U32 sd_uv_off = sd_y_off + sd_y_virstride;
+
+        mpp_dev_set_reg_offset(dev, 133, sd_y_off);
+        mpp_meta_set_s32(meta, KEY_DEC_TBN_Y_OFFSET, sd_y_off);
+        mpp_meta_set_s32(meta, KEY_DEC_TBN_UV_OFFSET, sd_uv_off);
     }
 }
 

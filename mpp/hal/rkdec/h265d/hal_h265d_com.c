@@ -2522,7 +2522,7 @@ MPP_RET hal_h265d_vdpu38x_control(void *hal, MpiCmd cmd_type, void *param)
         break;
     }
     case MPP_DEC_GET_THUMBNAIL_FRAME_INFO: {
-        vdpu38x_update_thumbnail_frame_info((MppFrame)param);
+        mpp_buf_slots_setup_thumbnail_frame((MppFrame)param, NULL, NULL, 1);
     } break;
     case MPP_DEC_SET_OUTPUT_FORMAT: {
     } break;

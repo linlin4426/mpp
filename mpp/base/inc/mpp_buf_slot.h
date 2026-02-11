@@ -268,6 +268,9 @@ MPP_RET mpp_buf_slot_reset(MppBufSlots slots, RK_S32 index); //rest slot status 
 // special one for generate default frame to slot at index and return pointer
 MPP_RET mpp_buf_slot_default_info(MppBufSlots slots, RK_S32 index, void *val);
 
+RK_U32 mpp_buf_slots_setup_thumbnail_frame(MppFrame frame, RK_U32 *hor_y_stride, RK_U32 *y_stride,
+                                           RK_U32 update_frm_info);
+
 #ifdef __cplusplus
 }
 #endif

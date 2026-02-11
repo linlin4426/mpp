@@ -290,22 +290,19 @@ static MPP_RET hal_h265d_vdpu384b_gen_regs(void *hal,  HalTaskInfo *syn)
         framebuf = origin_buf->buf[0];
     }
 
-    hw_regs->comm_addrs.reg168_decout_base = mpp_buffer_get_fd(framebuf); //just index need map
-    hw_regs->comm_addrs.reg169_error_ref_base = mpp_buffer_get_fd(framebuf);
+    fd =  mpp_buffer_get_fd(framebuf);
+    hw_regs->comm_addrs.reg168_decout_base = fd;
+    hw_regs->comm_addrs.reg169_error_ref_base = fd;
+    hw_regs->comm_addrs.reg192_payload_st_cur_base = fd;
     /*if out_base is equal to zero it means this frame may error
     we return directly add by csy*/
     if (!hw_regs->comm_addrs.reg168_decout_base)
         return 0;
 
-    fd =  mpp_buffer_get_fd(framebuf);
-    hw_regs->comm_addrs.reg168_decout_base = fd;
-    hw_regs->comm_addrs.reg192_payload_st_cur_base = fd;
     mv_buf = hal_bufs_get_buf(reg_ctx->cmv_bufs, dxva_ctx->pp.CurrPic.Index7Bits);
-
     hw_regs->comm_addrs.reg216_colmv_cur_base = mpp_buffer_get_fd(mv_buf->buf[0]);
     hal_dbg_dumpf_buf(reg_ctx->dbg_ctx, "colmv_cur_frame.dat", mv_buf->buf[0], 0,
                       reg_ctx->mv_size, 128, "w+");
-
     mpp_buf_slot_get_prop(cfg->packet_slots, syn->dec.input, SLOT_BUFFER,
                           &streambuf);
     if ( dxva_ctx->bitstream == NULL) {

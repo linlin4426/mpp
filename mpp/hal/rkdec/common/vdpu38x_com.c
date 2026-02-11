@@ -652,31 +652,6 @@ MPP_RET vdpu38x_setup_cur_stride_info(MppFrame mframe, Vdpu38xRegSet *regs, RK_U
     return MPP_OK;
 }
 
-void vdpu38x_update_thumbnail_frame_info(MppFrame frame)
-{
-    RK_U32 down_scale_height = mpp_frame_get_height(frame) >> 1;
-    RK_U32 down_scale_width = mpp_frame_get_width(frame) >> 1;
-    RK_U32 down_scale_ver = MPP_ALIGN(down_scale_height, 16);
-    RK_U32 down_scale_hor = MPP_ALIGN(down_scale_width, 16);
-    RK_U32 down_scale_buf_size = 0;
-
-    if (!MPP_FRAME_FMT_IS_FBC(mpp_frame_get_fmt(frame))) {
-        down_scale_hor = mpp_align_128_odd_plus_64(down_scale_hor);
-        down_scale_ver = mpp_frame_get_ver_stride(frame) >> 1;
-    }
-
-    down_scale_buf_size = down_scale_hor * down_scale_ver *  3 / 2;
-    /*
-     *  no matter what format, scale down image will output as 8bit raster format;
-     */
-    mpp_frame_set_fmt(frame, MPP_FMT_YUV420SP);
-    mpp_frame_set_width(frame, down_scale_width);
-    mpp_frame_set_height(frame, down_scale_height);
-    mpp_frame_set_hor_stride(frame, down_scale_hor);
-    mpp_frame_set_ver_stride(frame, down_scale_ver);
-    mpp_frame_set_buf_size(frame, down_scale_buf_size);
-}
-
 void vdpu38x_setup_down_scale(MppFrame frame, MppDev dev, Vdpu38xCtrlReg *com, void* comParas)
 {
     RK_U32 down_scale_height = mpp_frame_get_height(frame) >> 1;
