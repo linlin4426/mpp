@@ -494,7 +494,7 @@ MPP_RET mpp_service_reg_wr(void *ctx, MppDevRegWrCfg *cfg)
     MppReqV1 *mpp_req = mpp_service_next_req(p);
 
     mpp_req->cmd = MPP_CMD_SET_REG_WRITE;
-    mpp_req->flag = 0;
+    mpp_req->flag = p->reg_wr_flag;
     mpp_req->size = cfg->size;
     mpp_req->offset = cfg->offset;
     mpp_req->data_ptr = REQ_DATA_PTR(cfg->reg);
@@ -634,6 +634,19 @@ MPP_RET mpp_service_set_err_ref_hack(void *ctx, RK_U32 *enable)
     mpp_req.data_ptr = REQ_DATA_PTR(enable);
 
     return mpp_service_ioctl_request(p->client, &mpp_req);
+}
+
+MPP_RET mpp_service_set_flag(void *ctx, RK_U32 *flag)
+{
+    MppDevMppService *p = (MppDevMppService *)ctx;
+    MPP_RET ret = MPP_NOK;
+
+    if (flag) {
+        p->reg_wr_flag = *flag;
+        ret = MPP_OK;
+    }
+
+    return ret;
 }
 
 MPP_RET mpp_service_lock_map(void *ctx)
@@ -830,25 +843,26 @@ MPP_RET mpp_service_cmd_poll(void *ctx, MppDevPollCfg *cfg)
 }
 
 const MppDevApi mpp_service_api = {
-    "mpp_service",
-    sizeof(MppDevMppService),
-    mpp_service_init,
-    mpp_service_deinit,
-    mpp_service_attach,
-    mpp_service_detach,
-    mpp_service_delimit,
-    mpp_service_set_cb_ctx,
-    mpp_service_reg_wr,
-    mpp_service_reg_rd,
-    mpp_service_reg_offset,
-    mpp_service_reg_offsets,
-    mpp_service_rcb_info,
-    mpp_service_set_info,
-    mpp_service_set_err_ref_hack,
-    mpp_service_lock_map,
-    mpp_service_unlock_map,
-    mpp_service_attach_fd,
-    mpp_service_detach_fd,
-    mpp_service_cmd_send,
-    mpp_service_cmd_poll,
+    .name               = "mpp_service",
+    .ctx_size           = sizeof(MppDevMppService),
+    .init               = mpp_service_init,
+    .deinit             = mpp_service_deinit,
+    .attach             = mpp_service_attach,
+    .detach             = mpp_service_detach,
+    .delimit            = mpp_service_delimit,
+    .set_cb_ctx         = mpp_service_set_cb_ctx,
+    .reg_wr             = mpp_service_reg_wr,
+    .reg_rd             = mpp_service_reg_rd,
+    .reg_offset         = mpp_service_reg_offset,
+    .reg_offs           = mpp_service_reg_offsets,
+    .rcb_info           = mpp_service_rcb_info,
+    .set_info           = mpp_service_set_info,
+    .set_err_ref_hack   = mpp_service_set_err_ref_hack,
+    .set_flag           = mpp_service_set_flag,
+    .lock_map           = mpp_service_lock_map,
+    .unlock_map         = mpp_service_unlock_map,
+    .attach_fd          = mpp_service_attach_fd,
+    .detach_fd          = mpp_service_detach_fd,
+    .cmd_send           = mpp_service_cmd_send,
+    .cmd_poll           = mpp_service_cmd_poll,
 };

@@ -60,6 +60,8 @@ typedef struct MppDevMppService_t {
 
     pthread_mutex_t     lock_bufs;
     struct list_head    list_bufs;
+
+    RK_U32              reg_wr_flag;
 } MppDevMppService;
 
 #ifdef  __cplusplus
