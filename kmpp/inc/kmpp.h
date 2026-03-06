@@ -7,6 +7,7 @@
 #define KMPP_H
 
 #include <unistd.h>
+#include <sys/time.h>
 
 #include "mpp_impl.h"
 #include "mpp_dec_cfg.h"
