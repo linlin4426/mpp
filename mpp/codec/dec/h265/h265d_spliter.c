@@ -265,7 +265,7 @@ static RK_S32 h265d_combine_frame(H265dSpl *p, RK_S32 next, const RK_U8 **buf, R
             }
 
             // Resize first to get new memory
-            if (mpp_ring_resize(p->ring, new_size)) {
+            if (NULL == mpp_ring_resize(p->ring, new_size)) {
                 mpp_loge_f("hal: resize ring to %u failed\n", new_size);
                 if (saved_wrap_data)
                     mpp_free(saved_wrap_data);
