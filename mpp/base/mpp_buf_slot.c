@@ -819,8 +819,7 @@ MPP_RET mpp_buf_slot_init(MppBufSlots *slots)
         return MPP_NOK;
     }
 
-    mpp_env_get_u32("buf_slot_debug", &buf_slot_debug,
-                    BUF_SLOT_DBG_OPS_HISTORY | BUF_SLOT_DBG_INFO_SET);
+    mpp_env_get_u32("buf_slot_debug", &buf_slot_debug, BUF_SLOT_DBG_OPS_HISTORY);
     mpp_env_get_u32("use_legacy_align", &use_legacy_align, 0);
 
     do {
