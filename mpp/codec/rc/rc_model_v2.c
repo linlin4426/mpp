@@ -195,7 +195,7 @@ MPP_RET bits_model_param_init(RcModelV2Ctx *ctx)
         mpp_err("madp init fail");
         return MPP_ERR_MALLOC;
     }
-    mpp_data_init_v2(&ctx->stat_rate, fps->fps_out_num, 0);
+    mpp_data_init_v2(&ctx->stat_rate, fps->fps_out_num / fps->fps_out_denom, 0);
     if (ctx->stat_rate == NULL) {
         mpp_err("stat_rate init fail fps_out_num %d", fps->fps_out_num);
         return MPP_ERR_MALLOC;
@@ -1099,7 +1099,6 @@ MPP_RET bits_model_init(RcModelV2Ctx *ctx)
     RcCfg *usr_cfg = &ctx->usr_cfg;
     RK_S32 gop_len = ctx->usr_cfg.igop;
     RcFpsCfg *fps = &ctx->usr_cfg.fps;
-    RK_S64 gop_bits = 0;
     RK_U32 target_bps = 0;
 
     rc_dbg_func("enter %p\n", ctx);
@@ -1173,18 +1172,17 @@ MPP_RET bits_model_init(RcModelV2Ctx *ctx)
     }
 
     ctx->target_bps = ctx->usr_cfg.bps_target;
+    ctx->last_fps = fps->fps_out_num / fps->fps_out_denom;
 
     if (gop_len >= 1)
-        gop_bits = (RK_S64)gop_len * target_bps * fps->fps_out_denom;
+        ctx->gop_total_bits = (RK_S64)gop_len * target_bps / ctx->last_fps;
     else
-        gop_bits = (RK_S64)fps->fps_out_num * target_bps * fps->fps_out_denom;
+        ctx->gop_total_bits = (RK_S64)target_bps;
 
-    ctx->gop_total_bits = gop_bits / fps->fps_out_num;
-    ctx->bit_per_frame = target_bps * fps->fps_out_denom / fps->fps_out_num;
+    ctx->bit_per_frame = target_bps / ctx->last_fps;
     ctx->watl_thrd = 3 * target_bps;
     ctx->stat_watl = ctx->watl_thrd  >> 3;
     ctx->watl_base = ctx->stat_watl;
-    ctx->last_fps = fps->fps_out_num / fps->fps_out_denom;
 
     rc_dbg_rc("gop %d total bit %lld per_frame %d statistics time %d second\n",
               ctx->usr_cfg.igop, ctx->gop_total_bits, ctx->bit_per_frame,
