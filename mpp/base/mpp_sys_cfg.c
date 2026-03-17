@@ -396,7 +396,7 @@ MPP_RET mpp_sys_dec_buf_chk_proc(MppSysDecBufChkCfg *cfg)
             aligned_byte = mpp_sys_cfg_align(SYS_CFG_ALIGN_16, aligned_pixel_byte);
         } break;
         }
-        sys_cfg_dbg_dec_buf("dec hw aligned hor_byte: [%d %d]\n", aligned_byte);
+        sys_cfg_dbg_dec_buf("dec hw aligned hor_byte: [%d]\n", aligned_byte);
 
         /*
          * NOTE: rk3576 use 128 odd plus 64 for all non jpeg format
@@ -404,8 +404,6 @@ MPP_RET mpp_sys_dec_buf_chk_proc(MppSysDecBufChkCfg *cfg)
          */
         if ((aligned_byte > 1920 || soc_type == ROCKCHIP_SOC_RK3576)
             && type != MPP_VIDEO_CodingMJPEG) {
-            rk_s32 update = 0;
-
             switch (soc_type) {
             case ROCKCHIP_SOC_RK3399 :
             case ROCKCHIP_SOC_RK3568 :
@@ -413,43 +411,40 @@ MPP_RET mpp_sys_dec_buf_chk_proc(MppSysDecBufChkCfg *cfg)
             case ROCKCHIP_SOC_RK3528 :
             case ROCKCHIP_SOC_RK3588 : {
                 aligned_byte = mpp_sys_cfg_align(SYS_CFG_ALIGN_256_ODD, aligned_byte);
-                update = 1;
             } break;
             case ROCKCHIP_SOC_RK3576 : {
                 aligned_byte = mpp_sys_cfg_align(SYS_CFG_ALIGN_128_ODD_PLUS_64, aligned_byte);
-                update = 1;
             } break;
             default : {
             } break;
             }
-
-            /*
-             * recalc aligned_pixel here
-             * NOTE: no RGB format here in fact
-             */
-            if (update) {
-                switch (fmt & MPP_FRAME_FMT_MASK) {
-                case MPP_FMT_YUV420SP_10BIT:
-                case MPP_FMT_YUV422SP_10BIT:
-                case MPP_FMT_YUV444SP_10BIT: {
-                    aligned_pixel = aligned_byte * 8 / 10;
-                } break;
-                case MPP_FMT_YUV422_YVYU:
-                case MPP_FMT_YUV422_YUYV:
-                case MPP_FMT_RGB565:
-                case MPP_FMT_BGR565: {
-                    aligned_pixel = aligned_byte / 2;
-                } break;
-                case MPP_FMT_RGB888:
-                case MPP_FMT_BGR888: {
-                    aligned_pixel = aligned_byte / 3;
-                } break;
-                default : {
-                    aligned_pixel = aligned_byte;
-                } break;
-                }
-            }
         }
+
+        /*
+         * recalc aligned_pixel here
+         * NOTE: no RGB format here in fact
+         */
+        switch (fmt & MPP_FRAME_FMT_MASK) {
+        case MPP_FMT_YUV420SP_10BIT:
+        case MPP_FMT_YUV422SP_10BIT:
+        case MPP_FMT_YUV444SP_10BIT: {
+            aligned_pixel = aligned_byte * 8 / 10;
+        } break;
+        case MPP_FMT_YUV422_YVYU:
+        case MPP_FMT_YUV422_YUYV:
+        case MPP_FMT_RGB565:
+        case MPP_FMT_BGR565: {
+            aligned_pixel = aligned_byte / 2;
+        } break;
+        case MPP_FMT_RGB888:
+        case MPP_FMT_BGR888: {
+            aligned_pixel = aligned_byte / 3;
+        } break;
+        default : {
+            aligned_pixel = aligned_byte;
+        } break;
+        }
+
         sys_cfg_dbg_dec_buf("dec hw performance aligned hor_byte: [%d]\n", aligned_pixel);
 
         cfg->h_stride_by_byte = aligned_byte;
