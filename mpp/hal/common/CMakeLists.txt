@@ -7,6 +7,7 @@ include_directories(.)
 add_library(hal_common OBJECT
     hal_info.c
     hal_bufs.c
+    hal_dbg.c
     )
 
 if( HAVE_H264E )
