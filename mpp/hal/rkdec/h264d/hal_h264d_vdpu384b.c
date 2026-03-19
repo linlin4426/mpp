@@ -132,15 +132,8 @@ static MPP_RET set_registers(H264dHalCtx_t *p_hal, Vdpu38xRegSet *regs, HalTaskI
         regs->comm_addrs.reg130_stream_buf_end_base = mpp_buffer_get_fd(mbuffer);
         mpp_dev_set_reg_offset(p_hal->cfg->dev, 130, mpp_buffer_get_size(mbuffer));
         // regs->comm_paras.reg65_strm_start_bit = 2 * 8;
-#ifdef DUMP_VDPU38X_DATAS
-        {
-            char *cur_fname = "stream_in.dat";
-            memset(vdpu38x_dump_cur_fname_path, 0, sizeof(vdpu38x_dump_cur_fname_path));
-            sprintf(vdpu38x_dump_cur_fname_path, "%s/%s", vdpu38x_dump_cur_dir, cur_fname);
-            vdpu38x_dump_data_to_file(vdpu38x_dump_cur_fname_path, (void *)mpp_buffer_get_ptr(mbuffer),
-                                      8 * p_hal->strm_len, 128, 0, 0);
-        }
-#endif
+        hal_dbg_dumpf_buf(p_hal->dbg_ctx, "stream_in.dat", mbuffer, 0,
+                          p_hal->strm_len, 128, "w+");
     }
 
     {
@@ -230,6 +223,7 @@ MPP_RET vdpu384b_h264d_init(void *hal, MppHalCfg *cfg)
     }
 
     vdpu38x_rcb_calc_init((Vdpu38xRcbCtx **)&reg_ctx->rcb_ctx);
+    hal_dbg_init(&p_hal->dbg_ctx, "hal_h264d");
 
 __RETURN:
     return MPP_OK;
@@ -400,17 +394,7 @@ MPP_RET vdpu384b_h264d_gen_regs(void *hal, HalTaskInfo *task)
         task->dec.reg_index = 0;
     }
 
-#ifdef DUMP_VDPU38X_DATAS
-    {
-        memset(vdpu38x_dump_cur_dir, 0, sizeof(vdpu38x_dump_cur_dir));
-        sprintf(vdpu38x_dump_cur_dir, "avc/Frame%04d", vdpu38x_dump_cur_frm);
-        if (access(vdpu38x_dump_cur_dir, 0)) {
-            if (mkdir(vdpu38x_dump_cur_dir))
-                mpp_err_f("error: mkdir %s\n", vdpu38x_dump_cur_dir);
-        }
-        vdpu38x_dump_cur_frm++;
-    }
-#endif
+    hal_dbg_setup(p_hal->dbg_ctx, NULL);
 
     vdpu38x_h264d_prepare_spspps(p_hal, (RK_U64 *)ctx->spspps, VDPU384B_SPSPPS_SIZE / 8);
     vdpu38x_h264d_prepare_scanlist(p_hal, ctx->sclst, VDPU384B_SCALING_LIST_SIZE);
@@ -496,11 +480,42 @@ MPP_RET vdpu384b_h264d_start(void *hal, HalTaskInfo *task)
             break;
         }
 
-        if (hal_h264d_debug & H264D_DBG_REG) {
+        vdpu38x_dump_sw_regs(regs, p_hal->dbg_ctx);
+
+        ret = MPP_OK;
+        if (hal_dbg_flag_en(p_hal->dbg_ctx, HAL_DBG_GET_REG)) {
+            rd_cfg.reg = &regs->reg_version;
+            rd_cfg.size = sizeof(regs->reg_version);
+            rd_cfg.offset = 0;
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+
+            rd_cfg.reg = &regs->ctrl_regs;
+            rd_cfg.size = sizeof(regs->ctrl_regs);
+            rd_cfg.offset = VDPU38X_OFF_CTRL_REGS;
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+
+            rd_cfg.reg = &regs->comm_paras;
+            rd_cfg.size = sizeof(regs->comm_paras);
+            rd_cfg.offset = VDPU38X_OFF_CODEC_PARAS_REGS;
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+
+            rd_cfg.reg = &regs->comm_addrs;
+            rd_cfg.size = sizeof(regs->comm_addrs);
+            rd_cfg.offset = VDPU38X_OFF_COMMON_ADDR_REGS;
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+
             rd_cfg.reg = &regs->statistic_regs;
             rd_cfg.size = sizeof(regs->statistic_regs);
             rd_cfg.offset = VDPU38X_OFF_COM_STATISTIC_REGS_VDPU384B;
-            ret = mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+        } else if (hal_dbg_flag_en(p_hal->dbg_ctx, HAL_DBG_STA_CHK)) {
+            rd_cfg.reg = &regs->statistic_regs;
+            rd_cfg.size = sizeof(regs->statistic_regs);
+            rd_cfg.offset = VDPU38X_OFF_COM_STATISTIC_REGS_VDPU384B;
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+        }
+        if (ret) {
+            mpp_err_f("set register read (debug) failed %d\n", ret);
         }
 
         /* rcb info for sram */
@@ -529,6 +544,8 @@ MPP_RET vdpu384b_h264d_wait(void *hal, HalTaskInfo *task)
                             reg_ctx->reg_buf[task->dec.reg_index].regs :
                             reg_ctx->regs;
 
+    hal_dbg_finish(p_hal->dbg_ctx);
+
     if (task->dec.flags.parse_err ||
         (task->dec.flags.ref_err && !p_hal->cfg->cfg->base.disable_error)) {
         goto __SKIP_HARD;
@@ -537,6 +554,17 @@ MPP_RET vdpu384b_h264d_wait(void *hal, HalTaskInfo *task)
     ret = mpp_dev_ioctl(p_hal->cfg->dev, MPP_DEV_CMD_POLL, NULL);
     if (ret)
         mpp_err_f("poll cmd failed %d\n", ret);
+
+    if (hal_dbg_flag_en(p_hal->dbg_ctx, HAL_DBG_STA_CHK) &&
+        (p_regs->statistic_regs.reg312.rcb_rd_sum_chk !=
+         p_regs->statistic_regs.reg312.rcb_wr_sum_chk)) {
+        mpp_loge("rcb rd sum %d wr sum %d\n",
+                 p_regs->statistic_regs.reg312.rcb_rd_sum_chk,
+                 p_regs->statistic_regs.reg312.rcb_wr_sum_chk);
+    }
+
+    if (hal_dbg_flag_en(p_hal->dbg_ctx, HAL_DBG_GET_REG))
+        vdpu38x_dump_hw_regs(p_regs, p_hal->dbg_ctx);
 
 __SKIP_HARD:
     if (p_hal->cfg->dec_cb) {
@@ -557,10 +585,6 @@ __SKIP_HARD:
             param.hard_err = 0;
 
         mpp_callback(p_hal->cfg->dec_cb, &param);
-    }
-    if (hal_h264d_debug & H264D_DBG_REG) {
-        mpp_assert(p_regs->statistic_regs.reg312.rcb_rd_sum_chk ==
-                   p_regs->statistic_regs.reg312.rcb_wr_sum_chk);
     }
     memset(&p_regs->ctrl_regs.reg19, 0, sizeof(RK_U32));
     if (p_hal->fast_mode) {

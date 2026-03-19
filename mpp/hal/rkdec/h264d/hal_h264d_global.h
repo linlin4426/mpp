@@ -15,6 +15,8 @@
 #include "dxva_syntax.h"
 #include "h264d_syntax.h"
 
+#include "hal_dbg.h"
+
 #define H264D_DBG_ERROR             (0x00000001)
 #define H264D_DBG_ASSERT            (0x00000002)
 #define H264D_DBG_WARNNING          (0x00000004)
@@ -112,6 +114,8 @@ typedef struct h264d_hal_ctx_t {
 
     void                     *reg_ctx;
     RK_U32                   fast_mode;
+
+    HalDbgCtx                *dbg_ctx;
 } H264dHalCtx_t;
 
 extern const RK_U32 h264_cabac_table[928];
