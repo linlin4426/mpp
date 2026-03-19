@@ -13,6 +13,8 @@
 #include "parser_api.h"
 #include "avs2d_syntax.h"
 
+#include "hal_dbg.h"
+
 #define AVS2D_HAL_DBG_ERROR             (0x00000001)
 #define AVS2D_HAL_DBG_ASSERT            (0x00000002)
 #define AVS2D_HAL_DBG_WARNNING          (0x00000004)
@@ -90,6 +92,8 @@ typedef struct avs2d_hal_ctx_t {
     MppBuffer               scalist_buf;
 
     RK_U32                  frame_no;
+
+    HalDbgCtx               *dbg_ctx;
 } Avs2dHalCtx_t;
 
 #endif /* HAL_AVS2D_GLOBAL_H */

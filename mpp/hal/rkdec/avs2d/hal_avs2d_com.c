@@ -43,6 +43,7 @@ MPP_RET hal_avs2d_vdpu_deinit(void *hal)
         MPP_FREE(reg_ctx->reg_buf[i].regs);
     }
     vdpu38x_rcb_calc_deinit(reg_ctx->rcb_ctx);
+    hal_dbg_deinit(p_hal->dbg_ctx);
 
     if (reg_ctx->bufs) {
         mpp_buffer_put(reg_ctx->bufs);
@@ -151,15 +152,8 @@ MPP_RET hal_avs2d_vdpu38x_prepare_header(Avs2dHalCtx_t *p_hal, RK_U8 *data, RK_U
 
     mpp_put_align(&bp, 64, 0);
 
-#ifdef DUMP_VDPU38X_DATAS
-    {
-        char *cur_fname = "global_cfg.dat";
-        memset(vdpu38x_dump_cur_fname_path, 0, sizeof(vdpu38x_dump_cur_fname_path));
-        sprintf(vdpu38x_dump_cur_fname_path, "%s/%s", vdpu38x_dump_cur_dir, cur_fname);
-        vdpu38x_dump_data_to_file(vdpu38x_dump_cur_fname_path, (void *)bp.pbuf,
-                                  64 * bp.index + bp.bitpos, 128, 0, 0);
-    }
-#endif
+    hal_dbg_dump_data(p_hal->dbg_ctx, "global_cfg.dat", (void *)bp.pbuf,
+                      64 * len, 128, 0, "w+");
 
     return MPP_OK;
 }

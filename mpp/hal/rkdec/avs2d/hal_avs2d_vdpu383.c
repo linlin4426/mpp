@@ -137,15 +137,15 @@ static MPP_RET vdpu383_avs2d_rcb_calc(void *context, RK_U32 *total_size)
 
 static MPP_RET fill_registers(Avs2dHalCtx_t *p_hal, Vdpu383RegSet *regs, HalTaskInfo *task)
 {
-    MPP_RET ret = MPP_OK;
-    RK_U32 i;
     MppFrame mframe = NULL;
     Avs2dSyntax_t *syntax = &p_hal->syntax;
     RefParams_Avs2d *refp = &syntax->refp;
     HalDecTask *task_dec  = &task->dec;
     MppBufSlots frm_slots = p_hal->cfg->frame_slots;
-
+    MppBuffer m_buf_tmp = NULL;
     HalBuf *mv_buf = NULL;
+    MPP_RET ret = MPP_OK;
+    RK_U32 i;
 
     //!< caculate the yuv_frame_size
     mpp_buf_slot_get_prop(frm_slots, task_dec->output, SLOT_FRAME_PTR, &mframe);
@@ -232,6 +232,10 @@ static MPP_RET fill_registers(Avs2dHalCtx_t *p_hal, Vdpu383RegSet *regs, HalTask
 
     regs->comm_paras.reg66_stream_len = MPP_ALIGN(mpp_packet_get_length(task_dec->input_packet), 16) + 64;
 
+    mpp_buf_slot_get_prop(p_hal->cfg->packet_slots, task_dec->input, SLOT_BUFFER, &m_buf_tmp);
+    hal_dbg_dumpf_buf(p_hal->dbg_ctx, "stream_in.dat", m_buf_tmp, 0,
+                      regs->comm_paras.reg66_stream_len, 128, "w+");
+
     {
         //scale down config
         mpp_buf_slot_get_prop(frm_slots, task_dec->output,
@@ -300,6 +304,7 @@ MPP_RET hal_avs2d_vdpu383_init(void *hal, MppHalCfg *cfg)
     }
 
     vdpu38x_rcb_calc_init((Vdpu38xRcbCtx **)&reg_ctx->rcb_ctx);
+    hal_dbg_init(&p_hal->dbg_ctx, "hal_avs2d");
 
 __RETURN:
     AVS2D_HAL_TRACE("Out. ret %d", ret);
@@ -357,6 +362,8 @@ MPP_RET hal_avs2d_vdpu383_gen_regs(void *hal, HalTaskInfo *task)
     regs = reg_ctx->regs;
     memset(regs, 0, sizeof(Vdpu383RegSet));
     vdpu383_init_ctrl_regs(regs, MPP_VIDEO_CodingAVS2);
+
+    hal_dbg_setup(p_hal->dbg_ctx, NULL);
 
     hal_avs2d_vdpu38x_prepare_header(p_hal, reg_ctx->shph_dat, AVS2_383_SHPH_SIZE / 8);
     hal_avs2d_vdpu38x_prepare_scalist(p_hal, reg_ctx->scalist_dat, AVS2_383_SCALIST_SIZE / 8);
@@ -450,12 +457,42 @@ MPP_RET hal_avs2d_vdpu383_start(void *hal, HalTaskInfo *task)
             break;
         }
 
-        if (hal_avs2d_debug & AVS2D_HAL_DBG_REG) {
-            memset(reg_ctx->reg_out, 0, sizeof(reg_ctx->reg_out));
-            rd_cfg.reg = reg_ctx->reg_out;
-            rd_cfg.size = sizeof(reg_ctx->reg_out);
+        vdpu383_dump_sw_regs(regs, p_hal->dbg_ctx);
+
+        ret = MPP_OK;
+        if (hal_dbg_flag_en(p_hal->dbg_ctx, HAL_DBG_GET_REG)) {
+            rd_cfg.reg = &regs->reg_version;
+            rd_cfg.size = sizeof(regs->reg_version);
             rd_cfg.offset = 0;
-            ret = mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+
+            rd_cfg.reg = &regs->ctrl_regs;
+            rd_cfg.size = sizeof(regs->ctrl_regs);
+            rd_cfg.offset = VDPU38X_OFF_CTRL_REGS;
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+
+            rd_cfg.reg = &regs->comm_paras;
+            rd_cfg.size = sizeof(regs->comm_paras);
+            rd_cfg.offset = VDPU38X_OFF_CODEC_PARAS_REGS;
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+
+            rd_cfg.reg = &regs->comm_addrs;
+            rd_cfg.size = sizeof(regs->comm_addrs);
+            rd_cfg.offset = VDPU38X_OFF_COMMON_ADDR_REGS;
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+
+            rd_cfg.reg = &regs->statistic_regs;
+            rd_cfg.size = sizeof(regs->statistic_regs);
+            rd_cfg.offset = VDPU38X_OFF_COM_STATISTIC_REGS_VDPU383;
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+        } else if (hal_dbg_flag_en(p_hal->dbg_ctx, HAL_DBG_STA_CHK)) {
+            rd_cfg.reg = &regs->statistic_regs;
+            rd_cfg.size = sizeof(regs->statistic_regs);
+            rd_cfg.offset = VDPU38X_OFF_COM_STATISTIC_REGS_VDPU383;
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+        }
+        if (ret) {
+            mpp_err_f("set register read (debug) failed %d\n", ret);
         }
 
         /* rcb info for sram */
@@ -486,6 +523,8 @@ MPP_RET hal_avs2d_vdpu383_wait(void *hal, HalTaskInfo *task)
     reg_ctx = (Avs2dRkvRegCtx *)p_hal->reg_ctx;
     regs = (p_hal->fast_mode != 0) ? reg_ctx->reg_buf[task->dec.reg_index].regs : reg_ctx->regs;
 
+    hal_dbg_finish(p_hal->dbg_ctx);
+
     if ((task->dec.flags.parse_err || task->dec.flags.ref_err) &&
         !p_hal->cfg->cfg->base.disable_error) {
         AVS2D_HAL_DBG(AVS2D_HAL_DBG_ERROR, "found task error.\n");
@@ -495,10 +534,17 @@ MPP_RET hal_avs2d_vdpu383_wait(void *hal, HalTaskInfo *task)
         ret = mpp_dev_ioctl(p_hal->cfg->dev, MPP_DEV_CMD_POLL, NULL);
         if (ret)
             mpp_err_f("poll cmd failed %d\n", ret);
-    }
 
-    if (hal_avs2d_debug & AVS2D_HAL_DBG_OUT)
-        hal_avs2d_vdpu_dump_yuv(hal, task);
+        if (hal_dbg_flag_en(p_hal->dbg_ctx, HAL_DBG_STA_CHK) &&
+            (regs->statistic_regs.reg356.rcb_rd_sum_chk !=
+             regs->statistic_regs.reg356.rcb_wr_sum_chk)) {
+            mpp_loge("rcb rd sum %d wr sum %d\n",
+                     regs->statistic_regs.reg356.rcb_rd_sum_chk,
+                     regs->statistic_regs.reg356.rcb_wr_sum_chk);
+        }
+        if (hal_dbg_flag_en(p_hal->dbg_ctx, HAL_DBG_GET_REG))
+            vdpu383_dump_hw_regs(regs, p_hal->dbg_ctx);
+    }
 
     AVS2D_HAL_TRACE("read irq_status 0x%08x\n", regs->ctrl_regs.reg15);
 
