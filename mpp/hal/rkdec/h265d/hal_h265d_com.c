@@ -2457,6 +2457,7 @@ MPP_RET hal_h265d_vdpu38x_deinit(void *hal)
         }
     }
     vdpu38x_rcb_calc_deinit((Vdpu38xRcbCtx *)reg_ctx->rcb_ctx);
+    hal_dbg_deinit(reg_ctx->dbg_ctx);
 
     for (i = 0; i < loop; i++)
         MPP_FREE(reg_ctx->g_buf[i].hw_regs);
@@ -2958,22 +2959,8 @@ RK_S32 hal_h265d_vdpu38x_output_pps_packet(void *hal, void *dxva, RK_U32 *scanli
         mpp_dev_set_reg_offset(reg_ctx->cfg->dev, 132, addr + reg_ctx->sclst_offset);
     }
 
-#ifdef dump
-    fwrite(pps_ptr, 1, 80 * 64, fp);
-    RK_U32 *tmp = (RK_U32 *)pps_ptr;
-    for (i = 0; i < 112 / 4; i++) {
-        mpp_log("pps[%3d] = 0x%08x\n", i, tmp[i]);
-    }
-#endif
-#ifdef DUMP_VDPU38X_DATAS
-    {
-        char *cur_fname = "global_cfg.dat";
-        memset(vdpu38x_dump_cur_fname_path, 0, sizeof(vdpu38x_dump_cur_fname_path));
-        sprintf(vdpu38x_dump_cur_fname_path, "%s/%s", vdpu38x_dump_cur_dir, cur_fname);
-        vdpu38x_dump_data_to_file(vdpu38x_dump_cur_fname_path, (void *)bp.pbuf,
-                                  64 * bp.index + bp.bitpos, 128, 0, 0);
-    }
-#endif
+    hal_dbg_dump_data(reg_ctx->dbg_ctx, "global_cfg.dat", reg_ctx->pps_buf,
+                      reg_ctx->pps_buf_sz * 8, 128, 0, "w+");
 
     return 0;
 }

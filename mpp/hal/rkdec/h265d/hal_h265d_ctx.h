@@ -11,6 +11,7 @@
 #include "mpp_env.h"
 #include "hal_bufs.h"
 #include "vdpu_com.h"
+#include "hal_dbg.h"
 
 /* before vdpu383 10 buf */
 #define H265D_RCB_BUF_COUNT 11
@@ -85,6 +86,8 @@ typedef struct HalH265dCtx_t {
     HalBufs         origin_bufs;
     MppBuffer       missing_ref_buf;
     RK_U32          missing_ref_buf_size;
+
+    HalDbgCtx       *dbg_ctx;
 } HalH265dCtx;
 
 typedef struct ScalingList_t {
