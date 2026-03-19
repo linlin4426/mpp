@@ -21,6 +21,7 @@
 #include "mpp_hal.h"
 #include "hal_bufs.h"
 #include "vdpu_com.h"
+#include "hal_dbg.h"
 
 #define VP9_CONTEXT 4
 
@@ -58,6 +59,8 @@ typedef struct HalVp9dCtx_t {
 
     RK_U32          fast_mode;
     void            *hw_ctx;
+
+    HalDbgCtx       *dbg_ctx;
 } HalVp9dCtx;
 
 typedef struct Vdpu38xVp9dCtx_t {

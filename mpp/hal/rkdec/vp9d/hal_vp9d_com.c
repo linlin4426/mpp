@@ -1228,14 +1228,6 @@ MPP_RET hal_vp9d_output_probe(void *buf, void *dxva)
 
     memcpy(buf, probe_packet, 304 * 8);
 
-#ifdef dump
-    if (intraFlag) {
-        fwrite(probe_packet, 1, 302 * 8, vp9_fp);
-    } else {
-        fwrite(probe_packet, 1, 304 * 8, vp9_fp);
-    }
-    fflush(vp9_fp);
-#endif
     MPP_FREE(probe_packet);
 
     return 0;
@@ -1965,20 +1957,8 @@ void hal_vp9d_update_counts(void *buf, void *dxva)
     RK_S32 i, j, m, n, k;
     RK_U32 *eob_coef;
     RK_S32 ref_type;
-#ifdef dump
-    RK_U32 count_length;
-#endif
     RK_U32 com_len = 0;
 
-#ifdef dump
-    if (!(s->frame_type == 0 || s->intra_only)) //inter
-        count_length = (213 * 64 + 576 * 5 * 32) / 8;
-    else //intra
-        count_length = (49 * 64 + 288 * 5 * 32) / 8;
-
-    fwrite(buf, 1, count_length, vp9_fp1);
-    fflush(vp9_fp1);
-#endif
     if ((s->frame_type == 0 || s->intra_only)) {
         com_len = sizeof(s->counts.partition) + sizeof(s->counts.skip) + sizeof(s->counts.intra)
                   + sizeof(s->counts.tx32p) + sizeof(s->counts.tx16p) + sizeof(s->counts.tx8p);
@@ -2145,6 +2125,7 @@ MPP_RET hal_vp9d_vdpu38x_deinit(void *hal)
 
     hal_vp9d_release_res(p_hal);
     vdpu38x_rcb_calc_deinit(hw_ctx->rcb_ctx);
+    hal_dbg_deinit(p_hal->dbg_ctx);
 
     MPP_FREE(p_hal->hw_ctx);
 
@@ -2395,15 +2376,8 @@ MPP_RET vdpu38x_vp9d_uncomp_hdr(HalVp9dCtx *p_hal, DXVA_PicParams_VP9 *pp,
 
     mpp_put_align(&bp, 64, 0); // 128
 
-#ifdef DUMP_VDPU38X_DATAS
-    {
-        char *cur_fname = "global_cfg.dat";
-        memset(vdpu38x_dump_cur_fname_path, 0, sizeof(vdpu38x_dump_cur_fname_path));
-        sprintf(vdpu38x_dump_cur_fname_path, "%s/%s", vdpu38x_dump_cur_dir, cur_fname);
-        vdpu38x_dump_data_to_file(vdpu38x_dump_cur_fname_path, (void *)bp.pbuf,
-                                  64 * bp.index + bp.bitpos, 128, 0, 0);
-    }
-#endif
+    hal_dbg_dump_data(p_hal->dbg_ctx, "global_cfg.dat", (void *)bp.pbuf,
+                      64 * bp.index + bp.bitpos, 128, 0, "w+");
 
     return MPP_OK;
 }

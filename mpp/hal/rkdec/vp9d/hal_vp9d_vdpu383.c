@@ -28,10 +28,8 @@
 #define HW_PROB         1
 #define GBL_SIZE        2 * (MPP_ALIGN(1299, 128) / 8)
 
-#ifdef DUMP_VDPU383_DATAS
-static RK_U32 cur_last_segid_flag;
-static MppBuffer cur_last_prob_base;
-#endif
+static RK_U32 dbg_cur_lst_segid_flag;
+static MppBuffer dbg_lst_prob_base;
 
 static MPP_RET hal_vp9d_alloc_res(HalVp9dCtx *hal)
 {
@@ -158,6 +156,7 @@ static MPP_RET hal_vp9d_vdpu383_init(void *hal, MppHalCfg *cfg)
     }
 
     vdpu38x_rcb_calc_init((Vdpu38xRcbCtx **)&hw_ctx->rcb_ctx);
+    hal_dbg_init(&p_hal->dbg_ctx, "hal_vp9d");
 
     return ret;
 __FAILED:
@@ -307,17 +306,7 @@ static MPP_RET hal_vp9d_vdpu383_gen_regs(void *hal, HalTaskInfo *task)
     regs = (Vdpu383RegSet*)hw_ctx->hw_regs;
     memset(regs, 0, sizeof(Vdpu383RegSet));
 
-#ifdef DUMP_VDPU383_DATAS
-    {
-        memset(dump_cur_dir, 0, sizeof(dump_cur_dir));
-        sprintf(dump_cur_dir, "vp9/Frame%04d", dump_cur_frame);
-        if (access(dump_cur_dir, 0)) {
-            if (mkdir(dump_cur_dir))
-                mpp_err_f("error: mkdir %s\n", dump_cur_dir);
-        }
-        dump_cur_frame++;
-    }
-#endif
+    hal_dbg_setup(p_hal->dbg_ctx, NULL);
 
     /* uncompress header data */
     vdpu38x_vp9d_uncomp_hdr(p_hal, pic_param, (RK_U64 *)hw_ctx->header_data, GBL_SIZE / 8);
@@ -379,36 +368,20 @@ static MPP_RET hal_vp9d_vdpu383_gen_regs(void *hal, HalTaskInfo *task)
         if (hw_ctx->prob_ctx_valid[frame_ctx_id]) {
             regs->comm_addrs.reg184_lastprob_base =
                 mpp_buffer_get_fd(hw_ctx->prob_loop_base[frame_ctx_id]);
-#ifdef DUMP_VDPU383_DATAS
-            { cur_last_prob_base = hw_ctx->prob_loop_base[frame_ctx_id]; }
-#endif
+            dbg_lst_prob_base = hw_ctx->prob_loop_base[frame_ctx_id];
         } else {
             regs->comm_addrs.reg184_lastprob_base = mpp_buffer_get_fd(hw_ctx->prob_default_base);
             hw_ctx->prob_ctx_valid[frame_ctx_id] |= pic_param->refresh_frame_context;
-#ifdef DUMP_VDPU383_DATAS
-            { cur_last_prob_base = hw_ctx->prob_default_base; }
-#endif
+            dbg_lst_prob_base = hw_ctx->prob_default_base;
         }
         regs->comm_addrs.reg185_updateprob_base =
             mpp_buffer_get_fd(hw_ctx->prob_loop_base[frame_ctx_id]);
     }
     regs->comm_addrs.reg183_kfprob_base = mpp_buffer_get_fd(hw_ctx->probe_base);
-#ifdef DUMP_VDPU383_DATAS
-    {
-        char *cur_fname = "cabac_last_probe.dat";
-        memset(dump_cur_fname_path, 0, sizeof(dump_cur_fname_path));
-        sprintf(dump_cur_fname_path, "%s/%s", dump_cur_dir, cur_fname);
-        dump_data_to_file(dump_cur_fname_path, (void *)mpp_buffer_get_ptr(cur_last_prob_base),
-                          8 * 152 * 16, 128, 0);
-    }
-    {
-        char *cur_fname = "cabac_kf_probe.dat";
-        memset(dump_cur_fname_path, 0, sizeof(dump_cur_fname_path));
-        sprintf(dump_cur_fname_path, "%s/%s", dump_cur_dir, cur_fname);
-        dump_data_to_file(dump_cur_fname_path, (void *)mpp_buffer_get_ptr(hw_ctx->probe_base),
-                          8 * PROB_KF_SIZE, 128, 0);
-    }
-#endif
+    hal_dbg_dumpf_buf(p_hal->dbg_ctx, "cabac_last_probe.dat",
+                      dbg_lst_prob_base, 0, 152 * 16, 128, "w+");
+    hal_dbg_dumpf_buf(p_hal->dbg_ctx, "cabac_kf_probe.dat",
+                      hw_ctx->probe_base, 0, PROB_KF_SIZE, 128, "w+");
 #else
 #endif
 
@@ -462,17 +435,10 @@ static MPP_RET hal_vp9d_vdpu383_gen_regs(void *hal, HalTaskInfo *task)
         regs->comm_addrs.reg181_segidlast_base = mpp_buffer_get_fd(hw_ctx->segid_cur_base);
         regs->comm_addrs.reg182_segidcur_base = mpp_buffer_get_fd(hw_ctx->segid_last_base);
     }
-#ifdef DUMP_VDPU383_DATAS
-    cur_last_segid_flag = hw_ctx->last_segid_flag;
-    {
-        char *cur_fname = "stream_in.dat";
-        memset(dump_cur_fname_path, 0, sizeof(dump_cur_fname_path));
-        sprintf(dump_cur_fname_path, "%s/%s", dump_cur_dir, cur_fname);
-        dump_data_to_file(dump_cur_fname_path, (void *)mpp_buffer_get_ptr(streambuf)
-                          + pic_param->uncompressed_header_size_byte_aligned,
-                          8 * (((stream_len + 15) & (~15)) + 0x80), 128, 0);
-    }
-#endif
+    dbg_cur_lst_segid_flag = hw_ctx->last_segid_flag;
+    hal_dbg_dumpf_buf(p_hal->dbg_ctx, "stream_in.dat", streambuf,
+                      pic_param->uncompressed_header_size_byte_aligned,
+                      (((stream_len + 15) & (~15)) + 0x80), 128, "w+");
     /* set last segid flag */
     if ((pic_param->stVP9Segments.enabled && pic_param->stVP9Segments.update_map) ||
         (pic_param->width != hw_ctx->ls_info.last_width || pic_param->height != hw_ctx->ls_info.last_height) ||
@@ -699,6 +665,44 @@ static MPP_RET hal_vp9d_vdpu383_start(void *hal, HalTaskInfo *task)
             break;
         }
 
+        vdpu383_dump_sw_regs(hw_regs, p_hal->dbg_ctx);
+
+        ret = MPP_OK;
+        if (hal_dbg_flag_en(p_hal->dbg_ctx, HAL_DBG_GET_REG)) {
+            rd_cfg.reg = &hw_regs->reg_version;
+            rd_cfg.size = sizeof(hw_regs->reg_version);
+            rd_cfg.offset = 0;
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+
+            rd_cfg.reg = &hw_regs->ctrl_regs;
+            rd_cfg.size = sizeof(hw_regs->ctrl_regs);
+            rd_cfg.offset = VDPU38X_OFF_CTRL_REGS;
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+
+            rd_cfg.reg = &hw_regs->comm_paras;
+            rd_cfg.size = sizeof(hw_regs->comm_paras);
+            rd_cfg.offset = VDPU38X_OFF_CODEC_PARAS_REGS;
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+
+            rd_cfg.reg = &hw_regs->comm_addrs;
+            rd_cfg.size = sizeof(hw_regs->comm_addrs);
+            rd_cfg.offset = VDPU38X_OFF_COMMON_ADDR_REGS;
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+
+            rd_cfg.reg = &hw_regs->statistic_regs;
+            rd_cfg.size = sizeof(hw_regs->statistic_regs);
+            rd_cfg.offset = VDPU38X_OFF_COM_STATISTIC_REGS_VDPU383;
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+        } else if (hal_dbg_flag_en(p_hal->dbg_ctx, HAL_DBG_STA_CHK)) {
+            rd_cfg.reg = &hw_regs->statistic_regs;
+            rd_cfg.size = sizeof(hw_regs->statistic_regs);
+            rd_cfg.offset = VDPU38X_OFF_COM_STATISTIC_REGS_VDPU383;
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+        }
+        if (ret) {
+            mpp_err_f("set register read (debug) failed %d\n", ret);
+        }
+
         // rcb info for sram
         vdpu38x_rcb_set_info(hw_ctx->rcb_ctx, dev);
 
@@ -718,61 +722,42 @@ static MPP_RET hal_vp9d_vdpu383_wait(void *hal, HalTaskInfo *task)
     HalVp9dCtx *p_hal = (HalVp9dCtx*)hal;
     Vdpu38xVp9dCtx *hw_ctx = (Vdpu38xVp9dCtx*)p_hal->hw_ctx;
     Vdpu383RegSet *hw_regs = (Vdpu383RegSet *)hw_ctx->hw_regs;
+    DXVA_PicParams_VP9 *pic_param = (DXVA_PicParams_VP9*)task->dec.syntax.data;
+    RK_U32 frame_ctx_id = pic_param->frame_context_idx;
 
     if (p_hal->fast_mode)
         hw_regs = (Vdpu383RegSet *)hw_ctx->g_buf[task->dec.reg_index].hw_regs;
 
     mpp_assert(hw_regs);
 
+    hal_dbg_finish(p_hal->dbg_ctx);
+
     ret = mpp_dev_ioctl(p_hal->cfg->dev, MPP_DEV_CMD_POLL, NULL);
     if (ret)
         mpp_err_f("poll cmd failed %d\n", ret);
-#ifdef DUMP_VDPU383_DATAS
-    {
-        char *cur_fname = "cabac_update_probe.dat";
-        DXVA_PicParams_VP9 *pic_param = (DXVA_PicParams_VP9*)task->dec.syntax.data;
-        RK_U32 frame_ctx_id = pic_param->frame_context_idx;
-        memset(dump_cur_fname_path, 0, sizeof(dump_cur_fname_path));
-        sprintf(dump_cur_fname_path, "%s/%s", dump_cur_dir, cur_fname);
-        dump_data_to_file(dump_cur_fname_path,
-                          (void *)mpp_buffer_get_ptr(hw_ctx->prob_loop_base[frame_ctx_id]),
-                          8 * 152 * 16, 128, 0);
-    }
-    {
-        char *cur_fname = "segid_last.dat";
-        memset(dump_cur_fname_path, 0, sizeof(dump_cur_fname_path));
-        sprintf(dump_cur_fname_path, "%s/%s", dump_cur_dir, cur_fname);
-        if (!cur_last_segid_flag)
-            dump_data_to_file(dump_cur_fname_path,
-                              (void *)mpp_buffer_get_ptr(hw_ctx->segid_cur_base),
-                              8 * 1559 * 8, 64, 0);
-        else
-            dump_data_to_file(dump_cur_fname_path,
-                              (void *)mpp_buffer_get_ptr(hw_ctx->segid_last_base),
-                              8 * 1559 * 8, 64, 0);
-    }
-    {
-        char *cur_fname = "segid_cur.dat";
-        memset(dump_cur_fname_path, 0, sizeof(dump_cur_fname_path));
-        sprintf(dump_cur_fname_path, "%s/%s", dump_cur_dir, cur_fname);
-        if (cur_last_segid_flag)
-            dump_data_to_file(dump_cur_fname_path,
-                              (void *)mpp_buffer_get_ptr(hw_ctx->segid_cur_base),
-                              8 * 1559 * 8, 64, 0);
-        else
-            dump_data_to_file(dump_cur_fname_path,
-                              (void *)mpp_buffer_get_ptr(hw_ctx->segid_last_base),
-                              8 * 1559 * 8, 64, 0);
-    }
-#endif
 
-    if (hal_vp9d_debug & HAL_VP9D_DBG_REG) {
-        RK_U32 *p = (RK_U32 *)hw_regs;
-        RK_U32 i = 0;
+    hal_dbg_dumpf_buf(p_hal->dbg_ctx, "cabac_update_probe.dat",
+                      hw_ctx->prob_loop_base[frame_ctx_id], 0,
+                      152 * 16, 128, "w+");
+    hal_dbg_dumpf_buf(p_hal->dbg_ctx, "segid_last.dat",
+                      0 == dbg_cur_lst_segid_flag ?
+                      hw_ctx->segid_cur_base : hw_ctx->segid_last_base,
+                      0, 1559 * 8, 128, "w+");
+    hal_dbg_dumpf_buf(p_hal->dbg_ctx, "segid_cur.dat",
+                      0 == dbg_cur_lst_segid_flag ?
+                      hw_ctx->segid_last_base : hw_ctx->segid_cur_base,
+                      0, 1559 * 8, 128, "w+");
 
-        for (i = 0; i < sizeof(Vdpu383RegSet) / 4; i++)
-            mpp_log("get regs[%02d]: %08X\n", i, *p++);
+    if (hal_dbg_flag_en(p_hal->dbg_ctx, HAL_DBG_STA_CHK) &&
+        (hw_regs->statistic_regs.reg356.rcb_rd_sum_chk !=
+         hw_regs->statistic_regs.reg356.rcb_wr_sum_chk)) {
+        mpp_loge("rcb rd sum %d wr sum %d\n",
+                 hw_regs->statistic_regs.reg356.rcb_rd_sum_chk,
+                 hw_regs->statistic_regs.reg356.rcb_wr_sum_chk);
     }
+
+    if (hal_dbg_flag_en(p_hal->dbg_ctx, HAL_DBG_GET_REG))
+        vdpu383_dump_hw_regs(hw_regs, p_hal->dbg_ctx);
 
     if (task->dec.flags.parse_err ||
         task->dec.flags.ref_err ||
