@@ -229,7 +229,7 @@ static struct {
 static MPP_RET hal_av1d_alloc_res(void *hal)
 {
     Av1dHalCtx *p_hal = (Av1dHalCtx *)hal;
-    RK_U32 max_cnt = p_hal->fast_mode ? VDPU_FAST_REG_SET_CNT : 1;
+    RK_U32 max_cnt = (p_hal->fast_mode != 0) ? VDPU_FAST_REG_SET_CNT : 1;
     void *cdf_ptr;
     Vdpu38xAv1dRegCtx *reg_ctx = NULL;
     RK_U32 i = 0;
@@ -309,6 +309,7 @@ MPP_RET vdpu384b_av1d_init(void *hal, MppHalCfg *cfg)
 
     reg_ctx = (Vdpu38xAv1dRegCtx *)p_hal->reg_ctx;
     vdpu38x_rcb_calc_init((Vdpu38xRcbCtx **)&reg_ctx->rcb_ctx);
+    hal_dbg_init(&reg_ctx->dbg_ctx, "hal_av1d");
 
 __RETURN:
     return MPP_OK;
@@ -461,17 +462,7 @@ MPP_RET vdpu384b_av1d_gen_regs(void *hal, HalTaskInfo *task)
     memset(regs, 0, sizeof(*regs));
     p_hal->strm_len = (RK_S32)mpp_packet_get_length(task->dec.input_packet);
 
-#ifdef DUMP_VDPU38X_DATAS
-    {
-        memset(vdpu38x_dump_cur_dir, 0, sizeof(vdpu38x_dump_cur_dir));
-        sprintf(vdpu38x_dump_cur_dir, "av1/Frame%04d", vdpu38x_dump_cur_frm);
-        if (access(vdpu38x_dump_cur_dir, 0)) {
-            if (mkdir(vdpu38x_dump_cur_dir))
-                mpp_err_f("error: mkdir %s\n", vdpu38x_dump_cur_dir);
-        }
-        vdpu38x_dump_cur_frm++;
-    }
-#endif
+    hal_dbg_setup(ctx->dbg_ctx, NULL);
 
     vdpu384b_init_ctrl_regs(regs, MPP_VIDEO_CodingAV1);
     vdpu38x_setup_statistic(&regs->ctrl_regs);
@@ -486,15 +477,8 @@ MPP_RET vdpu384b_av1d_gen_regs(void *hal, HalTaskInfo *task)
         regs->comm_paras.reg67_global_len = VDPU384B_UNCMPS_HEADER_SIZE / 16; // 128 bit as unit
         regs->comm_addrs.reg131_gbl_base = ctx->bufs_fd;
         mpp_dev_set_reg_offset(cfg->dev, 131, ctx->offset_uncomps);
-#ifdef DUMP_VDPU38X_DATAS
-        {
-            char *cur_fname = "global_cfg.dat";
-            memset(vdpu38x_dump_cur_fname_path, 0, sizeof(vdpu38x_dump_cur_fname_path));
-            sprintf(vdpu38x_dump_cur_fname_path, "%s/%s", vdpu38x_dump_cur_dir, cur_fname);
-            vdpu38x_dump_data_to_file(vdpu38x_dump_cur_fname_path, ctx->bufs_ptr,
-                                      8 * regs->comm_paras.reg67_global_len * 16, 128, 0, 0);
-        }
-#endif
+        hal_dbg_dumpf_buf(ctx->dbg_ctx, "global_cfg.dat", ctx->bufs, 0,
+                          regs->comm_paras.reg67_global_len * 16, 128, "w+");
         // input strm
         p_hal->strm_len = (RK_S32)mpp_packet_get_length(task->dec.input_packet);
         regs->comm_paras.reg66_stream_len = MPP_ALIGN(p_hal->strm_len + 15, 128);
@@ -506,22 +490,10 @@ MPP_RET vdpu384b_av1d_gen_regs(void *hal, HalTaskInfo *task)
         regs->comm_paras.reg65_strm_start_bit = 0; // bit start to decode
         /* error */
         regs->comm_addrs.reg169_error_ref_base = mpp_buffer_get_fd(mbuffer);
-#ifdef DUMP_VDPU38X_DATAS
-        {
-            char *cur_fname = "stream_in.dat";
-            memset(vdpu38x_dump_cur_fname_path, 0, sizeof(vdpu38x_dump_cur_fname_path));
-            sprintf(vdpu38x_dump_cur_fname_path, "%s/%s", vdpu38x_dump_cur_dir, cur_fname);
-            vdpu38x_dump_data_to_file(vdpu38x_dump_cur_fname_path, (void *)mpp_buffer_get_ptr(mbuffer),
-                                      8 * p_hal->strm_len, 128, 0, 0);
-        }
-        {
-            char *cur_fname = "stream_in_no_offset.dat";
-            memset(vdpu38x_dump_cur_fname_path, 0, sizeof(vdpu38x_dump_cur_fname_path));
-            sprintf(vdpu38x_dump_cur_fname_path, "%s/%s", vdpu38x_dump_cur_dir, cur_fname);
-            vdpu38x_dump_data_to_file(vdpu38x_dump_cur_fname_path, (void *)mpp_buffer_get_ptr(mbuffer),
-                                      8 * p_hal->strm_len, 128, 0, 0);
-        }
-#endif
+        hal_dbg_dumpf_buf(ctx->dbg_ctx, "stream_in.dat", mbuffer, 0,
+                          p_hal->strm_len, 128, "w+");
+        hal_dbg_dumpf_buf(ctx->dbg_ctx, "stream_in_no_offset.dat", mbuffer, 0,
+                          p_hal->strm_len, 128, "w+");
     }
 
     vdpu38x_av1d_rcb_setup(p_hal, task, dxva, &regs->comm_addrs.rcb_regs,
@@ -581,6 +553,8 @@ MPP_RET vdpu384b_av1d_gen_regs(void *hal, HalTaskInfo *task)
     {
         MppBuffer mbuffer = NULL;
         RK_U32 mapped_idx;
+        HalBuf *mv_buf = NULL;
+
         mpp_buf_slot_get_prop(cfg->frame_slots, task->dec.output, SLOT_FRAME_PTR, &mframe);
         mpp_buf_slot_get_prop(cfg->frame_slots, task->dec.output, SLOT_BUFFER, &mbuffer);
         regs->comm_addrs.reg168_decout_base = mpp_buffer_get_fd(mbuffer);
@@ -606,26 +580,15 @@ MPP_RET vdpu384b_av1d_gen_regs(void *hal, HalTaskInfo *task)
             }
         }
 
-        HalBuf *mv_buf = NULL;
         vdpu38x_av1d_colmv_setup(p_hal, dxva);
         mv_buf = hal_bufs_get_buf(ctx->colmv_bufs, dxva->CurrPic.Index7Bits);
         regs->comm_addrs.reg216_colmv_cur_base = mpp_buffer_get_fd(mv_buf->buf[0]);
-#ifdef DUMP_VDPU38X_DATAS
-        memset(mpp_buffer_get_ptr(mv_buf->buf[0]), 0, mpp_buffer_get_size(mv_buf->buf[0]));
-#endif
         for (i = 0; i < AV1_NUM_REF_FRAMES; i++) {
             if (dxva->frame_refs[i].Index != (RK_S8)0xff && dxva->frame_refs[i].Index != 0x7f) {
                 mv_buf = hal_bufs_get_buf(ctx->colmv_bufs, dxva->frame_refs[i].Index);
                 regs->comm_addrs.reg217_232_colmv_ref_base[i] = mpp_buffer_get_fd(mv_buf->buf[0]);
-#ifdef DUMP_VDPU38X_DATAS
-                {
-                    char *cur_fname = "colmv_ref_frame";
-                    memset(vdpu38x_dump_cur_fname_path, 0, sizeof(vdpu38x_dump_cur_fname_path));
-                    sprintf(vdpu38x_dump_cur_fname_path, "%s/%s%d.dat", vdpu38x_dump_cur_dir, cur_fname, i);
-                    vdpu38x_dump_data_to_file(vdpu38x_dump_cur_fname_path, (void *)mpp_buffer_get_ptr(mv_buf->buf[0]),
-                                              8 * mpp_buffer_get_size(mv_buf->buf[0]), 64, 0, 0);
-                }
-#endif
+                hal_dbg_dumpf_buf(ctx->dbg_ctx, "colmv_ref_frame.dat", mv_buf->buf[0],
+                                  0, ctx->colmv_size, 128, "w+");
             }
         }
     }
@@ -736,11 +699,42 @@ MPP_RET vdpu384b_av1d_start(void *hal, HalTaskInfo *task)
             break;
         }
 
-        if (hal_av1d_debug & AV1D_DBG_REG) {
+        vdpu38x_dump_sw_regs(regs, reg_ctx->dbg_ctx);
+
+        ret = MPP_OK;
+        if (hal_dbg_flag_en(reg_ctx->dbg_ctx, HAL_DBG_GET_REG)) {
+            rd_cfg.reg = &regs->reg_version;
+            rd_cfg.size = sizeof(regs->reg_version);
+            rd_cfg.offset = 0;
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+
+            rd_cfg.reg = &regs->ctrl_regs;
+            rd_cfg.size = sizeof(regs->ctrl_regs);
+            rd_cfg.offset = VDPU38X_OFF_CTRL_REGS;
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+
+            rd_cfg.reg = &regs->comm_paras;
+            rd_cfg.size = sizeof(regs->comm_paras);
+            rd_cfg.offset = VDPU38X_OFF_CODEC_PARAS_REGS;
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+
+            rd_cfg.reg = &regs->comm_addrs;
+            rd_cfg.size = sizeof(regs->comm_addrs);
+            rd_cfg.offset = VDPU38X_OFF_COMMON_ADDR_REGS;
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+
             rd_cfg.reg = &regs->statistic_regs;
             rd_cfg.size = sizeof(regs->statistic_regs);
             rd_cfg.offset = VDPU38X_OFF_COM_STATISTIC_REGS_VDPU384B;
-            ret = mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+        } else if (hal_dbg_flag_en(reg_ctx->dbg_ctx, HAL_DBG_STA_CHK)) {
+            rd_cfg.reg = &regs->statistic_regs;
+            rd_cfg.size = sizeof(regs->statistic_regs);
+            rd_cfg.offset = VDPU38X_OFF_COM_STATISTIC_REGS_VDPU384B;
+            ret |= mpp_dev_ioctl(dev, MPP_DEV_REG_RD, &rd_cfg);
+        }
+        if (ret) {
+            mpp_err_f("set register read (debug) failed %d\n", ret);
         }
 
         /* rcb info for sram */
@@ -768,27 +762,21 @@ MPP_RET vdpu384b_av1d_wait(void *hal, HalTaskInfo *task)
     Vdpu38xRegSet *p_regs = p_hal->fast_mode ?
                             reg_ctx->reg_buf[task->dec.reg_index].regs :
                             reg_ctx->regs;
-#ifdef DUMP_VDPU38X_DATAS
-    {
-        char *cur_fname = "colmv_cur_frame.dat";
-        DXVA_PicParams_AV1 *dxva = (DXVA_PicParams_AV1*)task->dec.syntax.data;
-        HalBuf *mv_buf = NULL;
-        mv_buf = hal_bufs_get_buf(reg_ctx->colmv_bufs, dxva->CurrPic.Index7Bits);
-        memset(vdpu38x_dump_cur_fname_path, 0, sizeof(vdpu38x_dump_cur_fname_path));
-        sprintf(vdpu38x_dump_cur_fname_path, "%s/%s", vdpu38x_dump_cur_dir, cur_fname);
-        vdpu38x_dump_data_to_file(vdpu38x_dump_cur_fname_path, (void *)mpp_buffer_get_ptr(mv_buf->buf[0]),
-                                  8 * mpp_buffer_get_size(mv_buf->buf[0]), 64, 0, 0);
+
+    DXVA_PicParams_AV1 *dxva = (DXVA_PicParams_AV1*)task->dec.syntax.data;
+    HalBuf *hal_buf_tmp = NULL;
+    MppBuffer mbuffer = NULL;
+
+    hal_dbg_finish(reg_ctx->dbg_ctx);
+
+    if (hal_dbg_flag_en(reg_ctx->dbg_ctx, HAL_DBG_DUMP) && 0 == p_hal->fast_mode) {
+        hal_buf_tmp = hal_bufs_get_buf(reg_ctx->colmv_bufs, dxva->CurrPic.Index7Bits);
+        hal_dbg_dumpf_buf(reg_ctx->dbg_ctx, "colmv_cur_frame.dat", hal_buf_tmp->buf[0],
+                          0, reg_ctx->colmv_size, 128, "w+");
     }
-    {
-        char *cur_fname = "decout.dat";
-        MppBuffer mbuffer = NULL;
-        mpp_buf_slot_get_prop(p_hal->cfg->frame_slots, task->dec.output, SLOT_BUFFER, &mbuffer);
-        memset(vdpu38x_dump_cur_fname_path, 0, sizeof(vdpu38x_dump_cur_fname_path));
-        sprintf(vdpu38x_dump_cur_fname_path, "%s/%s", vdpu38x_dump_cur_dir, cur_fname);
-        vdpu38x_dump_data_to_file(vdpu38x_dump_cur_fname_path, (void *)mpp_buffer_get_ptr(mbuffer),
-                                  8 * mpp_buffer_get_size(mbuffer), 128, 0, 0);
-    }
-#endif
+    mpp_buf_slot_get_prop(p_hal->cfg->frame_slots, task->dec.output, SLOT_BUFFER, &mbuffer);
+    hal_dbg_dumpf_buf(reg_ctx->dbg_ctx, "decout.dat", mbuffer, 0,
+                      mpp_buffer_get_size(mbuffer), 128, "w+");
 
     if (task->dec.flags.parse_err ||
         task->dec.flags.ref_err) {
@@ -798,18 +786,12 @@ MPP_RET vdpu384b_av1d_wait(void *hal, HalTaskInfo *task)
     ret = mpp_dev_ioctl(p_hal->cfg->dev, MPP_DEV_CMD_POLL, NULL);
     if (ret)
         mpp_err_f("poll cmd failed %d\n", ret);
-#ifdef DUMP_VDPU38X_DATAS
-    {
-        char *cur_fname = "cabac_cdf_out.dat";
-        HalBuf *cdf_buf = NULL;
-        DXVA_PicParams_AV1 *dxva = (DXVA_PicParams_AV1*)task->dec.syntax.data;
-        memset(vdpu38x_dump_cur_fname_path, 0, sizeof(vdpu38x_dump_cur_fname_path));
-        sprintf(vdpu38x_dump_cur_fname_path, "%s/%s", vdpu38x_dump_cur_dir, cur_fname);
-        cdf_buf = hal_bufs_get_buf(reg_ctx->cdf_segid_bufs, dxva->CurrPic.Index7Bits);
-        vdpu38x_dump_data_to_file(vdpu38x_dump_cur_fname_path, (void *)mpp_buffer_get_ptr(cdf_buf->buf[0]),
-                                  (NON_COEF_CDF_SIZE + COEF_CDF_SIZE) * 8, 128, 0, 0);
+
+    if (hal_dbg_flag_en(reg_ctx->dbg_ctx, HAL_DBG_DUMP) && 0 == p_hal->fast_mode) {
+        hal_buf_tmp = hal_bufs_get_buf(reg_ctx->cdf_segid_bufs, dxva->CurrPic.Index7Bits);
+        hal_dbg_dumpf_buf(reg_ctx->dbg_ctx, "cabac_cdf_out.dat", hal_buf_tmp->buf[0],
+                          0, NON_COEF_CDF_SIZE + COEF_CDF_SIZE, 128, "w+");
     }
-#endif
 
     if (task->dec.flags.parse_err ||
         task->dec.flags.ref_err ||
@@ -825,10 +807,17 @@ MPP_RET vdpu384b_av1d_wait(void *hal, HalTaskInfo *task)
         mpp_buf_slot_get_prop(p_hal->cfg->frame_slots, task->dec.output, SLOT_FRAME_PTR, &mframe);
         mpp_frame_set_errinfo(mframe, 1);
     }
-    if (hal_av1d_debug & AV1D_DBG_REG) {
-        mpp_assert(p_regs->statistic_regs.reg312.rcb_rd_sum_chk ==
-                   p_regs->statistic_regs.reg312.rcb_wr_sum_chk);
+
+    if (hal_dbg_flag_en(reg_ctx->dbg_ctx, HAL_DBG_STA_CHK) &&
+        (p_regs->statistic_regs.reg312.rcb_rd_sum_chk !=
+         p_regs->statistic_regs.reg312.rcb_wr_sum_chk)) {
+        mpp_loge("rcb rd sum %d wr sum %d\n",
+                 p_regs->statistic_regs.reg312.rcb_rd_sum_chk,
+                 p_regs->statistic_regs.reg312.rcb_wr_sum_chk);
     }
+
+    if (hal_dbg_flag_en(reg_ctx->dbg_ctx, HAL_DBG_GET_REG))
+        vdpu38x_dump_hw_regs(p_regs, reg_ctx->dbg_ctx);
 
 __SKIP_HARD:
     if (p_hal->fast_mode)

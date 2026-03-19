@@ -954,6 +954,7 @@ static void hal_av1d_release_res(void *hal)
     for (i = 0; i < max_cnt; i++)
         BUF_PUT(reg_ctx->rcb_bufs[i]);
     vdpu38x_rcb_calc_deinit(reg_ctx->rcb_ctx);
+    hal_dbg_deinit(reg_ctx->dbg_ctx);
 
     BUF_PUT(reg_ctx->filter_mem);
 
@@ -1485,14 +1486,6 @@ void vdpu38x_av1d_set_cdf_segid(Av1dHalCtx *p_hal, DXVA_PicParams_AV1 *dxva,
     RK_U32 i = 0;
 
     /* use para in decoder */
-#ifdef DUMP_VDPU38X_DATAS
-    {
-        char *cur_fname = "cabac_cdf_in.dat";
-
-        memset(vdpu38x_dump_cur_fname_path, 0, sizeof(vdpu38x_dump_cur_fname_path));
-        sprintf(vdpu38x_dump_cur_fname_path, "%s/%s", vdpu38x_dump_cur_dir, cur_fname);
-    }
-#endif
     if (dxva->format.frame_type == AV1_FRAME_KEY)
         for (i = 0; i < AV1_NUM_REF_FRAMES; i++)
             reg_ctx->ref_info_tbl[i].cdf_valid = 0;
@@ -1505,15 +1498,12 @@ void vdpu38x_av1d_set_cdf_segid(Av1dHalCtx *p_hal, DXVA_PicParams_AV1 *dxva,
         dxva->primary_ref_frame == AV1_PRIMARY_REF_NONE) {
         *noncoef_rd_base = mpp_buffer_get_fd(reg_ctx->cdf_rd_def_base);
         *coef_rd_base = mpp_buffer_get_fd(reg_ctx->cdf_rd_def_base);
-#ifdef DUMP_VDPU38X_DATAS
-        {
-            vdpu38x_dump_data_to_file(vdpu38x_dump_cur_fname_path, (void *)mpp_buffer_get_ptr(reg_ctx->cdf_rd_def_base),
-                                      8 * NON_COEF_CDF_SIZE, 128, 0, 0);
-            vdpu38x_dump_data_to_file(vdpu38x_dump_cur_fname_path, (RK_U8 *)mpp_buffer_get_ptr(reg_ctx->cdf_rd_def_base)
-                                      + NON_COEF_CDF_SIZE + COEF_CDF_SIZE * coeff_cdf_idx,
-                                      8 * COEF_CDF_SIZE, 128, 0, 1);
-        }
-#endif
+        hal_dbg_dumpf_buf(reg_ctx->dbg_ctx, "cabac_cdf_in.dat",
+                          reg_ctx->cdf_rd_def_base, 0, NON_COEF_CDF_SIZE, 128, "w+");
+        hal_dbg_dumpf_buf(reg_ctx->dbg_ctx, "cabac_cdf_in.dat",
+                          reg_ctx->cdf_rd_def_base,
+                          NON_COEF_CDF_SIZE + COEF_CDF_SIZE * coeff_cdf_idx,
+                          COEF_CDF_SIZE, 128, "a+");
     } else {
         mapped_idx = dxva->ref_frame_idx[dxva->primary_ref_frame];
 
@@ -1530,15 +1520,11 @@ void vdpu38x_av1d_set_cdf_segid(Av1dHalCtx *p_hal, DXVA_PicParams_AV1 *dxva,
         *noncoef_rd_base = mpp_buffer_get_fd(buf_tmp);
         *coef_rd_base = mpp_buffer_get_fd(buf_tmp);
         *segid_last_base = mpp_buffer_get_fd(buf_tmp);
-#ifdef DUMP_VDPU38X_DATAS
-        {
-            vdpu38x_dump_data_to_file(vdpu38x_dump_cur_fname_path, (void *)mpp_buffer_get_ptr(buf_tmp),
-                                      8 * NON_COEF_CDF_SIZE, 128, 0, 0);
-            vdpu38x_dump_data_to_file(vdpu38x_dump_cur_fname_path, (RK_U8 *)mpp_buffer_get_ptr(buf_tmp)
-                                      + NON_COEF_CDF_SIZE + COEF_CDF_SIZE * coeff_cdf_idx,
-                                      8 * COEF_CDF_SIZE, 128, 0, 1);
-        }
-#endif
+        hal_dbg_dumpf_buf(reg_ctx->dbg_ctx, "cabac_cdf_in.dat", buf_tmp, 0,
+                          NON_COEF_CDF_SIZE, 128, "w+");
+        hal_dbg_dumpf_buf(reg_ctx->dbg_ctx, "cabac_cdf_in.dat", buf_tmp,
+                          NON_COEF_CDF_SIZE + COEF_CDF_SIZE * coeff_cdf_idx,
+                          COEF_CDF_SIZE, 128, "a+");
     }
     cdf_buf = hal_bufs_get_buf(reg_ctx->cdf_segid_bufs, dxva->CurrPic.Index7Bits);
     *noncoef_wr_base = mpp_buffer_get_fd(cdf_buf->buf[0]);
@@ -1567,16 +1553,10 @@ void vdpu38x_av1d_set_cdf_segid(Av1dHalCtx *p_hal, DXVA_PicParams_AV1 *dxva,
         }
     }
 
-#ifdef DUMP_VDPU38X_DATAS
-    {
-        char *cur_fname = "cdf_rd_def.dat";
-        memset(vdpu38x_dump_cur_fname_path, 0, sizeof(vdpu38x_dump_cur_fname_path));
-        sprintf(vdpu38x_dump_cur_fname_path, "%s/%s", vdpu38x_dump_cur_dir, cur_fname);
-        vdpu38x_dump_data_to_file(vdpu38x_dump_cur_fname_path, (void *)mpp_buffer_get_ptr(reg_ctx->cdf_rd_def_base),
-                                  (NON_COEF_CDF_SIZE + COEF_CDF_SIZE * 4) * 8, 128, 0, 0);
-    }
-#endif
+    hal_dbg_dumpf_buf(reg_ctx->dbg_ctx, "cdf_rd_def.dat",
+                      reg_ctx->cdf_rd_def_base, 0, ALL_CDF_SIZE, 128, "w+");
 
+    return;
 }
 
 MPP_RET vdpu38x_av1d_colmv_setup(Av1dHalCtx *p_hal, DXVA_PicParams_AV1 *dxva)

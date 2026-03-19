@@ -8,6 +8,7 @@
 
 #include "av1d_common.h"
 #include "vdpu_com.h"
+#include "hal_dbg.h"
 #include "hal_bufs.h"
 
 typedef struct Av1dVdpu38xBuf_t {
@@ -42,6 +43,8 @@ typedef struct Vdpu38xAv1dRegCtx_t {
     VdpuRcbInfo         rcb_buf_info[RCB_BUF_CNT];
     RK_U32              rcb_buf_size;
     MppBuffer           rcb_bufs[VDPU_FAST_REG_SET_CNT];
+
+    HalDbgCtx           *dbg_ctx;
 
     HalBufs             colmv_bufs;
     RK_U32              colmv_count;
