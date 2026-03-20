@@ -34,7 +34,7 @@ void vdpu383_init_ctrl_regs(Vdpu383RegSet *regs, MppCodingType codec_t)
     } break;
     case MPP_VIDEO_CodingAVS2 : {
         ctrl_regs->reg8_dec_mode = 3;
-        ctrl_regs->reg20_cabac_error_en_lowbits = 0xffffffff;
+        ctrl_regs->reg20_cabac_error_en_lowbits = 0xffffffdf;
         ctrl_regs->reg21_cabac_error_en_highbits = 0x3fffffff;
     } break;
     case MPP_VIDEO_CodingVP9 : {
