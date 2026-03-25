@@ -489,6 +489,7 @@ static MPP_RET hal_vp9d_vdpu383_gen_regs(void *hal, HalTaskInfo *task)
     // vp9 only one colmv
     regs->comm_addrs.reg217_232_colmv_ref_base[0] = hw_ctx->pre_mv_base_addr;
 
+    fbc_en = MPP_FRAME_FMT_IS_FBC(mpp_frame_get_fmt(mframe));
     reg_ref_base = regs->comm_addrs.reg170_185_ref_base;
     reg_payload_ref_base = regs->comm_addrs.reg195_210_payload_st_ref_base;
     for (i = 0; i < 3; i++) {

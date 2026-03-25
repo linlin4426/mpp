@@ -229,6 +229,7 @@ static MPP_RET hal_vp9d_vdpu384b_gen_regs(void *hal, HalTaskInfo *task)
     RK_S32 intraFlag = 0;
     MppBuffer framebuf = NULL;
     HalBuf *mv_buf = NULL;
+    RK_U32 fbc_en = 0;
     HalBuf *origin_buf = NULL;
 
     HalVp9dCtx *p_hal = (HalVp9dCtx*)hal;
@@ -436,6 +437,7 @@ static MPP_RET hal_vp9d_vdpu384b_gen_regs(void *hal, HalTaskInfo *task)
     // vp9 only one colmv
     regs->comm_addrs.reg217_232_colmv_ref_base[0] = hw_ctx->pre_mv_base_addr;
 
+    fbc_en = MPP_FRAME_FMT_IS_FBC(mpp_frame_get_fmt(mframe));
     reg_ref_base = regs->comm_addrs.reg170_185_ref_base;
     reg_payload_ref_base = regs->comm_addrs.reg195_210_payload_st_ref_base;
     for (i = 0; i < 3; i++) {
@@ -445,7 +447,7 @@ static MPP_RET hal_vp9d_vdpu384b_gen_regs(void *hal, HalTaskInfo *task)
         ref_frame_height_y = pic_param->ref_frame_coded_height[ref_idx];
         if (ref_frame_idx < 0x7f)
             mpp_buf_slot_get_prop(cfg->frame_slots, ref_frame_idx, SLOT_FRAME_PTR, &ref_frame);
-        if (MPP_FRAME_FMT_IS_FBC(mpp_frame_get_fmt(mframe))) {
+        if (fbc_en) {
             vdpu38x_get_fbc_off(ref_frame, &y_hor_virstride, &uv_hor_virstride, &y_virstride);
         } else {
             if (ref_frame)
