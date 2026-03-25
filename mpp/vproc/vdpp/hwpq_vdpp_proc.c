@@ -577,6 +577,7 @@ static void vdpp_dump_bufs(HwpqVdppParams *p_proc_param, RK_S32 index)
         RK_S32 map_flag = 0;
         const HwpqVdppImgInfo *src_info = &p_proc_param->src_img_info;
 
+        mpp_mkdir_p(HWPQ_VDPP_DEBUG_DUMP_PATH); // 0755
         snprintf(filename, 255, "%s/hwpq_vdpp_in_%dx%d_fmt%d.bin", HWPQ_VDPP_DEBUG_DUMP_PATH,
                  src_info->img_yrgb.w_vir, src_info->img_yrgb.h_vir, src_info->img_fmt);
 
@@ -612,6 +613,7 @@ static void vdpp_dump_bufs(HwpqVdppParams *p_proc_param, RK_S32 index)
     if (hwpq_vdpp_debug & HWPQ_VDPP_DUMP_OUT) {
         const HwpqVdppImgInfo *dst_info = &p_proc_param->dst_img_info;
 
+        mpp_mkdir_p(HWPQ_VDPP_DEBUG_DUMP_PATH); // 0755
         snprintf(filename, 255, "%s/hwpq_vdpp_out_%dx%d_fmt%d.bin", HWPQ_VDPP_DEBUG_DUMP_PATH,
                  dst_info->img_yrgb.w_vir, dst_info->img_yrgb.h_vir, dst_info->img_fmt);
 

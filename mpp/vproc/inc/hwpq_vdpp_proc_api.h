@@ -7,8 +7,8 @@
 #define HWPQ_VDPP_PROC_API_H
 
 /* version definition */
-#define HWPQ_VDPP_PROC_VERSION_HEX  (0x01040100)    /* [31:0] = [major:8-minor:8-patch:16] */
-#define HWPQ_VDPP_PROC_VERSION_STR  "v1.4.1"
+#define HWPQ_VDPP_PROC_VERSION_HEX  (0x010402FF)    /* [31:0] = [major:8-minor:8-patch:8-tweak:8] */
+#define HWPQ_VDPP_PROC_VERSION_STR  "v1.4.2"
 
 /* hwpq vdpp color format definition */
 #define VDPP_FRAME_FMT_COLOR_MASK   (0x000f0000)    /* DEPRECATED */

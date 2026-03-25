@@ -112,7 +112,7 @@ static void print_help_info()
     mpp_logi("  -S, --dswap           : output image chroma_uv is swapped\n");
     mpp_logi("  -m, --mode       [int]: vdpp work mode: {2-vep, 3-dci_hist}, default: 2\n");
     mpp_logi("  -n, --nframe     [int]: frame number, default: 1\n");
-    mpp_logi("      --slt       <file>: system level test file\n");
+    mpp_logi("  -t, --slt       <file>: system level test file\n");
     mpp_logi("      --cfg_set    [int]: high 16 bit: mask; low 3 bit (msb->lsb): dmsr|es|sharp. default: 0x0\n");
     mpp_logi("      --en_dmsr    [int]: en_dmsr flag, default: 0\n");
     mpp_logi("      --en_es      [int]: en_es   flag, default: 0\n");
@@ -852,6 +852,12 @@ int vdpp_test(VdppComCtx *vdppCtx, VdppTestCfg *cfg)
                 crc_data_calc(checkcrc, phist, DCI_HIST_SIZE);
                 crc_data_write(checkcrc, cfg->fp_slt);
             }
+            if (cfg->en_pyr) {
+                for (i = 0; i < 3; ++i) {
+                    crc_data_calc(checkcrc, pyrAddrs[i], pyrSizes[i]);
+                    crc_data_write(checkcrc, cfg->fp_slt);
+                }
+            }
         }
 
         // get bbd result
@@ -868,6 +874,12 @@ int vdpp_test(VdppComCtx *vdppCtx, VdppTestCfg *cfg)
                             results.bbd.bbd_size_top, results.bbd.bbd_size_bottom,
                             results.bbd.bbd_size_left, results.bbd.bbd_size_right);
                     fflush(cfg->fp_result);
+                }
+                if (cfg->fp_slt) {
+                    fprintf(cfg->fp_slt, "bbd result: [top=%d, btm=%d, left=%d, right=%d]\n",
+                            results.bbd.bbd_size_top, results.bbd.bbd_size_bottom,
+                            results.bbd.bbd_size_left, results.bbd.bbd_size_right);
+                    fflush(cfg->fp_slt);
                 }
             }
         }
