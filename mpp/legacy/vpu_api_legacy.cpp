@@ -609,6 +609,9 @@ static void setup_VPU_FRAME_from_mpp_frame(VpuCodecContext *ctx, VPU_FRAME *vfra
     case MPP_FRAME_FBC_AFBC_V2: {
         vframe->ColorType |= VPU_OUTPUT_FORMAT_FBC_AFBC_V2;
     } break;
+    case MPP_FRAME_FBC_RKFBC: {
+        vframe->ColorType |= VPU_OUTPUT_FORMAT_FBC_RKFBC;
+    } break;
     default: {
     } break;
     }
