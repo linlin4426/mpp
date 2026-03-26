@@ -17,6 +17,7 @@ extern "C" {
  * runtime environment. This is usefull on product environemnt.
  */
 rk_u32 mpp_rt_allcator_is_valid(MppBufferType type);
+const char *mpp_rt_get_rw_path(void);
 
 #ifdef __cplusplus
 }

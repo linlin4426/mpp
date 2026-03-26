@@ -62,9 +62,16 @@ static const char *mpp_vpu_address[] = {
 
 typedef struct MppRuntimeService_t {
     rk_u32  allocator_valid[MPP_BUFFER_TYPE_BUTT];
+    const char *rw_path;
 } MppRuntimeSrv;
 
 static MppRuntimeSrv *srv_runtime;
+
+static const char *mpp_rw_candidate_paths[] = {
+    "/data",          /* Android primary */
+    "/userdata",      /* Linux */
+    "/sdcard",        /* Android external storage */
+};
 
 static void mpp_rt_srv_init()
 {
@@ -82,6 +89,32 @@ static void mpp_rt_srv_init()
     }
 
     srv_runtime = srv;
+
+    /* Probe read-write accessible path */
+    {
+        const char *env_rw_path = NULL;
+        rk_u32 i;
+
+        mpp_env_get_str("mpp_rw_path", &env_rw_path, NULL);
+
+        if (env_rw_path && access(env_rw_path, R_OK | W_OK) == 0) {
+            srv->rw_path = env_rw_path;
+            mpp_rt_dbg("using env rw path: %s\n", env_rw_path);
+        } else {
+            if (env_rw_path)
+                mpp_loge("env mpp_rw_path %s is not accessible\n", env_rw_path);
+
+            for (i = 0; i < MPP_ARRAY_ELEMS(mpp_rw_candidate_paths); i++) {
+                const char *path = mpp_rw_candidate_paths[i];
+
+                if (access(path, R_OK | W_OK) == 0) {
+                    mpp_rt_dbg("found rw path: %s\n", path);
+                    srv->rw_path = path;
+                    break;
+                }
+            }
+        }
+    }
 
     srv->allocator_valid[MPP_BUFFER_TYPE_NORMAL] = 1;
     srv->allocator_valid[MPP_BUFFER_TYPE_ION] = !access("/dev/ion", F_OK | R_OK | W_OK);
@@ -175,6 +208,7 @@ static void mpp_rt_srv_init()
         if (!allocator_found)
             mpp_log("Can NOT found allocator in dts, enable both ion and drm\n");
     }
+
     return;
 }
 
@@ -196,6 +230,13 @@ rk_u32 mpp_rt_allcator_is_valid(MppBufferType type)
     }
 
     return valid;
+}
+
+const char *mpp_rt_get_rw_path(void)
+{
+    MppRuntimeSrv *srv = get_srv_runtime();
+
+    return NULL != srv ? srv->rw_path : NULL;
 }
 
 MPP_SINGLETON(MPP_SGLN_RUNTIME, mpp_runtime, mpp_rt_srv_init, mpp_rt_srv_deinit)
