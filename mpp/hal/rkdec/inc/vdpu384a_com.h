@@ -8,9 +8,9 @@
 
 #include "mpp_device.h"
 #include "mpp_buf_slot.h"
+#include "hal_dbg.h"
 #include "vdpu_com.h"
 
-// #define DUMP_VDPU384A_DATAS
 
 typedef struct Vdpu384aRegVersion_t {
     /* SWREG0_ID */
@@ -670,16 +670,8 @@ void vdpu384a_setup_statistic(Vdpu384aCtrlReg *com);
 MPP_RET vdpu384a_setup_cur_stride_info(MppFrame mframe, Vdpu384aRegSet *regs, RK_U32 chroma_fmt_idc);
 void vdpu384a_setup_down_scale(MppFrame frame, MppDev dev, Vdpu384aCtrlReg *com, void* comParas);
 void vdpu384a_update_thumbnail_frame_info(MppFrame frame);
-
-#ifdef DUMP_VDPU384A_DATAS
-extern RK_U32 dump_cur_frame;
-extern char dump_cur_dir[128];
-extern char dump_cur_fname_path[512];
-
-MPP_RET flip_string(char *str);
-MPP_RET dump_data_to_file(char *fname_path, void *data, RK_U32 data_bit_size,
-                          RK_U32 line_bits, RK_U32 big_end);
-#endif
+RK_RET vdpu384a_dump_sw_regs(Vdpu384aRegSet *regs, HalDbgCtx *dbg_ctx);
+RK_RET vdpu384a_dump_hw_regs(Vdpu384aRegSet *regs, HalDbgCtx *dbg_ctx);
 
 #ifdef  __cplusplus
 }

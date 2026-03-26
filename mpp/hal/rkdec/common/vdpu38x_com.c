@@ -775,102 +775,24 @@ RK_S32 hal_h265d_avs2d_calc_mv_size(RK_S32 pic_w, RK_S32 pic_h, RK_S32 ctu_w)
     return mv_size;
 }
 
-#ifdef DUMP_VDPU38X_DATAS
-RK_U32 vdpu38x_dump_cur_frm = 0;
-char vdpu38x_dump_cur_dir[128];
-char vdpu38x_dump_cur_fname_path[512];
-
-MPP_RET vdpu38x_flip_string(char *str)
+RK_RET vdpu38x_dump_sw_regs(Vdpu38xRegSet *regs, HalDbgCtx *dbg_ctx)
 {
-    RK_U32 len = strlen(str);
-    RK_U32 i, j;
-
-    for (i = 0, j = len - 1; i <= j; i++, j--) {
-        // swapping characters
-        char c = str[i];
-        str[i] = str[j];
-        str[j] = c;
-    }
+    vdpu38x_sw_regs(dbg_ctx, regs->reg_version, 0, "w+");
+    vdpu38x_sw_regs(dbg_ctx, regs->ctrl_regs, VDPU38X_OFF_CTRL_REGS, "a+");
+    vdpu38x_sw_regs(dbg_ctx, regs->comm_paras, VDPU38X_OFF_CODEC_PARAS_REGS, "a+");
+    vdpu38x_sw_regs(dbg_ctx, regs->comm_addrs, VDPU38X_OFF_COMMON_ADDR_REGS, "a+");
+    vdpu38x_sw_regs(dbg_ctx, regs->statistic_regs, VDPU38X_OFF_COM_STATISTIC_REGS_VDPU384B, "a+");
 
     return MPP_OK;
 }
 
-MPP_RET vdpu38x_dump_data_to_file(char *fname_path, void *data, RK_U32 data_bit_size,
-                                  RK_U32 line_bits, RK_U32 big_end, RK_U32 append)
+RK_RET vdpu38x_dump_hw_regs(Vdpu38xRegSet *regs, HalDbgCtx *dbg_ctx)
 {
-    RK_U8 *buf_p = (RK_U8 *)data;
-    RK_U8 cur_data;
-    RK_U32 i;
-    RK_U32 loop_cnt;
-    FILE *dump_fp = NULL;
-    char line_tmp[256];
-    RK_U32 str_idx = 0;
-
-    if (append)
-        dump_fp = fopen(fname_path, "aw+");
-    else
-        dump_fp = fopen(fname_path, "w+");
-    if (!dump_fp) {
-        mpp_err_f("open file: %s error!\n", fname_path);
-        return MPP_NOK;
-    }
-    if (append)
-        fseek(dump_fp, 0, SEEK_END);
-
-    if ((data_bit_size % 4 != 0) || (line_bits % 8 != 0)) {
-        mpp_err_f("line bits not align to 4! data_bit_size: %d  line_bits: %d\n",
-                  data_bit_size, line_bits);
-        return MPP_NOK;
-    }
-
-    loop_cnt = data_bit_size / 8;
-    for (i = 0; i < loop_cnt; i++) {
-        cur_data = buf_p[i];
-
-        sprintf(&line_tmp[str_idx++], "%0x", cur_data & 0xf);
-        if ((i * 8 + 4) % line_bits == 0) {
-            line_tmp[str_idx++] = '\0';
-            str_idx = 0;
-            if (!big_end)
-                vdpu38x_flip_string(line_tmp);
-            fprintf(dump_fp, "%s\n", line_tmp);
-        }
-        sprintf(&line_tmp[str_idx++], "%0x", (cur_data >> 4) & 0xf);
-        if ((i * 8 + 8) % line_bits == 0) {
-            line_tmp[str_idx++] = '\0';
-            str_idx = 0;
-            if (!big_end)
-                vdpu38x_flip_string(line_tmp);
-            fprintf(dump_fp, "%s\n", line_tmp);
-        }
-    }
-
-    // last line
-    if (data_bit_size % 4) {
-        cur_data = buf_p[i];
-        sprintf(&line_tmp[str_idx++], "%0x", cur_data & 0xf);
-        if ((i * 8 + 8) % line_bits == 0) {
-            line_tmp[str_idx++] = '\0';
-            str_idx = 0;
-            if (!big_end)
-                vdpu38x_flip_string(line_tmp);
-            fprintf(dump_fp, "%s\n", line_tmp);
-        }
-    }
-    if (data_bit_size % line_bits) {
-        loop_cnt = (line_bits - (data_bit_size % line_bits)) / 4;
-        for (i = 0; i < loop_cnt; i++)
-            sprintf(&line_tmp[str_idx++], "%0x", 0);
-        line_tmp[str_idx++] = '\0';
-        str_idx = 0;
-        if (!big_end)
-            vdpu38x_flip_string(line_tmp);
-        fprintf(dump_fp, "%s\n", line_tmp);
-    }
-
-    fflush(dump_fp);
-    fclose(dump_fp);
+    vdpu38x_hw_regs(dbg_ctx, regs->reg_version, 0, "w+");
+    vdpu38x_hw_regs(dbg_ctx, regs->ctrl_regs, VDPU38X_OFF_CTRL_REGS, "a+");
+    vdpu38x_hw_regs(dbg_ctx, regs->comm_paras, VDPU38X_OFF_CODEC_PARAS_REGS, "a+");
+    vdpu38x_hw_regs(dbg_ctx, regs->comm_addrs, VDPU38X_OFF_COMMON_ADDR_REGS, "a+");
+    vdpu38x_hw_regs(dbg_ctx, regs->statistic_regs, VDPU38X_OFF_COM_STATISTIC_REGS_VDPU384B, "a+");
 
     return MPP_OK;
 }
-#endif

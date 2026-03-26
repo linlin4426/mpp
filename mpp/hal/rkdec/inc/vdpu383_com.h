@@ -10,8 +10,6 @@
 #include "mpp_buf_slot.h"
 #include "vdpu_com.h"
 
-// #define DUMP_VDPU383_DATAS
-
 typedef struct Vdpu383RegVersion_t {
     struct {
         RK_U32 minor_ver                      : 8;
@@ -604,16 +602,8 @@ void vdpu383_setup_statistic(Vdpu383CtrlReg *com);
 MPP_RET vdpu383_setup_cur_stride_info(MppFrame mframe, Vdpu383RegSet *regs, RK_U32 chroma_fmt_idc);
 void vdpu383_setup_down_scale(MppFrame frame, MppDev dev, Vdpu383CtrlReg *com, void* comParas);
 void vdpu383_update_thumbnail_frame_info(MppFrame frame);
-
-#ifdef DUMP_VDPU383_DATAS
-extern RK_U32 dump_cur_frame;
-extern char dump_cur_dir[128];
-extern char dump_cur_fname_path[512];
-
-MPP_RET flip_string(char *str);
-MPP_RET dump_data_to_file(char *fname_path, void *data, RK_U32 data_bit_size,
-                          RK_U32 line_bits, RK_U32 big_end);
-#endif
+RK_RET vdpu383_dump_sw_regs(Vdpu383RegSet *regs, HalDbgCtx *dbg_ctx);
+RK_RET vdpu383_dump_hw_regs(Vdpu383RegSet *regs, HalDbgCtx *dbg_ctx);
 
 #ifdef  __cplusplus
 }

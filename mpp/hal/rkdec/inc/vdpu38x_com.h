@@ -11,10 +11,9 @@
 #include "mpp_device.h"
 #include "mpp_buf_slot.h"
 
+#include "hal_dbg.h"
 #include "vdpu_com.h"
 #include "hal_bufs.h"
-
-// #define DUMP_VDPU38X_DATAS
 
 #define VDPU38X_OFF_CTRL_REGS                     (8 * sizeof(RK_U32))
 #define VDPU38X_OFF_INTERRUPT_REGS                (15 * sizeof(RK_U32))
@@ -24,6 +23,14 @@
 #define VDPU38X_OFF_COM_STATISTIC_REGS_VDPU383    (320 * sizeof(RK_U32))
 #define VDPU38X_OFF_COM_STATISTIC_REGS_VDPU384A   (320 * sizeof(RK_U32))
 #define VDPU38X_OFF_COM_STATISTIC_REGS_VDPU384B   (256 * sizeof(RK_U32))
+
+#define vdpu38x_sw_regs(dbg_ctx, regs, offset, mode) \
+    hal_dbg_dump_set_regs(dbg_ctx, (RK_U32 *)&regs, sizeof(regs) / 4, \
+                          offset / sizeof(RK_U32), mode);
+
+#define vdpu38x_hw_regs(dbg_ctx, regs, offset, mode) \
+    hal_dbg_dump_get_regs(dbg_ctx, (RK_U32 *)&regs, sizeof(regs) / 4, \
+                          offset / sizeof(RK_U32), mode);
 
 typedef enum Vdpu38xFmt_e {
     MPP_HAL_FMT_YUV400 = 0,
@@ -826,16 +833,8 @@ void vdpu38x_setup_down_scale(MppFrame frame, MppDev dev, Vdpu38xCtrlReg *com, v
 void vdpu38x_update_thumbnail_frame_info(MppFrame frame);
 MPP_RET vdpu38x_setup_scale_origin_bufs(MppFrame mframe, HalBufs *org_bufs, RK_S32 max_cnt);
 RK_S32 hal_h265d_avs2d_calc_mv_size(RK_S32 pic_w, RK_S32 pic_h, RK_S32 ctu_w);
-
-#ifdef DUMP_VDPU38X_DATAS
-extern RK_U32 vdpu38x_dump_cur_frm;
-extern char vdpu38x_dump_cur_dir[128];
-extern char vdpu38x_dump_cur_fname_path[512];
-
-MPP_RET vdpu38x_flip_string(char *str);
-MPP_RET vdpu38x_dump_data_to_file(char *fname_path, void *data, RK_U32 data_bit_size,
-                                  RK_U32 line_bits, RK_U32 big_end, RK_U32 append);
-#endif
+RK_RET vdpu38x_dump_sw_regs(Vdpu38xRegSet *regs, HalDbgCtx *dbg_ctx);
+RK_RET vdpu38x_dump_hw_regs(Vdpu38xRegSet *regs, HalDbgCtx *dbg_ctx);
 
 #ifdef  __cplusplus
 }
