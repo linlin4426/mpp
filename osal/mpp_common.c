@@ -3,7 +3,13 @@
  * Copyright (c) 2015 Rockchip Electronics Co., Ltd.
  */
 
+#include <errno.h>
+#include <dirent.h>
+#include <string.h>
+
 #include "mpp_common.h"
+
+#define MPP_PATH_MAX_LEN    1024
 
 static const RK_U8 log2_tab[256] = {
     0, 0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
@@ -181,4 +187,35 @@ RK_S64 mpp_round_pow2_signed(RK_S64 x, RK_U16 n)
         return -((RK_S64)mpp_round_pow2(-x, n));
     else
         return (RK_S64)mpp_round_pow2(x, n);
+}
+
+MPP_RET mpp_mkdir_p(const char *path)
+{
+    char tmp[MPP_PATH_MAX_LEN];
+    char *p = NULL;
+
+    if (!path) {
+        errno = EINVAL;
+        return MPP_NOK;
+    }
+
+    if (strlen(path) >= sizeof(tmp)) {
+        errno = ENAMETOOLONG;
+        return MPP_NOK;
+    }
+
+    strncpy(tmp, path, sizeof(tmp) - 1);
+    tmp[sizeof(tmp) - 1] = '\0';
+
+    for (p = tmp + 1; *p; p++) {
+        if (*p != '/')
+            continue;
+
+        *p = '\0';
+        if (mkdir(tmp) == -1 && errno != EEXIST)
+            return MPP_NOK;
+        *p = '/';
+    }
+
+    return (mkdir(tmp) == -1 && errno != EEXIST) ? MPP_NOK : MPP_OK;
 }

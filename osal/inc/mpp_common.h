@@ -7,6 +7,7 @@
 #define MPP_COMMON_H
 
 #include "rk_type.h"
+#include "mpp_err.h"
 
 #define MPP_TAG_SIZE            32
 
@@ -240,6 +241,8 @@ RK_U32 mpp_clip_uint_pow2(RK_S32 val, RK_S32 n);
 RK_U64 mpp_round_pow2(RK_U64 x, RK_U16 n);
 // Divide a signed integer x by 2^n and round to nearest integer
 RK_S64 mpp_round_pow2_signed(RK_S64 x, RK_U16 n);
+
+MPP_RET mpp_mkdir_p(const char *path);
 
 #ifdef __cplusplus
 }
