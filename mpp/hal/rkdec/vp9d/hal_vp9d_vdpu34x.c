@@ -449,6 +449,8 @@ static MPP_RET hal_vp9d_vdpu34x_gen_regs(void *hal, HalTaskInfo *task)
             mpp_err("vp9 fast mode buf all used\n");
             return MPP_ERR_NOMEM;
         }
+    } else {
+        task->dec.reg_index = 0;
     }
 
     if (hal_vp9d_vdpu34x_setup_colmv_buf(hal, task))

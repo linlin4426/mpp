@@ -396,6 +396,8 @@ MPP_RET vdpu384b_h264d_gen_regs(void *hal, HalTaskInfo *task)
                 break;
             }
         }
+    } else {
+        task->dec.reg_index = 0;
     }
 
 #ifdef DUMP_VDPU38X_DATAS

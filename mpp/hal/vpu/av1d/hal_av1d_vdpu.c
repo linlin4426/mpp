@@ -1882,6 +1882,8 @@ MPP_RET vdpu_av1d_gen_regs(void *hal, HalTaskInfo *task)
                 break;
             }
         }
+    } else {
+        task->dec.reg_index = 0;
     }
 
     regs = ctx->regs;

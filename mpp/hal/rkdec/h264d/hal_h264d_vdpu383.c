@@ -503,6 +503,8 @@ MPP_RET vdpu383_h264d_gen_regs(void *hal, HalTaskInfo *task)
                 break;
             }
         }
+    } else {
+        task->dec.reg_index = 0;
     }
 
 #ifdef DUMP_VDPU383_DATAS

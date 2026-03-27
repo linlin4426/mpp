@@ -278,6 +278,8 @@ MPP_RET hal_vp9d_rkv_gen_regs(void *hal, HalTaskInfo *task)
             mpp_err("vp9 fast mode buf all used\n");
             return MPP_ERR_NOMEM;
         }
+    } else {
+        task->dec.reg_index = 0;
     }
     VP9_REGS *vp9_hw_regs = (VP9_REGS*)hw_ctx->hw_regs;
     intraFlag = (!pic_param->frame_type || pic_param->intra_only);

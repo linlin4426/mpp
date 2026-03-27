@@ -409,6 +409,8 @@ MPP_RET vdpu384a_h264d_gen_regs(void *hal, HalTaskInfo *task)
                 break;
             }
         }
+    } else {
+        task->dec.reg_index = 0;
     }
 
 #ifdef DUMP_VDPU384A_DATAS

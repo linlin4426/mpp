@@ -853,6 +853,8 @@ MPP_RET vdpu1_h264d_gen_regs(void *hal, HalTaskInfo *task)
                 break;
             }
         }
+    } else {
+        task->dec.reg_index = 0;
     }
 
     hal_h264d_explain_input_buffer(hal, &task->dec);

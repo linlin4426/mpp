@@ -301,6 +301,8 @@ static MPP_RET hal_vp9d_vdpu383_gen_regs(void *hal, HalTaskInfo *task)
             mpp_err("vp9 fast mode buf all used\n");
             return MPP_ERR_NOMEM;
         }
+    } else {
+        task->dec.reg_index = 0;
     }
     regs = (Vdpu383RegSet*)hw_ctx->hw_regs;
     memset(regs, 0, sizeof(Vdpu383RegSet));

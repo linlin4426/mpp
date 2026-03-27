@@ -469,6 +469,8 @@ MPP_RET rkv_h264d_gen_regs(void *hal, HalTaskInfo *task)
                 break;
             }
         }
+    } else {
+        task->dec.reg_index = 0;
     }
 
     prepare_spspps(p_hal, (RK_U64 *)reg_ctx->spspps, sizeof(reg_ctx->spspps));

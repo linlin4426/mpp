@@ -359,6 +359,8 @@ MPP_RET hal_avs2d_vdpu384b_gen_regs(void *hal, HalTaskInfo *task)
         }
 
         mpp_assert(regs);
+    } else {
+        task->dec.reg_index = 0;
     }
 
     regs = reg_ctx->regs;
