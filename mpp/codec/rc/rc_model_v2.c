@@ -1683,13 +1683,6 @@ MPP_RET rc_model_v2_hal_start(void *ctx, EncRcTask *task)
             }
             p->start_qp = mpp_clip(p->start_qp, qpmin, usr_cfg->fqp_max_p);
         }
-        if (p->pre_target_bits_fix_count * 90 / 100 > p->pre_real_bits_count) {
-            p->start_qp = mpp_clip(p->start_qp, info->quality_min, 35);
-        } else if (p->pre_target_bits_fix_count * 100 / 100 > p->pre_real_bits_count) {
-            p->start_qp = mpp_clip(p->start_qp, info->quality_min, 37);
-        } else if (p->pre_target_bits_fix_count * 107 / 100 > p->pre_real_bits_count) {
-            p->start_qp = mpp_clip(p->start_qp, info->quality_min, 39);
-        }
         p->start_qp = mpp_clip(p->start_qp, qpmin, 51);
     }
 
