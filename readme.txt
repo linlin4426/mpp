@@ -83,43 +83,45 @@ More document can be found at http://opensource.rock-chips.com/wiki_Mpp
    |  |  |
    |  |  |----- dec
    |  |  |  |
-   |  |  |  |----- dummy         decoder parser work flow sample
+   |  |  |  |----- av1           av1 parser
    |  |  |  |
-   |  |  |  |----- h263
+   |  |  |  |----- avs           avs parser
    |  |  |  |
-   |  |  |  |----- h264
+   |  |  |  |----- avs2          avs2 parser
    |  |  |  |
-   |  |  |  |----- h265
+   |  |  |  |----- h263          h263 parser
+   |  |  |  |
+   |  |  |  |----- h264          h264 parser
+   |  |  |  |
+   |  |  |  |----- h265          h265 parser
    |  |  |  |
    |  |  |  |----- m2v           mpeg2 parser
    |  |  |  |
    |  |  |  |----- mpg4          mpeg4 parser
    |  |  |  |
-   |  |  |  |----- vp8
+   |  |  |  |----- vp8           vp8 parser
    |  |  |  |
-   |  |  |  |----- vp9
+   |  |  |  |----- vp9           vp9 parser
    |  |  |  |
-   |  |  |  |----- jpeg
+   |  |  |  |----- jpeg          jpeg parser
    |  |  |
    |  |  |----- enc
    |  |     |
    |  |     |----- dummy         encoder controllor work flow sample
    |  |     |
-   |  |     |----- h264
+   |  |     |----- h264          h264 encoder
    |  |     |
-   |  |     |----- h265
+   |  |     |----- h265          h265 encoder
    |  |     |
-   |  |     |----- jpeg
+   |  |     |----- jpeg          jpeg encoder
+   |  |     |
+   |  |     |----- vp8           vp8 encoder
    |  |
    |  |----- hal                 Hardware Abstract Layer (HAL): modules used in mpi
    |  |  |
    |  |  |----- inc              header files provided by hal for external usage
    |  |  |
-   |  |  |----- iep              iep user library
-   |  |  |
-   |  |  |----- pp               post-processor user library
-   |  |  |
-   |  |  |----- deinter          deinterlace function module including pp/iep
+   |  |  |----- common           shared HAL code
    |  |  |
    |  |  |----- rkdec            rockchip hardware decoder register generation
    |  |  |  |
@@ -128,14 +130,28 @@ More document can be found at http://opensource.rock-chips.com/wiki_Mpp
    |  |  |  |----- h265d         generate register file from H.265 syntax info
    |  |  |  |
    |  |  |  |----- vp9d          generate register file from vp9 syntax info
+   |  |  |  |
+   |  |  |  |----- av1d          generate register file from AV1 syntax info
+   |  |  |  |
+   |  |  |  |----- avsd          generate register file from AVS syntax info
+   |  |  |  |
+   |  |  |  |----- avs2d         generate register file from AVS2 syntax info
+   |  |  |
+   |  |  |----- rkenc            rockchip hardware encoder register generation
+   |  |  |  |
+   |  |  |  |----- h264e         generate register file from H.264 syntax info
+   |  |  |  |
+   |  |  |  |----- h265e         generate register file from H.265 syntax info
+   |  |  |  |
+   |  |  |  |----- jpege         generate register file from jpeg syntax info
    |  |  |
    |  |  |----- vpu              vpu register generation library
    |  |     |
+   |  |     |----- av1d          generate register file from AV1 syntax info
+   |  |     |
    |  |     |----- h263d         generate register file from H.263 syntax info
    |  |     |
-   |  |     |----- h264d         generate register file from H.264 syntax info
-   |  |     |
-   |  |     |----- h265d         generate register file from H.265 syntax info
+   |  |     |----- h264e         generate register file from H.264 syntax info
    |  |     |
    |  |     |----- jpegd         generate register file from jpeg syntax info
    |  |     |
@@ -146,6 +162,16 @@ More document can be found at http://opensource.rock-chips.com/wiki_Mpp
    |  |     |----- mpg4d         generate register file from mpeg4 syntax info
    |  |     |
    |  |     |----- vp8d          generate register file from vp8 syntax info
+   |  |     |
+   |  |     |----- vp8e          generate register file from vp8 syntax info
+   |  |
+   |  |----- vproc               video process modules
+   |  |  |
+   |  |  |----- iep              image enhancement processor
+   |  |  |
+   |  |  |----- iep2             image enhancement processor v2
+   |  |  |
+   |  |  |----- vdpp             video post processor
    |  |
    |  |----- legacy              generate new libvpu to include old vpuapi path
    |  |                          and new mpp path
