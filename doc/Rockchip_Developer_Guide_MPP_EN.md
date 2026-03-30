@@ -2,9 +2,9 @@
 
 | Project： | MPP         |
 | --------- | ----------- |
-| Version： | 0.7         |
+| Version： | 0.8         |
 | Author：  | Herman Chen |
-| Date：    | 10/17/2023  |
+| Date：    | 03/31/2026  |
 
 | **Revision** | **Date**   | **Description**                                              | **Author**                              |
 | ------------ | ---------- | ------------------------------------------------------------ | --------------------------------------- |
@@ -16,6 +16,7 @@
 | 0.5          | 06/08/2020 | Update encoder new configuration interface, no longer supports RK3188 | Herman Chen                             |
 | 0.6          | 06/11/2020 | Translation                                                  | Lily Chen                               |
 | 0.7          | 10/17/2023 | add markdown document                                        | Xueman Ruan<br>Yandong Lin              |
+| 0.8          | 03/31/2026 | Update decoder/encoder control interface, add MppEncCfg parameter table, add no_thread mode, FBC/Tile format, encoder config debugging sections, update demo parameters | Herman Chen |
 |              |            |                                                              |                                         |
 |              |            |                                                              |                                         |
 
@@ -25,7 +26,7 @@
 Media Process Platform (MPP) provided by Rockchip is a general media processing software platform for Rockchip chip series. For applications the MPP platform shields the complex lower-level processing related to chips. Its purpose is to shield the differences between different chips and provide a unified media process interface (MPI) to users. The functions provided by MPP include:
 
 -   video decoding
-    -   H.265 / H.264 / H.263 / AV1 / VP9 / VP8 / AVS2 / AVS / AVS+ / MPEG-4 / MPEG-2 / MPEG-1 / VC1 / MJPEG
+    -   H.265 / H.264 / H.263 / AV1 / VP9 / VP8 / AVS2 / AVS / MPEG-4 / MPEG-2 / MJPEG
 -   video encoding
     -   H.265 / H.264 / VP8 / MJPEG
 -   video processing
@@ -226,6 +227,22 @@ For the decoder the MppFrame is its output information structure. The decoded in
 
 Meanwhile once the resolution of input stream is changed the info_change flag in MppFrame will be set and info_change event will be notified to user who is required to modify the buffer pool.
 
+### FBC and Tile Format
+
+In addition to common linear YUV/RGB formats, MppFrame also supports FBC (Frame Buffer Compression) and Tile formats through flag bits in MppFrameFormat.
+
+FBC types:
+
+| FBC Type | Flag Value | Description |
+|---|---|---|
+| AFBC_V1 | 0x00100000 | ISP output |
+| AFBC_V2 | 0x00200000 | Decoder output |
+| RKFBC | 0x00400000 | Decoder output / Encoder input |
+
+Tile format is indicated by bit 25 (0x02000000). Note that FBC and Tile are mutually exclusive.
+
+To configure decoder output to FBC/Tile format, use the `MPP_DEC_SET_OUTPUT_FORMAT` or `MPP_DEC_SET_FRAME_INFO` command.
+
 ## 2.5 Advanced task structure (MppTask)
 
 When the interface between MppPacket and MppFrame cannot fulfill user’s requirements it is necessary to use MppTask as a data container to fulfill more complex input and output requirements. MppTask needs to be used in conjunction with poll/dequeuer/enqueue interface. Compared with simple process interfaces such as put_packet/get_frame, MppTask has complex process and low efficiency which is the cost of fulfilling complex requirements.
@@ -356,6 +373,12 @@ The decode function is a combination of decode_put_packet and decode_get_frame d
 
 In user view, the decode function firstly try to acquire a decoded image. If the decoded image is obtained, the decoded image is preferentially returned to the caller. If there is no decoded image can be output the bitstream is sent, and then try again to get the decoded image and exit.
 
+### 3.1.4 Decoder no_thread mode
+
+By default, MPP decoder internally creates a worker thread to handle hardware operations. Users can disable this internal thread by setting the `MPP_SET_DISABLE_THREAD` command before calling `mpp_init`. In no_thread mode, the user calls the synchronous `decode` interface directly.
+
+The advantage of no_thread mode is simpler calling convention. The disadvantage is reduced hardware/software parallelism, which may result in lower decoding efficiency. For usage, refer to test/mpi_dec_nt_test.c.
+
 # 3.2 Decoder control interface
 
 ## 3.2.1 control
@@ -388,11 +411,11 @@ The command parameter is RK_U32*, which is used to enable the protocol parser in
 
 The command parameter is RK_U32*, which is used to enable fast frame parsing in MPP and improve the parallelism of decoder hardware and software. However, the side-effect is some influence on error stream flag so it is disabled by default. This command is called before mpp_init.
 
-**MPP_DEC_GET_STREAM_COUT**
+**MPP_DEC_GET_STREAM_COUNT**
 
 The command parameter is RK_U32*. It is called by external applications to obtain the number of bitstream packets that have not been processed. It is a historical legacy interface.
 
-**MPP_DEC_GET_VPUMEM_USED_COUT**
+**MPP_DEC_GET_VPUMEM_USED_COUNT**
 
 The command parameter is RK_U32*. It is called by external applications to obtain the number of MppBuffer used by MPP. It is a historical legacy interface.
 
@@ -562,9 +585,13 @@ MPP recommends using the encapsulated MppEncCfg structure to configure encoder i
 
 Due to the configurable options and parameters of the encoder, the use of fixed structures is prone to frequent changes in the interface structure, resulting in the inability to ensure binary compatibility of the interface, complicated version management, and greatly increased maintenance.
 
-To alleviate this problem, MppEncCfg uses (void \*) as the type, and uses \<string-value\> for key map configuration. The function interface is divided into s32/u32/s64/u64/ptr/st, and the corresponding interface functions are divided into set and get two groups, as follows:
+To alleviate this problem, MppEncCfg uses (void \*) as the type, and uses \<string-value\> for key map configuration. The function interface is divided into s8/u8/s16/u16/s32/u32/s64/u64/ptr/st, and the corresponding interface functions are divided into set and get two groups, as follows:
 
 ```c
+MPP_RET mpp_enc_cfg_set_s8(MppEncCfg cfg, const char *name, RK_S8 val);
+MPP_RET mpp_enc_cfg_set_u8(MppEncCfg cfg, const char *name, RK_U8 val);
+MPP_RET mpp_enc_cfg_set_s16(MppEncCfg cfg, const char *name, RK_S16 val);
+MPP_RET mpp_enc_cfg_set_u16(MppEncCfg cfg, const char *name, RK_U16 val);
 MPP_RET mpp_enc_cfg_set_s32(MppEncCfg cfg, const char *name, RK_S32 val);
 MPP_RET mpp_enc_cfg_set_u32(MppEncCfg cfg, const char *name, RK_U32 val);
 MPP_RET mpp_enc_cfg_set_s64(MppEncCfg cfg, const char *name, RK_S64 val);
@@ -572,6 +599,10 @@ MPP_RET mpp_enc_cfg_set_u64(MppEncCfg cfg, const char *name, RK_U64 val);
 MPP_RET mpp_enc_cfg_set_ptr(MppEncCfg cfg, const char *name, void *val);
 MPP_RET mpp_enc_cfg_set_st(MppEncCfg cfg, const char *name, void *val);
 
+MPP_RET mpp_enc_cfg_get_s8(MppEncCfg cfg, const char *name, RK_S8 *val);
+MPP_RET mpp_enc_cfg_get_u8(MppEncCfg cfg, const char *name, RK_U8 *val);
+MPP_RET mpp_enc_cfg_get_s16(MppEncCfg cfg, const char *name, RK_S16 *val);
+MPP_RET mpp_enc_cfg_get_u16(MppEncCfg cfg, const char *name, RK_U16 *val);
 MPP_RET mpp_enc_cfg_get_s32(MppEncCfg cfg, const char *name, RK_S32 *val);
 MPP_RET mpp_enc_cfg_get_u32(MppEncCfg cfg, const char *name, RK_U32 *val);
 MPP_RET mpp_enc_cfg_get_s64(MppEncCfg cfg, const char *name, RK_S64 *val);
@@ -582,68 +613,156 @@ MPP_RET mpp_enc_cfg_get_st(MppEncCfg cfg, const char *name, void *val);
 
 The character string is generally defined by \[type:parameter\]. The supported character strings and parameter types are as follows:
 
-|Parameter string   |Interface   |Actual type   |Description   |
+| Parameter string | Interface | Actual type | Description |
 |---|---|---|---|
-|rc:mode|S32|MppEncRcMode|Indicates the bit rate control mode, currently supports CBR and VBR:<br>CBR is Constant Bit Rate，fixed bit rate mode。In fixed bit rate mode, the target bit rate plays a decisive role.<br>VBR is Variable Bit Rate, variable bit rate mode.In variable bit rate mode, the maximum and minimum bit rates play a decisive role.<br>FIX_QP is a fixed QP mode, used for debugging and performance evaluation.<br>![](media/Rockchip_Developer_Guide_MPP/MPP_MppEncRcMode.png)|
-|rc:bps_target|S32|RK_S32|Indicates the target code rate in CBR mode.|
-|rc:bps_max|S32|RK_S32|Indicates the highest bit rate in VBR mode.|
-|rc:bps_min|S32|RK_S32|Indicates the lowest bit rate in VBR mode.|
-|rc:fps_in_flex|S32|RK_S32|Flag bit indicating whether the input frame rate is variable. The default is 0.<br>0 means that the input frame rate is fixed, and the frame rate calculation method is fps_in_num/fps_in_denom, which can indicate the fractional frame rate.<br>1 means that the input frame rate is variable. In the case of a variable frame rate, the frame rate is not fixed, and the corresponding code rate calculation and allocation rules become calculated according to actual time.|
-|rc:fps_in_flex|S32|RK_S32|Flag bit indicating whether the input frame rate is variable. The default is 0.<br>0 means that the input frame rate is fixed, and the frame rate calculation method is fps_in_num/fps_in_denom, which can indicate the fractional frame rate.<br>1 means that the input frame rate is variable. In the case of a variable frame rate, the frame rate is not fixed, and the corresponding code rate calculation and allocation rules become calculated according to actual time.|
-|rc:fps_in_num|S32|RK_S32|Indicates the numerator part of the input frame rate score value, for example, 0 means the default 30fps.|
-|rc:fps_in_denom|S32|RK_S32|Indicates the denominator part of the input frame rate fraction value. If 0 is 1|
-|rc:fps_out_flex|S32|RK_S32|Flag indicating whether the output frame rate is variable. The default is 0.<br>0 means that the output frame rate is fixed, and the frame rate calculation method is fps_out_num/fps_out_denom, which can indicate the fractional frame rate.<br>1 means that the output frame rate is variable. In the case of variable frame rate, the frame rate is not fixed, and the corresponding code stream output time is calculated according to the actual time.|
-|rc:fps_out_num|S32|RK_S32|Indicates the numerator part of the output frame rate score, such as 0 means the default 30fps.|
-|rc:fps_out_denom|S32|RK_S32|Indicates the denominator part of the output frame rate score value. If 0 is 1|
-|rc:gop||RK_S32|Indicates Group Of Picture, that is, the interval between two I frames, the meaning is as follows.<br>0-indicates that there is only one I frame, other frames are P frames<br>1-means all I frames<br>2-means the sequence is I P I P I P...<br>3-means the sequence is I P P I P P I P P...<br>In general, gop is selected as an integer multiple of the input frame rate.|
-|rc:max_reenc_times|U32|RK_U32|The maximum recoding times of a frame of image.|
-|prep:width|S32|RK_S32|Indicates the number of pixels in the horizontal direction of the input image, in units of pixels.|
-|prep:height|S32|RK_S32|Indicates the number of pixels in the vertical direction of the input image, in units of pixels.|
-|prep:hor_stride|S32|RK_S32|Indicates the distance between two adjacent lines in the vertical direction of the input image, in bytes.|
-|prep:ver_stride|S32|RK_S32|Indicates the number of lines between input image components, and the unit is 1.|
-|prep:format|S32|MppFrameFormat|Represents the input image color space format and memory layout.<br>![](media/Rockchip_Developer_Guide_MPP/MPP_MppFrameFormat.png)|
-|prep:color|S32|MppFrameColorSpace|Represents the color space range of input image data.|
-|prep:range|S32|MppFrameColorRange|Indicates whether the input image is full range or limit range<br>![](media/Rockchip_Developer_Guide_MPP/MPP_MppFrameColorRange.png)|
-|prep:rotation|S32|MppEncRotationCfg|Represents the input image rotation attribute, the default is 0, no rotation.<br>![](media/Rockchip_Developer_Guide_MPP/MPP_MppEncRotationCfg.png)|
-|prep:mirroring|S32|RK_S32|Indicates the mirroring attribute of the input image, the default is no mirroring . <br>![](media/Rockchip_Developer_Guide_MPP/MPP_MppEncMirrorCfg.png)|
-|codec:type|S32|MppCodingType|Indicates the protocol type corresponding to MppEncCodecCfg, which needs to be consistent with the parameters of the MppCtx initialization function mpp_init.<br>![](media/Rockchip_Developer_Guide_MPP/MPP_MppCodingType.png)|
-|h264:stream_type|S32|RK_S32|Indicates the type of input H.264 stream format, and the default is 0.<br>0-indicates Annex B format, that is, the start code of 00 00 00 01 is added.<br>1-indicates a format without a start code.<br>At present, the internal fixed format is Annex B format|
-|h264:profile|S32|RK_S32|The profile_idc parameter in SPS:<br>66-indicates Baseline profile.<br>77-indicates Main profile.<br>100-indicates High profile.<br>![](media/Rockchip_Developer_Guide_MPP/MPP_H264Profile.png)|
-|h264:level|S32|RK_S32|Indicates  the level_idc parameter in SPS, where 10 represents level 1.0:10/11/12/13 – qcif@15fps / cif@7.5fps / cif@15fps / cif@30fps<br>20/21/22 – cif@30fps / half-D1@25fps / D1@12.5fps<br>30/31/32 – D1@25fps / 720p@30fps / 720p@60fps<br>40/41/42 – 1080p@30fps / 1080p@30fps / 1080p@60fps<br>50/51/52 – 4K@30fps / 4K@30fps / 4K@60fps<br>The general configuration is level 4.1 to meet the requirements.|
-|h264:cabac_en|S32|RK_S32|Represents the entropy encoding format used by the encoder:<br>0 – CAVLC,Adaptive variable length coding.<br>1 – CABAC, Adaptive arithmetic coding.|
-|h264:cabac_idc|S32|RK_S32|The cabac_init_idc in the protocol syntax is valid when cabac_en is 1, and the valid value is 0~2.|
-|h264:trans8x8|S32|RK_S32|Indicates the 8x8 conversion enable flag in the protocol syntax.|
-|h264:const_intra|S32|RK_S32|0-to close, fixed close in Baseline/Main profile.|
-|h264:scaling_list|S32|RK_S32|1-to enable, selectable to enable in High profile.|
-|h264:cb_qp_offset|S32|RK_S32|It indicates the constrained_intra_pred_mode mode enable flag in the protocol syntax.|
-|h264:cr_qp_offset|S32|RK_S32|0-is off, 1-is on.|
-|h264:dblk_disable|S32|RK_S32|Represents the scaling_list_matrix mode in the protocol syntax|
-|h264:dblk_alpha|S32|RK_S32|0-flat matrix, 1-default matrix.|
-|h264:dblk_beta|S32|RK_S32|Indicates the deblock_offset_beta value in the protocol syntax.|
-|h264:qp_init|S32|RK_S32|The valid range is [-6, 6].|
-|h264:qp_max|S32|RK_S32|Indicates the initial QP value. Do not configure it under normal circumstances.|
-|h264:qp_min|S32|RK_S32|Indicates the maximum QP value, do not configure it under normal circumstances.|
-|h264:qp_max_i|S32|RK_S32|Indicates the minimum QP value, do not configure it under normal circumstances.|
-|h264:qp_min_i|S32|RK_S32|Indicates the maximum I frame QP value. Do not configure it under normal circumstances.|
-|h264:qp_step|S32|RK_S32|Indicates the minimum I frame QP value. Do not configure it under normal circumstances.|
-|h265:profile|S32|RK_S32|Indicates the frame-level QP change amplitude between two adjacent frames.|
-|h265:level|S32|RK_S32|The profile_idc parameter in the VPS:|
-|h265:scaling_list|S32|RK_S32|Fixed at 1, Main profile|
-|h265:cb_qp_offset|S32|RK_S32|Represents the level_idc parameter in VPS|
-|h265:cr_qp_offset|S32|RK_S32|Represents the scaling_list_matrix mode in the protocol syntax|
-|h265:dblk_disable|S32|RK_S32|0-flat matrix, 1-default matrix.|
-|h265:dblk_alpha|S32|RK_S32|Indicates the chroma_cb_qp_offset value in the protocol syntax.|
-|h265:dblk_beta|S32|RK_S32|The valid range is [-12, 12].|
-|h265:qp_init|S32|RK_S32|Indicates the chroma_cr_qp_offset value in the protocol syntax.|
-|h265:qp_max|S32|RK_S32|The valid range is [-12, 12].|
-|h265:qp_min|S32|RK_S32|Indicates the deblock_disable flag in the protocol syntax, and the valid range is [0, 2].|
-|h265:qp_max_i|S32|RK_S32|0 – deblocking is enabled.|
-|h265:qp_min_i|S32|RK_S32|Indicates the minimum I frame QP value. Do not configure it under normal circumstances.|
-|h265:qp_step|S32|RK_S32|Indicates the frame-level QP change amplitude between two adjacent frames.|
-|h265:qp_delta_ip|S32|RK_S32|Indicates the QP difference between the I frame and the previous P frame.|
-|jpeg: quant|S32|RK_S32|Indicates the quantization parameter level used by the JPEG encoder. The encoder has a total of 11 levels of quantization coefficient tables, from 0 to 10, and the image quality is from poor to good.|
-|split:mode|U32|MppEncSplitMode|Represents the slice split mode of H.264/H.265 protocol<br>![](media/Rockchip_Developer_Guide_MPP/MPP_MppEncSplitMode.png)<br>0–  no split.<br>1– BY_BYTE divides the slice according to the slice size.<br>2– BY_CTU divides the slice according to the number of macroblocks or CTUs.|
-|split:arg|U32|RK_U32|Slice cutting parameters:<br>In BY_BYTE mode, the parameter indicates the maximum size of each slice.<br>In BY_CTU mode, the parameter indicates the number of macroblocks or CTUs contained in each slice.|
+| base:low_delay | S32 | RK_S32 | Indicates low latency output mode. 0 – disabled; 1 – enabled. |
+| base:smt1_en | S32 | RK_S32 | Indicates SMTRC v1 mode enable flag, only supported on some encoder chips. 0 – disabled; 1 – enabled. |
+| base:smt3_en | S32 | RK_S32 | Indicates SMTRC v3 mode enable flag, only supported on some encoder chips. 0 – disabled; 1 – enabled. |
+| rc:mode | S32 | MppEncRcMode | Indicates the rate control mode, currently supports six modes: CBR (Constant Bit Rate), fixed bit rate mode. In fixed bit rate mode, the target bit rate plays a decisive role. VBR (Variable Bit Rate), variable bit rate mode. In variable bit rate mode, the maximum and minimum bit rates play a decisive role. FIX_QP (Fixed QP mode), used for debugging and performance evaluation. AVBR (Adaptive Variable Bit Rate), adaptive bit rate mode. In adaptive bit rate mode, the minimum bit rate plays a decisive role in static scenes, and the maximum bit rate plays a decisive role in motion scenes. The final average bit rate will be close to the target bit rate. SMTRC (Smart Rate Control), smart rate control mode. SE (Super Encoder), super encoding mode, can further improve encoding quality. ![](media/Rockchip_Developer_Guide_MPP/MPP_MppEncRcMode.png) |
+| rc:bps_target | S32 | RK_S32 | Indicates the target bit rate in CBR mode. |
+| rc:bps_max | S32 | RK_S32 | Indicates the highest bit rate in VBR/AVBR mode. |
+| rc:bps_min | S32 | RK_S32 | Indicates the lowest bit rate in VBR/AVBR mode. |
+| rc:fps_in_flex | S32 | RK_S32 | Flag bit indicating whether the input frame rate is variable, default is 0. 0 means fixed input frame rate, calculated as fps_in_num / fps_in_denom. 1 means variable input frame rate, bit rate calculation becomes time-based. |
+| rc:fps_in_num | S32 | RK_S32 | Indicates the numerator part of the input frame rate fraction, default value is 30. |
+| rc:fps_in_denom | S32 | RK_S32 | Indicates the denominator part of the input frame rate fraction, default value is 1. |
+| rc:fps_out_flex | S32 | RK_S32 | Flag bit indicating whether the output frame rate is variable, default is 0. 0 means fixed output frame rate, calculated as fps_out_num / fps_out_denom. 1 means variable output frame rate. |
+| rc:fps_out_num | S32 | RK_S32 | Indicates the numerator part of the output frame rate fraction, default value is 30. |
+| rc:fps_out_denom | S32 | RK_S32 | Indicates the denominator part of the output frame rate fraction, default value is 1. |
+| rc:gop | S32 | RK_S32 | Indicates Group Of Picture, the interval between two I frames: 0 – only one I frame; 1 – all I frames; 2 – I P I P I P...; 3 – I P P I P P... Generally, gop should be an integer multiple of the output frame rate. |
+| rc:max_reenc_times | U32 | RK_U32 | Indicates the maximum recoding times of a frame, default is 1. In low latency mode, only 0 is allowed. |
+| rc:priority | U32 | MppEncRcPriority | Indicates super frame re-encoding priority. 0 – target bit rate priority; 1 – super frame threshold priority. Only effective during super frame re-encoding. ![](media/Rockchip_Developer_Guide_MPP/MPP_MppEncRcPriority.png) |
+| rc:drop_mode | U32 | MppEncRcDropFrmMode | Indicates frame drop mode. 0 – disabled; 1 – normal drop mode; 2 – pskip construction mode. ![](media/Rockchip_Developer_Guide_MPP/MPP_MppEncRcDropFrmMode.png) |
+| rc:drop_thd | U32 | RK_U32 | Indicates frame drop threshold control variable, default is 20. Formula: bps_max * (1 + drop_thd / 100). |
+| rc:drop_gap | U32 | RK_U32 | Indicates the maximum allowed consecutive drop frames. |
+| rc:max_i_prop | S32 | RK_S32 | Indicates the maximum IP ratio, default is 30. |
+| rc:min_i_prop | S32 | RK_S32 | Indicates the minimum IP ratio, default is 10. |
+| rc:init_ip_ratio | S32 | RK_S32 | Indicates the initial IP ratio, default is 160. Valid range: [160, 640]. |
+| rc:super_mode | U32 | MppEncRcSuperFrameMode | Indicates super frame processing mode. 0 – no special strategy; 1 – drop super frame; 2 – re-encode super frame. ![](media/Rockchip_Developer_Guide_MPP/MPP_MppEncRcSuperFrameMode.png) |
+| rc:super_i_thd | U32 | RK_U32 | Indicates super I frame threshold. |
+| rc:super_p_thd | U32 | RK_U32 | Indicates super P frame threshold. |
+| rc:debreath_en | U32 | RK_U32 | Indicates debreath effect removal enable flag. 0 – disabled; 1 – enabled. |
+| rc:debreath_strength | U32 | RK_U32 | Indicates debreath effect strength adjustment parameter, valid range: [0, 35]. |
+| rc:qp_init | S32 | RK_S32 | Indicates the initial QP value. |
+| rc:qp_min | S32 | RK_S32 | Indicates the minimum QP value for P/B frames. |
+| rc:qp_max | S32 | RK_S32 | Indicates the maximum QP value for P/B frames. |
+| rc:qp_min_i | S32 | RK_S32 | Indicates the minimum QP value for I frames. |
+| rc:qp_max_i | S32 | RK_S32 | Indicates the maximum QP value for I frames. |
+| rc:qp_step | S32 | RK_S32 | Indicates the frame-level QP change amplitude between two adjacent frames. |
+| rc:qp_ip | S32 | RK_S32 | Indicates the QP difference between I frame and P frame, valid range: [0, 8]. |
+| rc:qp_vi | S32 | RK_S32 | Indicates the QP difference between virtual I frame and P frame, valid range: [0, 6]. |
+| rc:hier_qp_en | S32 | RK_S32 | Indicates QP layer enable flag. 0 – disabled; 1 – enabled. |
+| rc:hier_qp_delta | St | RK_S32 * | Indicates the QP difference of each layer relative to the 0th layer P frame, 4 layers stored in array. |
+| rc:hier_frame_num | St | RK_S32 * | Indicates the frame number of each layer, 4 layers stored in array. |
+| rc:stats_time | S32 | RK_S32 | Indicates instantaneous bit rate statistics time in seconds, valid range: [1, 60], default is 3. |
+| rc:fps_chg_no_idr | S32 | RK_S32 | Indicates whether to insert IDR frame on output frame rate change, default is 0. 0 – insert SPS/PPS and IDR; 1 – only insert SPS/PPS. |
+| rc:gop_mode | S32 | MppEncRcGopMode | Indicates GOP mode. 0 – normal P frame mode; 1 – smart P frame mode. |
+| rc:skip_cnt | S32 | RK_S32 | Indicates the maximum continuous frame skip count. 0 – frame skip is not allowed. |
+| rc:fqp_min_i | S32 | RK_S32 | Indicates the minimum frame-level base QP for I frames. |
+| rc:fqp_min_p | S32 | RK_S32 | Indicates the minimum frame-level base QP for P frames. |
+| rc:fqp_max_i | S32 | RK_S32 | Indicates the maximum frame-level base QP for I frames. |
+| rc:fqp_max_p | S32 | RK_S32 | Indicates the maximum frame-level base QP for P frames. |
+| rc:refresh_en | U32 | RK_U32 | Indicates Gradual Decoder Refresh (GDR) enable flag. 0 – disabled; 1 – enabled. |
+| rc:refresh_mode | U32 | MppEncRcIntraRefreshMode | Indicates GDR refresh mode. 0 – by row (ROW); 1 – by column (COL). |
+| rc:refresh_num | U32 | RK_U32 | Indicates GDR refresh parameter. In row mode: rows per refresh; in column mode: columns per refresh. |
+| prep:width | S32 | RK_S32 | Indicates the number of pixels in horizontal direction, in pixels. |
+| prep:height | S32 | RK_S32 | Indicates the number of pixels in vertical direction, in pixels. |
+| prep:format | S32 | MppFrameFormat | Indicates the image color space format and memory layout. ![](media/Rockchip_Developer_Guide_MPP/MPP_MppFrameFormat.png) |
+| prep:hor_stride | S32 | RK_S32 | Indicates the distance between two adjacent rows in vertical direction, in bytes. |
+| prep:ver_stride | S32 | RK_S32 | Indicates the row spacing between image components, in units of 1. |
+| prep:colorspace | S32 | MppFrameColorSpace | Indicates the color space type in VUI information. |
+| prep:colorprim | S32 | MppFrameColorPrimaries | Indicates the colour_primaries parameter in VUI information. |
+| prep:colortrc | S32 | MppFrameColorTransferCharacteristic | Indicates the transfer_characteristics parameter in VUI information. |
+| prep:colorrange | S32 | MppFrameColorRange | Indicates the YUV to RGB color range. 0 – unspecified; 1 – MPEG limit range; 2 – JPEG full range. ![](media/Rockchip_Developer_Guide_MPP/MPP_MppFrameColorRange.png) |
+| prep:range | S32 | MppFrameColorRange | Same as prep:colorrange, for forward compatibility. |
+| prep:format_out | S32 | MppFrameChromaFormat | Indicates the encoder output chroma format. |
+| prep:chroma_ds_mode | S32 | MppFrameChromaDownSampleMode | Indicates chroma down-sample mode, used when input is 444 format. 0 – no down-sample; 1 – average mode; 2 – discard mode. |
+| prep:flip | S32 | RK_S32 | Indicates the image flip attribute, default is 0. 0 – no flip; 1 – vertical flip. |
+| prep:range_out | S32 | MppFrameColorRange | Indicates the output color range. When different from prep:colorrange, encoder performs limit/full range conversion. Only supported on some newer chips. |
+| prep:rotation | S32 | MppEncRotationCfg | Indicates the image rotation attribute, default is 0. 0 – no rotation; 1 – 90 degrees; 2 – 180 degrees; 3 – 270 degrees. |
+| prep:mirroring | S32 | RK_S32 | Indicates the image mirroring attribute, default is 0. 0 – no mirroring; 1 – horizontal mirror; 2 – vertical mirror. |
+| codec:type | S32 | MppCodingType | Indicates the protocol type, needs to be consistent with mpp_init parameter. ![](media/Rockchip_Developer_Guide_MPP/MPP_MppCodingType.png) |
+| h264:stream_type | S32 | RK_S32 | Indicates H.264 stream format type. 0 – Annex-B format; 1 – AVCC format. |
+| h264:profile | S32 | RK_S32 | Indicates the profile_idc parameter in SPS. ![](media/Rockchip_Developer_Guide_MPP/MPP_H264Profile.png) |
+| h264:level | S32 | RK_S32 | Indicates the level_idc parameter in SPS. |
+| h264:poc_type | U32 | RK_U32 | Indicates the pic_order_cnt_type parameter in SPS. |
+| h264:log2_max_poc_lsb | U32 | RK_U32 | Indicates the log2_max_pic_order_cnt_lsb_minus4 parameter, only used when poc_type is 0. |
+| h264:log2_max_frm_num | U32 | RK_U32 | Indicates the log2_max_frame_num_minus4 parameter in SPS. |
+| h264:gaps_not_allowed | U32 | RK_U32 | Indicates the inverse of gaps_in_frame_num_value_allowed_flag in SPS. |
+| h264:cabac_en | S32 | RK_S32 | Indicates the entropy encoding format. 0 – CAVLC; 1 – CABAC. |
+| h264:cabac_idc | S32 | RK_S32 | Indicates the cabac_init_idc parameter, valid range: [0, 2]. |
+| h264:trans8x8 | S32 | RK_S32 | Indicates the transform_8x8_mode_flag. 0 – disabled; 1 – enabled (High profile only). |
+| h264:const_intra | S32 | RK_S32 | Indicates the constrained_intra_pred_mode flag. 0 – disabled; 1 – enabled. |
+| h264:scaling_list | S32 | RK_S32 | Indicates the scaling_list_matrix mode. 0 – flat matrix; 1 – default matrix. |
+| h264:cb_qp_offset | S32 | RK_S32 | Indicates the chroma_qp_index_offset for Cb, valid range: [-12, 12]. |
+| h264:cr_qp_offset | S32 | RK_S32 | Indicates the second_chroma_qp_index_offset for Cr, valid range: [-12, 12]. |
+| h264:dblk_disable | S32 | RK_S32 | Indicates the deblocking filter control flag, valid range: [0, 2]. 0 – enabled; 1 – disabled; 2 – disabled at slice boundary. |
+| h264:dblk_alpha | S32 | RK_S32 | Indicates the slice_alpha_c0_offset_div2, valid range: [-6, 6]. |
+| h264:dblk_beta | S32 | RK_S32 | Indicates the slice_beta_offset_div2, valid range: [-6, 6]. |
+| h264:qp_init | S32 | RK_S32 | Indicates the initial QP value, same as rc:qp_init, for forward compatibility. |
+| h264:qp_max | S32 | RK_S32 | Indicates the maximum QP value for P/B frames, same as rc:qp_max, for forward compatibility. |
+| h264:qp_min | S32 | RK_S32 | Indicates the minimum QP value for P/B frames, same as rc:qp_min, for forward compatibility. |
+| h264:qp_max_i | S32 | RK_S32 | Indicates the maximum I frame QP value, same as rc:qp_max_i, for forward compatibility. |
+| h264:qp_min_i | S32 | RK_S32 | Indicates the minimum I frame QP value, same as rc:qp_min_i, for forward compatibility. |
+| h264:qp_step | S32 | RK_S32 | Indicates the frame-level QP change amplitude, same as rc:qp_step, for forward compatibility. |
+| h264:qp_delta_ip | S32 | RK_S32 | Indicates the QP difference between I and P frames, same as rc:qp_ip, for forward compatibility. |
+| h264:max_tid | S32 | RK_S32 | Indicates the maximum temporal layer ID. |
+| h264:max_ltr | S32 | RK_S32 | Indicates the maximum long-term reference frame count. |
+| h264:prefix_mode | S32 | RK_S32 | Indicates prefix NAL enable flag. 0 – disabled; 1 – enabled. |
+| h264:base_layer_pid | S32 | RK_S32 | Indicates the base layer priority ID. |
+| h264:constraint_set | U32 | RK_U32 | Indicates the constraint_set0_flag to constraint_set5_flag in SPS. |
+| h264:vui_en | U32 | RK_U32 | Indicates VUI information enable flag. 0 – disabled; 1 – enabled. |
+| h265:profile | S32 | RK_S32 | Indicates the profile_idc parameter in VPS. |
+| h265:tier | S32 | RK_S32 | Indicates the tier_idc parameter in VPS. |
+| h265:level | S32 | RK_S32 | Indicates the level_idc parameter in VPS. |
+| h265:scaling_list | S32 | RK_S32 | Indicates the scaling_list_matrix mode. 0 – flat matrix; 1 – default matrix. |
+| h265:cb_qp_offset | S32 | RK_S32 | Indicates the chroma_qp_index_offset for Cb, valid range: [-12, 12]. |
+| h265:cr_qp_offset | S32 | RK_S32 | Indicates the second_chroma_qp_index_offset for Cr, valid range: [-12, 12]. |
+| h265:dblk_disable | S32 | RK_S32 | Indicates the deblocking filter control flag, valid range: [0, 2]. |
+| h265:dblk_alpha | S32 | RK_S32 | Indicates the slice_beta_offset_div2, valid range: [-6, 6]. |
+| h265:dblk_beta | S32 | RK_S32 | Indicates the slice_tc_offset_div2, valid range: [-6, 6]. |
+| h265:qp_init | S32 | RK_S32 | Indicates the initial QP value, same as rc:qp_init, for forward compatibility. |
+| h265:qp_max | S32 | RK_S32 | Indicates the maximum QP value for P/B frames, same as rc:qp_max, for forward compatibility. |
+| h265:qp_min | S32 | RK_S32 | Indicates the minimum QP value for P/B frames, same as rc:qp_min, for forward compatibility. |
+| h265:qp_max_i | S32 | RK_S32 | Indicates the maximum I frame QP value, same as rc:qp_max_i, for forward compatibility. |
+| h265:qp_min_i | S32 | RK_S32 | Indicates the minimum I frame QP value, same as rc:qp_min_i, for forward compatibility. |
+| h265:qp_step | S32 | RK_S32 | Indicates the frame-level QP change amplitude, same as rc:qp_step, for forward compatibility. |
+| h265:qp_delta_ip | S32 | RK_S32 | Indicates the QP difference between I and P frames, same as rc:qp_ip, for forward compatibility. |
+| h265:sao_luma_disable | S32 | RK_S32 | Indicates the inverse of slice_sao_luma_flag. 0 – luma SAO enabled; 1 – luma SAO disabled. |
+| h265:sao_chroma_disable | S32 | RK_S32 | Indicates the inverse of slice_sao_chroma_flag. 0 – chroma SAO enabled; 1 – chroma SAO disabled. |
+| h265:sao_bit_ratio | S32 | RK_S32 | Indicates the SAO bit lambda value. |
+| h265:lpf_acs_sli_en | U32 | RK_U32 | Indicates Loop filter across slice enable flag. |
+| h265:lpf_acs_tile_disable | U32 | RK_U32 | Indicates Loop filter across tile disable flag. |
+| h265:auto_tile | S32 | RK_S32 | Indicates auto tile encoding enable flag. When enabled, the encoder automatically splits tiles by core count for each frame. |
+| h265:max_ltr | S32 | RK_S32 | Indicates the maximum long-term reference frame count. |
+| h265:base_layer_pid | S32 | RK_S32 | Indicates the base layer priority ID. |
+| h265:const_intra | S32 | RK_S32 | Indicates the constrained intra prediction enable flag. 0 – disabled; 1 – enabled. |
+| h265:lcu_size | S32 | RK_S32 | Indicates the LCU size, read-only parameter with fixed CTU partition size per chip. |
+| h265:vui_en | U32 | RK_U32 | Indicates VUI information enable flag. 0 – disabled; 1 – enabled. |
+| vp8:qp_init | S32 | RK_S32 | Indicates the initial QP value, same as rc:qp_init, for forward compatibility. |
+| vp8:qp_max | S32 | RK_S32 | Indicates the maximum QP value for P/B frames, same as rc:qp_max, for forward compatibility. |
+| vp8:qp_min | S32 | RK_S32 | Indicates the minimum QP value for P/B frames, same as rc:qp_min, for forward compatibility. |
+| vp8:qp_max_i | S32 | RK_S32 | Indicates the maximum I frame QP value, same as rc:qp_max_i, for forward compatibility. |
+| vp8:qp_min_i | S32 | RK_S32 | Indicates the minimum I frame QP value, same as rc:qp_min_i, for forward compatibility. |
+| vp8:qp_step | S32 | RK_S32 | Indicates the frame-level QP change amplitude, same as rc:qp_step, for forward compatibility. |
+| vp8:qp_delta_ip | S32 | RK_S32 | Indicates the QP difference between I and P frames, same as rc:qp_ip, for forward compatibility. |
+| vp8:disable_ivf | S32 | RK_S32 | Indicates IVF encapsulation disable flag. 0 – enabled; 1 – disabled. |
+| jpeg:quant | S32 | RK_S32 | Indicates the quantization parameter level of JPEG encoder, from 0 to 10. |
+| jpeg:qtable_y | Ptr | RK_U8 * | Indicates the luma component quantization table, size 64. |
+| jpeg:qtable_u | Ptr | RK_U8 * | Indicates the chroma U component quantization table, size 64. |
+| jpeg:qtable_v | Ptr | RK_U8 * | Indicates the chroma V component quantization table, size 64. |
+| jpeg:q_factor | S32 | RK_S32 | Indicates the quantization table factor, valid range: [1, 99]. Default is 80. |
+| jpeg:qf_max | S32 | RK_S32 | Indicates the quantization table factor maximum value, default is 99. |
+| jpeg:qf_min | S32 | RK_S32 | Indicates the quantization table factor minimum value, default is 1. |
+| split:mode | U32 | MppEncSplitMode | Indicates the slice split mode. 0 – no split; 1 – BY_BYTE; 2 – BY_CTU. ![](media/Rockchip_Developer_Guide_MPP/MPP_MppEncSplitMode.png) |
+| split:arg | U32 | RK_U32 | Slice split parameter: BY_BYTE mode – max size per slice; BY_CTU mode – MB/CTU count per slice. |
+| split:out | U32 | RK_U32 | Indicates slice output mode, supports combination: bit 0 – low delay output (each slice as separate packet); bit 1 – segment mode output (packet with segment info). |
+| hw:qp_row | S32 | RK_S32 | Indicates the P frame row-level QP change. |
+| hw:qp_row_i | S32 | RK_S32 | Indicates the I frame row-level QP change. |
+| hw:aq_thrd_i | St | RK_U32 * | Indicates the I frame adaptive quantization threshold array, 16 elements. |
+| hw:aq_thrd_p | St | RK_U32 * | Indicates the P frame adaptive quantization threshold array, 16 elements. |
+| hw:aq_step_i | St | RK_S32 * | Indicates the I frame adaptive quantization step array. |
+| hw:aq_step_p | St | RK_S32 * | Indicates the P frame adaptive quantization step array. |
+| hw:mb_rc_disable | S32 | RK_S32 | Indicates the macroblock-level rate control disable flag. |
 
 Other strings and parameters will be expanded later.
 
@@ -655,7 +774,7 @@ The MpiCmd enumeration type defined in the rk_mpi_cmd.h file defines the control
 
 The commands from MPP_ENC_CMD_BASE to MPP_ENC_CMD_END are the control interface commands of the encoder. Among them, the MPP_ENC_SET/GET_CFG configuration command has been introduced as the basic configuration command in 3.5.1. The rest of the commands are briefly described below, where the commands are related to the encoder hardware and only some hardware support.
 
-At present, the encoder hardware supported by MPP is divided into vepu series and rkvenc series. The vepu series supports H.264 encoding, vp8 encoding and jpeg encoding, and is equipped in most RK chips. The rkvenc series only supports H.264 encoding, and is currently only available on the RV1109/RV1126 SoC, which supports more encoding functions than the vepu series.
+At present, the encoder hardware supported by MPP is divided into vepu series and rkvenc series. The vepu series supports H.264 encoding, vp8 encoding and jpeg encoding, and is equipped in most RK chips. The rkvenc series supports H.264, H.265 and jpeg encoding, equipped in RV1109/RV1126 and newer SoC, which supports more encoding functions than the vepu series.
 
 Brief description of some CMD commands:
 
@@ -685,14 +804,26 @@ The input parameter of MPP_ENC_GET_HDR_SYNC is MppPacket, which requires externa
 In the case of multi-threading, the MppPacket obtained by the MPP_ENC_GET_EXTRA_INFO command may be modified by other controls during reading, so this command is not thread-safe and is only used for compatibility with the old vpu_api. Do not use it again.
 
 
-**~~MPP_ENC_SET_SEI_CFG/MPP_ENC_GET_SEI_DATA~~**
+**MPP_ENC_SET_SEI_CFG**
+
+Used to configure the encoder SEI output mode, input parameter is MppEncSeiMode enumeration.
+
+**~~MPP_ENC_GET_SEI_DATA~~**
+
+Deprecated command, reserved for forward compatibility, do not use.
+
+
+**~~MPP_ENC_PRE_ALLOC_BUFF/MPP_ENC_SET_QP_RANGE~~**
 
 Deprecated commands, reserved for forward compatibility, do not use.
 
+**MPP_ENC_SET_ROI_CFG**
 
-**~~MPP_ENC_PRE_ALLOC_BUFF/MPP_ENC_SET_QP_RANGE/MPP_ENC_SET_ROI_CFG/ MPP_ENC_SET_CTU_QP~~**
+Used to configure the encoder ROI (Region Of Interest) areas, input parameter is MppEncROICfg pointer.
 
-Deprecated commands, reserved for forward compatibility, do not use.
+**MPP_ENC_SET_CTU_QP**
+
+Used to configure the encoder CTU-level QP, input parameter is H265eCtu pointer. Only supported by H.265 encoder.
 
 
 **MPP_ENC_GET_RC_API_ALL**
@@ -795,7 +926,7 @@ The demo program of MPP changes quickly. The following descriptions are for refe
 
 # 4.1 Decoder demo
 
-The decoder demo is the mpi_dec_test series programs including the single-threaded mpi_dec_test using the decode_put_packet and decode_get_frame interfaces, the multi-threaded mpi_dec_mt_test, and the multi-instance mpi_dec_multi_test.
+The decoder demo is the mpi_dec_test series programs including the single-threaded mpi_dec_test using the decode_put_packet and decode_get_frame interfaces, the multi-threaded mpi_dec_mt_test, the multi-instance mpi_dec_multi_test, and the no_thread mode mpi_dec_nt_test using the decode interface (see 3.1.4).
 
 The following is an example of using mpi_dec_test on the Android platform as an example. First run mpi_dec_test directly, help document can be printed in the log, as shown below:
 
@@ -817,7 +948,7 @@ The command parameter descriptions as follows.
 | -s                | number of instances, 1 by default                            |
 | -v                | trace option: q - quiet; f - show fps                        |
 | -slt              | slt verify data file corresponding to output decoded frame   |
-| -help             | show help                                                    |
+| -bufmode          | buffer mode: hi - half internal (default); i - internal; e - external |\n| -help             | show help                                                    |
 
 In the command parameters of mpi_dec_test, input file (i), coding type (t) is mandatory parameter. Other parameters such as output file (o), image width (w) image height (h), decoded frame number (n), etc. are optional parameters with less effect.
 
@@ -875,7 +1006,7 @@ See the test/mpi_dec_test.c for detailed decoder demo source code.
 
 # 4.2 Encoder demo
 
-The encoder demo is the mpi_enc_test series programs, including single-threaded mpi_enc_test and multi-instance mpi_enc_multi_test.
+The encoder demo is the mpi_enc_test series programs, including single-threaded mpi_enc_test and multi-threaded mpi_enc_mt_test.
 
 Take mpi_enc_test on the Android platform as an example. First run mpi_enc_test directly, output is shown below:
 
@@ -902,9 +1033,9 @@ The command parameter descriptions as follows.
 | -f                | the format of input picture, NV12 by default                 |
 | -t                | output stream coding type                                    |
 | -tsrc             | input file source coding type, only used in the codec performance test(see mpi_rc2_test.c) |
-| -n                | max encoding frame number. If input bitstream is too long, only the first n frames can be decoded. |
+| -n                | max encoding frame number. Set to -1 for infinite loop encoding. |
 | -g                | gop reference mode                                           |
-| -rc               | set rc_mode, 0:vbr 1:cbr 2:fixqp 3:avbr                      |
+| -rc               | set rc_mode, 0:vbr 1:cbr 2:fixqp 3:avbr 4:smtrc               |
 | -bps              | set bit rate                                                 |
 | -fps              | set input and output frame rate, 30 by default. This command parameter only describes the proportional relationship between the input frame rate and the output frame rate, which is to related to the real frame rate. |
 | -qc               | set quality control                                          |
@@ -953,7 +1084,7 @@ Log introduction related to the decoder demo have been omitted.
  I mpp_enc: MPP_ENC_SET_RC_CFG bps 7776000 [486000:8262000] fps [30:30] gop 60
  ```
 
-Default bitrate control parameters for the encoder, with a target bitrate of 7.8 Mbps, a lower reference bitrate of 0.5 Mbps, and an upper reference bitrate of 8.3 Mbps. The default input and output frame rate is 30, and the default GOP size is 60.
+Old version encoder bitrate control parameters (current version uses MppEncCfg), with a target bitrate of 7.8 Mbps, a lower reference bitrate of 0.5 Mbps, and an upper reference bitrate of 8.3 Mbps. The default input and output frame rate is 30, and the default GOP size is 60.
 
  ```
  I mpi_enc_test: chn 0 encoded frame 0 size 218616 qp 11

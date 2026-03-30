@@ -2,9 +2,9 @@
 
 | Project： | MPP        |
 | --------- | ---------- |
-| Version： | 0.7        |
+| Version： | 0.8        |
 | Author：  | 陈恒明     |
-| Date：    | 10/17/2023 |
+| Date：    | 03/31/2026 |
 
 | Revision | Date       | Description                                             | Author                  |
 | -------- | ---------- | ------------------------------------------------------- | ----------------------- |
@@ -15,6 +15,7 @@
 | 0.5      | 06/08/2020 | 更新编码器新配置接口 不再支持RK3188                     | 陈恒明                  |
 | 0.6      | 08/31/2022 | 更新MPP demo说明 更新编码器控制接口说明                 | 陈恒明 阮学满           |
 | 0.7      | 10/17/2023 | 添加markdown文档                                        |阮学满 林言东|
+| 0.8      | 03/31/2026 | 更新解码器/编码器控制接口说明，补充MppEncCfg参数表，新增no_thread模式、FBC/Tile格式、编码器配置调试等章节，更新demo参数说明 | 陈恒明 |
 |          |            |                                                         |                         |
 |          |            |                                                         |                         |
 
@@ -25,7 +26,7 @@
 瑞芯微提供的媒体处理软件平台（Media Process Platform，简称MPP）是适用于瑞芯微芯片系列的通用媒体处理软件平台。该平台对应用软件屏蔽了芯片相关的复杂底层处理，其目的是为了屏蔽不同芯片的差异，为使用者提供统一的视频媒体处理接口（Media Process Interface，缩写MPI）。MPP提供的功能包括：
 
 -   视频解码
-	-   H.265 / H.264 / H.263 / VP9 / VP8 / MPEG-4 / MPEG-2 / MPEG-1 / VC1 / MJPEG / AV1
+	-   H.265 / H.264 / H.263 / AV1 / VP9 / VP8 / MPEG-4 / MPEG-2 / AVS2 / AVS / MJPEG
 -   视频编码
 	-   H.265 / H.264 / VP8 / MJPEG
 -   视频处理
@@ -68,13 +69,15 @@ MPP层通过MPI对接各种中间件软件，如OpenMax和gstreamer，或者直�
 
 MPP支持在各种版本的Android平台和纯Linux平台上运行。
 
-支持瑞芯微Linux内核3.10、4.4、4.19和5.10版本，需要有vcodec_service设备驱动支持以及相应的DTS配置支持。
+支持瑞芯微Linux内核3.10、4.4、4.19、5.10和6.1版本，需要有vcodec_service/mpp_service设备驱动支持以及相应的DTS配置支持。
 
 ### 1.3.2 硬件平台支持
 
 支持瑞芯微主流的各种系列芯片平台：
 
-RK3288系列，RK3368系列，RK3399系列，RK3588系列
+RK3288系列，RK3368系列，RK3399系列，RK3588系列, RK356x系列
+
+RK3576系列，RK3528/RK3562/RK3538/RK3572系列，
 
 RK30xx系列，RK312x系列芯片，RK322x系列芯片，RK332x系列
 
@@ -237,6 +240,27 @@ MppFrame的其他配置参数成员如下：
 
 同时，一旦发现码流分辨率改变，MppFrame中的info_change标志就会对应置位，向用户通知发生了info_change事件，需要用户进行缓存池修改处理。
 
+### FBC与Tile格式
+
+MppFrameFormat的高位标志位支持FBC（Frame Buffer Compression）和Tile两种特殊的内存排布方式。
+
+FBC是一种帧缓存压缩格式，可以减少图像数据在内存和总线中的占用带宽。MppFrameFormat中定义了以下FBC类型：
+
+| FBC类型 | 标志位 | 说明 |
+|---|---|---|
+| 无FBC | 0x0 | 默认情况，不使用帧缓存压缩 |
+| AFBC_V1 | 0x00100000 | 用于ISP输出，具有基于宽高自动计算的payload offset |
+| AFBC_V2 | 0x00200000 | 用于视频解码器输出，payload offset存储在header首地址的前32位中，始终为0 |
+| RKFBC | 0x00400000 | 用于视频解码器输出和编码器输入，具有基于宽度自动计算的header stride |
+
+FBC格式与Tile格式不能同时存在。
+
+Tile格式通过bit 25标志位表示，启用后图像数据按Tile排布存储，而非按行连续存储。Tile排布可以提升内存访问效率，在某些硬件上可以获得更好的性能。
+
+对于使用FBC或Tile格式的MppFrame，图像缓存的计算方式与普通格式不同，需要预留额外的header空间。解码器在使用FBC输出时，会在info_change事件中通过fmt字段通知用户当前的输出格式，用户需要根据格式类型正确计算所需的缓存大小。
+
+如需配置解码器输出为FBC或Tile格式，可通过control接口的MPP_DEC_SET_OUTPUT_FORMAT或MPP_DEC_SET_FRAME_INFO命令来实现。MPP_DEC_SET_OUTPUT_FORMAT用于配置解码器的输出图像格式，MPP_DEC_SET_FRAME_INFO用于配置解码器的默认宽高及格式信息。两个命令的调用时机均在mpp_init之后、正式解码之前。具体配置值通过在MppFrameFormat的基础色域格式上叠加FBC或Tile标志位来设定，例如将NV12格式叠加AFBC_V2标志位即表示输出AFBC_V2压缩的NV12图像。
+
 ## 2.5 高级任务封装MppTask
 
 当MppPacket与MppFrame组成的接口无法满足需求时，需要使用MppTask做为一个数据容器，来满足复杂的输入输出需求。MppTask需要与poll/dequeuer/enqueue接口来配合使用，对比put_packet/get_frame等简单流程接口，MppTask的使用流程复杂，效率低，是为了满足复杂需求的代价。
@@ -375,6 +399,23 @@ decode函数是decode_put_packet与decode_get_frame数据的结合，为用户�
 
 在用户看来，decode函数首先是获取解码图像，有解码图像优先返回解码图像，没有可输出的解码图像的情况下送入码流，最后再尝试一次获取解码图像并退出。
 
+### 3.1.4 解码器no_thread模式
+
+默认情况下，MPP解码器内部会创建一个工作线程来处理解码任务，用户通过decode_put_packet送入码流，通过decode_get_frame获取解码图像。在某些嵌入式场景中，如果用户希望完全由外部线程控制解码流程，可以使用no_thread模式。
+
+no_thread模式通过control接口的MPP_SET_DISABLE_THREAD命令（无参数）来启用，命令调用时机在mpp_init之前。启用后，MPP内部不再创建工作线程，此时应使用同步的decode接口进行解码，decode接口在一个调用中同时完成码流输入和图像输出。
+
+no_thread模式的使用流程如下：
+
+1. 创建MppCtx；
+2. 通过control接口发送MPP_SET_DISABLE_THREAD命令，禁用内部工作线程；
+3. 调用mpp_init初始化解码器；
+4. 在用户自己的线程中循环调用decode接口进行解码，decode接口会同时处理码流输入和图像输出；
+5. 正常处理info_change等事件；
+6. 解码完成后调用mpp_destroy销毁实例。
+
+no_thread模式的优点是调用方式更简单，用户只需要一个线程即可完成解码流程；缺点是由于没有内部工作线程的并行处理，硬件与软件的并行度会降低，解码效率可能低于默认的多线程模式。具体使用可参考test/mpi_dec_nt_test.c。
+
 ## 3.2 解码器控制接口
 
 ### 3.2.1 control
@@ -409,11 +450,11 @@ decode函数是decode_put_packet与decode_get_frame数据的结合，为用户�
 
 命令参数为RK_U32\*，用于使能MPP内的快速帧解析，提升解码的软硬件并行度，但副作用是会对错误码流的标志有影响，默认关闭。命令调用时机是在- MPP_init之前。
 
-- MPP_DEC_GET_STREAM_COUT
+- MPP_DEC_GET_STREAM_COUNT
 
 命令参数为RK_U32\*，用于外部应用获取还未处理的码流包数量，历史遗留接口。
 
-- MPP_DEC_GET_VPUMEM_USED_COUT
+- MPP_DEC_GET_VPUMEM_USED_COUNT
 
 命令参数为RK_U32\*，用于外部应用获取MPP使用的MppBuffer数量，历史遗留接口。
 
@@ -592,6 +633,10 @@ MPP推荐使用封装后的MppEncCfg结构通过control接口的MPP_ENC_SET_CFG/
 
 ```c
 配置编码器信息：
+MPP_RET mpp_enc_cfg_set_s8(MppEncCfg cfg, const char *name, RK_S8 val);
+MPP_RET mpp_enc_cfg_set_u8(MppEncCfg cfg, const char *name, RK_U8 val);
+MPP_RET mpp_enc_cfg_set_s16(MppEncCfg cfg, const char *name, RK_S16 val);
+MPP_RET mpp_enc_cfg_set_u16(MppEncCfg cfg, const char *name, RK_U16 val);
 MPP_RET mpp_enc_cfg_set_s32(MppEncCfg cfg, const char *name, RK_S32 val);
 MPP_RET mpp_enc_cfg_set_u32(MppEncCfg cfg, const char *name, RK_U32 val);
 MPP_RET mpp_enc_cfg_set_s64(MppEncCfg cfg, const char *name, RK_S64 val);
@@ -599,6 +644,10 @@ MPP_RET mpp_enc_cfg_set_u64(MppEncCfg cfg, const char *name, RK_U64 val);
 MPP_RET mpp_enc_cfg_set_ptr(MppEncCfg cfg, const char *name, void *val);
 MPP_RET mpp_enc_cfg_set_st(MppEncCfg cfg, const char *name, void *val);
 获取编码器信息：
+MPP_RET mpp_enc_cfg_get_s8(MppEncCfg cfg, const char *name, RK_S8 *val);
+MPP_RET mpp_enc_cfg_get_u8(MppEncCfg cfg, const char *name, RK_U8 *val);
+MPP_RET mpp_enc_cfg_get_s16(MppEncCfg cfg, const char *name, RK_S16 *val);
+MPP_RET mpp_enc_cfg_get_u16(MppEncCfg cfg, const char *name, RK_U16 *val);
 MPP_RET mpp_enc_cfg_get_s32(MppEncCfg cfg, const char *name, RK_S32 *val);
 MPP_RET mpp_enc_cfg_get_u32(MppEncCfg cfg, const char *name, RK_U32 *val);
 MPP_RET mpp_enc_cfg_get_s64(MppEncCfg cfg, const char *name, RK_S64 *val);
@@ -613,7 +662,9 @@ MPP_RET mpp_enc_cfg_get_st(MppEncCfg cfg, const char *name, void *val);
 | 参数字串                | 接口 | 实际类型                            | 描述说明                                                     |
 | ----------------------- | ---- | ----------------------------------- | ------------------------------------------------------------ |
 | base:low_delay          | S32  | RK_S32                              | 表示低延时输出模式。 0 – 表示关闭；1 – 表示开启。            |
-| rc:mode                 | S32  | MppEncRcMode                        | 表示码率控制模式，目前支持CBR、VBR和AVBR三种： CBR为Constant Bit Rate，固定码率模式。 在固定码率模式下，目标码率起决定性作用。 VBR为Variable Bit Rate，可变码率模式。 在可变码率模式下，最大最小码率起决定性作用。 AVBR为Adaptive Variable Bit Rate，自适应码率模式。 在自适应码率模式下，静止场景中最小码率起决定性作用，运动场景中最大码率起决定性作用。最终平均码率将接近目标码率。 FIX_QP为固定QP模式，用于调试和性能评估。 ![](media/Rockchip_Developer_Guide_MPP/MPP_MppEncRcMode.png) |
+| base:smt1_en            | S32  | RK_S32                              | 表示SMTRC v1模式使能标志，仅在部分编码器芯片上支持。 0 – 表示关闭；1 – 表示开启。 |
+| base:smt3_en            | S32  | RK_S32                              | 表示SMTRC v3模式使能标志，仅在部分编码器芯片上支持。 0 – 表示关闭；1 – 表示开启。 |
+| rc:mode                 | S32  | MppEncRcMode                        | 表示码率控制模式，目前支持以下六种： CBR为Constant Bit Rate，固定码率模式。 在固定码率模式下，目标码率起决定性作用。 VBR为Variable Bit Rate，可变码率模式。 在可变码率模式下，最大最小码率起决定性作用。 FIX_QP为固定QP模式，用于调试和性能评估。 AVBR为Adaptive Variable Bit Rate，自适应码率模式。 在自适应码率模式下，静止场景中最小码率起决定性作用，运动场景中最大码率起决定性作用。最终平均码率将接近目标码率。 SMTRC为Smart Rate Control，智能码率控制模式。 SE为Super Encoder，超级编码模式，可进一步提升编码质量。 ![](media/Rockchip_Developer_Guide_MPP/MPP_MppEncRcMode.png) |
 | rc:bps_target           | S32  | RK_S32                              | 表示CBR模式下的目标码率。                                    |
 | rc:bps_max              | S32  | RK_S32                              | 表示VBR/AVBR模式下的最高码率。                               |
 | rc:bps_min              | S32  | RK_S32                              | 表示VBR/AVBR模式下的最低码率。                               |
@@ -649,6 +700,16 @@ MPP_RET mpp_enc_cfg_get_st(MppEncCfg cfg, const char *name, void *val);
 | rc:hier_qp_delta        | St   | RK_S32 \*                           | 表示各层帧相对于第0层P帧的QP差值，层数为4，用数组存储。      |
 | rc:hier_frame_num       | St   | RK_S32 \*                           | 表示各层帧数，层数为4，用数组存储。                          |
 | rc:stats_time           | S32  | RK_S32                              | 表示瞬时码率统计时间，单位为秒，有效范围为\[1, 60\]。默认值为3。 |
+| rc:fps_chg_no_idr       | S32  | RK_S32                              | 表示输出帧率变化时是否插入IDR帧的标志位，默认值为0。 0 – 表示插入SPS/PPS头和IDR帧；1 – 表示仅插入SPS/PPS头，不插入IDR帧。 |
+| rc:gop_mode             | S32  | MppEncRcGopMode                     | 表示GOP模式。 0 – 表示普通P帧模式；1 – 表示智能P帧模式。      |
+| rc:skip_cnt             | S32  | RK_S32                              | 表示最大连续跳帧数。 0 – 表示不允许跳帧。                     |
+| rc:fqp_min_i            | S32  | RK_S32                              | 表示I帧的最小帧级基准QP。                                    |
+| rc:fqp_min_p            | S32  | RK_S32                              | 表示P帧的最小帧级基准QP。                                    |
+| rc:fqp_max_i            | S32  | RK_S32                              | 表示I帧的最大帧级基准QP。                                    |
+| rc:fqp_max_p            | S32  | RK_S32                              | 表示P帧的最大帧级基准QP。                                    |
+| rc:refresh_en           | U32  | RK_U32                              | 表示渐进式刷新（GDR）使能标志。 0 – 表示关闭；1 – 表示开启。  |
+| rc:refresh_mode         | U32  | MppEncRcIntraRefreshMode            | 表示渐进式刷新模式。 0 – 表示按行刷新（ROW），逐行刷新宏块行；1 – 表示按列刷新（COL），逐列刷新宏块列。 |
+| rc:refresh_num          | U32  | RK_U32                              | 表示渐进式刷新的刷新参数。在行刷新模式下表示每次刷新的宏块行数，在列刷新模式下表示每次刷新的宏块列数。 |
 | prep:width              | S32  | RK_S32                              | 表示图像水平方向像素数，单位为像素个数。                     |
 | prep:height             | S32  | RK_S32                              | 表示图像垂直方向像素数，单位为像素个数。                     |
 | prep:format             | S32  | MppFrameFormat                      | 表示图像色彩空间格式以及内存排布方式。 ![](media/Rockchip_Developer_Guide_MPP/MPP_MppFrameFormat.png) |
@@ -659,6 +720,10 @@ MPP_RET mpp_enc_cfg_get_st(MppEncCfg cfg, const char *name, void *val);
 | prep:colortrc           | S32  | MppFrameColorTransferCharacteristic | 表示VUI信息中transfer_characteristics参数，具体含义请参考H.264/H.265协议。 |
 | prep:colorrange         | S32  | MppFrameColorRange                  | 表示YUV转RGB的色彩范围。 0 – 表示未指定，由MPP配置。 1 – 表示码流格式为MPEG，限制色彩范围。 2 – 表示码流格式为JPEG，不限制色彩范围。 ![](media/Rockchip_Developer_Guide_MPP/MPP_MppFrameColorRange.png) |
 | prep:range              | S32  | MppFrameColorRange                  | 同prep:colorrange，用于前向兼容MPP版本。                     |
+| prep:format_out         | S32  | MppFrameChromaFormat               | 表示编码器输出色度格式。                                     |
+| prep:chroma_ds_mode     | S32  | MppFrameChromaDownSampleMode       | 表示色度降采样模式，用于输入444格式降采样为420或422时使用。 0 – 表示不降采样；1 – 表示均值模式（AVERAGE）；2 – 表示丢点模式（DISCARD）。 |
+| prep:flip               | S32  | RK_S32                              | 表示图像翻转属性，默认值为0。 0 – 表示不翻转；1 – 表示垂直翻转。 |
+| prep:range_out          | S32  | MppFrameColorRange                  | 表示输出色彩范围。当与prep:colorrange不同时，编码器会进行limit/full range转换。仅在部分新芯片上支持。 |
 | prep:rotation           | S32  | MppEncRotationCfg                   | 表示图像旋转属性，默认值为0。除了RK3588芯片，其他芯片均不支持FBC数据结构的旋转操作。 0 – 表示图像不旋转。 1 – 表示图像逆时针旋转90度。 2 – 表示图像逆时针旋转180度。 3 – 表示图像逆时针旋转270度。 |
 | prep:mirroring          | S32  | RK_S32                              | 表示图像镜像属性，默认值为0。除了RK3588芯片，其他芯片均不支持FBC数据结构的镜像操作。 0 – 表示图像不做镜像。 1 – 表示图像做水平镜像。 2 – 表示图像做垂直镜像。 |
 | codec:type              | S32  | MppCodingType                       | 表示MppEncCodecCfg对应的协议类型，需要与MppCtx初始化函数mpp_init的参数一致。 ![](media/Rockchip_Developer_Guide_MPP/MPP_MppCodingType.png) |
@@ -691,6 +756,7 @@ MPP_RET mpp_enc_cfg_get_st(MppEncCfg cfg, const char *name, void *val);
 | h264:prefix_mode        | S32  | RK_S32                              | 表示添加prefix nal的使能标志。 0 – 表示关闭。 1 – 表示开启，在SEI信息和硬件编码的码流数据之间添加prefix nal。 |
 | h264:base_layer_pid     | S32  | RK_S32                              | 表示基准层优先级ID。                                         |
 | h264:constraint_set     | U32  | RK_U32                              | 表示SPS中的constraint_set0_flag至constraint_set5_flag参数。  |
+| h264:vui_en              | U32  | RK_U32                              | 表示VUI信息使能标志。 0 – 表示关闭；1 – 表示开启。            |
 | h265:profile            | S32  | RK_S32                              | 表示VPS中的profile_idc参数。目前MPP内部固定为1，Main profile。 |
 | h265:level              | S32  | RK_S32                              | 表示VPS中的level_idc参数。                                   |
 | h265:scaling_list       | S32  | RK_S32                              | 表示H.265协议中scaling_list_matrix模式。 0 – 表示flat matrix，1 – 表示默认matrix。 |
@@ -708,6 +774,16 @@ MPP_RET mpp_enc_cfg_get_st(MppEncCfg cfg, const char *name, void *val);
 | h265:qp_delta_ip        | S32  | RK_S32                              | 表示I帧和P帧的QP差值，同rc:qp_ip，用于前向兼容MPP版本。      |
 | h265:sao_luma_disable   | S32  | RK_S32                              | 表示H.265协议中slice_sao_luma_flag参数的非，即当前slice亮度分量的采样点自适应偏移的禁用标志。 <br/>0 – 亮度分量的SAO开启。 <br/>1 – 亮度分量的SAO关闭。 |
 | h265:sao_chroma_disable | S32  | RK_S32                              | 表示H.265协议中slice_sao_chroma_flag参数的非，即当前slice色度分量的采样点自适应偏移的禁用标志。 <br/>0 – 色度分量的SAO开启。 <br/>1 – 色度分量的SAO关闭。 |
+| h265:sao_bit_ratio       | S32  | RK_S32                              | 表示SAO bit lambda值。                                        |
+| h265:lpf_acs_sli_en      | U32  | RK_U32                              | 表示Loop filter across slice使能标志。                       |
+| h265:lpf_acs_tile_disable| U32  | RK_U32                              | 表示Loop filter across tile禁用标志。                        |
+| h265:auto_tile           | S32  | RK_S32                              | 表示自动tile编码使能标志。开启后编码器会根据核数自动分tile编码同一帧。 |
+| h265:max_ltr             | S32  | RK_S32                              | 表示最大长期参考帧数。                                       |
+| h265:base_layer_pid      | S32  | RK_S32                              | 表示基准层优先级ID。                                         |
+| h265:const_intra         | S32  | RK_S32                              | 表示constrained intra prediction使能标志。 0 – 表示关闭；1 – 表示开启。 |
+| h265:lcu_size            | S32  | RK_S32                              | 表示LCU大小，只读参数，不同芯片有不同的固定CTU划分大小。       |
+| h265:vui_en              | U32  | RK_U32                              | 表示VUI信息使能标志。 0 – 表示关闭；1 – 表示开启。            |
+| h265:tier                | S32  | RK_S32                              | 表示VPS中的tier_idc参数。                                    |
 | vp8:qp_init             | S32  | RK_S32                              | 表示初始QP值，同rc:qp_init，用于前向兼容MPP版本。            |
 | vp8:qp_max              | S32  | RK_S32                              | 表示P、B帧的最大QP值，同rc:qp_max，用于前向兼容MPP版本。     |
 | vp8:qp_min              | S32  | RK_S32                              | 表示P、B帧的最小QP值，同rc:qp_min，用于前向兼容MPP版本。     |
@@ -725,6 +801,14 @@ MPP_RET mpp_enc_cfg_get_st(MppEncCfg cfg, const char *name, void *val);
 | jpeg:qf_min             | S32  | RK_S32                              | 表示量化表因子最小值，默认值为1。                            |
 | split:mode              | U32  | MppEncSplitMode                     | 表示H.264/H.265协议的slice切分模式 ![](media/Rockchip_Developer_Guide_MPP/MPP_MppEncSplitMode.png) <br>0– 不切分。<br>1– BY_BYTE 切分 slice 根据 slice 大小。<br>2– BY_CTU 切分 slice 根据宏块或 CTU 个数。 |
 | split:arg               | U32  | RK_U32                              | Slice切分参数： 在BY_BYTE模式下，参数表示每个slice的最大大小。 在BY_CTU模式下，参数表示每个slice包含的宏块或CTU个数。 |
+| split:out               | U32  | RK_U32                              | 表示Slice输出模式，支持以下两种模式的组合： bit 0 – 表示低延时输出（LOWDELAY），每个slice单独输出一个packet； bit 1 – 表示segment模式输出（SEGMENT），输出的packet中携带segment信息。 |
+| hw:qp_row               | S32  | RK_S32                              | 表示P帧行间QP变化量。                                        |
+| hw:qp_row_i             | S32  | RK_S32                              | 表示I帧行间QP变化量。                                        |
+| hw:aq_thrd_i            | St   | RK_U32 \*                           | 表示I帧自适应量化阈值数组，16个元素。                         |
+| hw:aq_thrd_p            | St   | RK_U32 \*                           | 表示P帧自适应量化阈值数组，16个元素。                         |
+| hw:aq_step_i            | St   | RK_S32 \*                           | 表示I帧自适应量化步长数组。                                   |
+| hw:aq_step_p            | St   | RK_S32 \*                           | 表示P帧自适应量化步长数组。                                   |
+| hw:mb_rc_disable        | S32  | RK_S32                              | 表示宏块级码率控制禁用标志。                                  |
 
 其他的字符串与参数会进行后续扩展。
 
@@ -736,7 +820,7 @@ MPP_RET mpp_enc_cfg_get_st(MppEncCfg cfg, const char *name, void *val);
 
 从MPP_ENC_CMD_BASE到MPP_ENC_CMD_END之间的命令为编码器的control接口命令，其中配置命令的MPP_ENC_SET/GET\_ CFG已经做为基本的配置命令在3.5.1进行了介绍。剩下的命令在下面进行简要的介绍，其中的命令与编码器硬件相关，只有部分硬件支持。
 
-目前MPP支持的编码器硬件分为vepu系列和rkvenc系列，vepu系列支持H.264编码，vp8编码和jpeg编码，配备于绝大多数RK芯片中。rkvenc系列只支持H.264编码，目前只配备于RV1109/RV1126系统芯片，其支持的编码功能相对于vepu系统会更多更强。
+目前MPP支持的编码器硬件分为vepu系列和rkvenc系列，vepu系列支持H.264编码，vp8编码和jpeg编码，配备于绝大多数RK芯片中。rkvenc系列支持H.264、H.265和jpeg编码，支持更多的编码功能，配备于RV1109/RV1126及更新的芯片平台中。
 
 部分CMD命令简要说明：
 
@@ -772,7 +856,11 @@ MPP_ENC_GET_EXTRA_INFO输入参数为MppPacket\*，会获取编码器的内部Mp
 
 由于在多线程情况下，MPP_ENC_GET_EXTRA_INFO命令获取的MppPacket有可能在读取时被其他control修改，所以这个命令并不是线程安全的，仅做为旧vpu_api的兼容用，不要再使用。
 
-- ~~MPP_ENC_SET_SEI_CFG/MPP_ENC_GET_SEI_DATA~~
+- MPP_ENC_SET_SEI_CFG
+
+用于配置编码器SEI输出模式，输入参数为MppEncSeiMode枚举类型。支持三种模式：MPP_ENC_SEI_MODE_DISABLE（默认，关闭SEI输出）、MPP_ENC_SEI_MODE_ONE_SEQ（每个IDR帧写入一次SEI）、MPP_ENC_SEI_MODE_ONE_FRAME（每帧可写入SEI）。
+
+- ~~MPP_ENC_GET_SEI_DATA~~
 
 废弃命令，前向兼容用保留，不要使用
 
@@ -824,6 +912,48 @@ MPP_ENC_GET_EXTRA_INFO输入参数为MppPacket\*，会获取编码器的内部Mp
 
 用于配置rkvenc系列硬件的OSD数据，命令参数为MppEncOSDData。需要每帧进行配置，每编码一帧之后需要重新配置。本命令被MppFrame带的MppMeta中的KEY_OSD_DATA进行替代，不再使用。
 
+### 3.5.3 编码器配置调试
+
+编码器的参数非常多且复杂，MPP提供了多种调试手段帮助用户确认编码器的实际运行配置。
+
+#### 通过mpp_sys_srv调试编码器配置
+
+MPP内部运行时会创建一个系统命令服务线程，通过FIFO管道 `/tmp/mpp-<pid>-cmd` 接收外部调试命令。用户可以在编码器运行过程中，通过向该管道写入命令来获取编码器的实时配置信息。
+
+支持的命令格式如下：
+
+```bash
+echo "help" > /tmp/mpp-<pid>-cmd
+echo "show" > /tmp/mpp-<pid>-cmd
+echo "venc <id> show_cfg" > /tmp/mpp-<pid>-cmd
+echo "venc <id> dump_cfg /tmp" > /tmp/mpp-<pid>-cmd
+```
+
+其中 `<pid>` 为编码进程的进程号，`<id>` 为编码器实例编号。各命令说明如下：
+
+| 命令 | 描述说明 |
+|------|---------|
+| help | 打印所有支持的系统命令。 |
+| show | 显示当前进程中的所有MPP实例信息。 |
+| venc \<id\> show_cfg | 在日志中打印指定编码器实例的完整配置信息。 |
+| venc \<id\> dump_cfg \<path\> | 将指定编码器实例的完整配置以JSON格式导出到文件，文件名为 `mpp-<pid>-<id>.json`，保存在指定的 `<path>` 目录下。 |
+
+其中 `dump_cfg` 命令导出的JSON文件包含了编码器当前所有配置参数的完整快照，可用于配置对比和问题排查。
+
+#### 通过SEI写入编码器配置信息
+
+在编码器启用SEI输出的情况下（通过control接口设置 `MPP_ENC_SET_SEI_CFG`，模式设置为 `MPP_ENC_SEI_MODE_ONE_SEQ`），MPP会在每个IDR帧的SEI中写入编码器的配置信息，方便在解码端直接获取编码参数。
+
+SEI中写入的配置信息通过不同的UUID进行区分：
+
+| UUID标识 | 描述说明 |
+|---------|---------|
+| version | MPP库的版本信息。 |
+| rc_cfg | 编码器的码率控制配置信息，包含rc_mode、gop、fps、qp等参数。 |
+| refresh_cfg | 渐进式刷新（GDR）配置信息。 |
+
+解码端可以通过解析SEI中的UUID字段来提取对应的配置信息，从而实现编码参数的端到端追溯。
+
 ## 3.6 编码器使用要点
 
 ### 3.6.1 输入图像的宽高与stride
@@ -869,7 +999,7 @@ MPP的demo程序变化比较快，以下说明仅供参考，具体情况以实�
 
 ## 4.1 解码器demo
 
-解码器demo为mpi_dec_test系列程序，包括使用decode_put_packet和decode_get_frame接口的单线程mpi_dec_test、多线程的mpi_dec_mt_test以及多实例的mpi_dec_multi_test。
+解码器demo为mpi_dec_test系列程序，包括使用decode_put_packet和decode_get_frame接口的单线程mpi_dec_test、多线程的mpi_dec_mt_test、多实例的mpi_dec_multi_test以及使用no_thread模式直接调用decode接口的mpi_dec_nt_test（参见3.1.4节）。
 
 以Android平台上的mpi_dec_test为例进行使用说明。直接运行测试用例mpi_dec_test，可以在日志中打印帮助文档，如下图所示：
 
@@ -891,6 +1021,7 @@ MPP的demo程序变化比较快，以下说明仅供参考，具体情况以实�
 | -s       | MPP实例数，默认为1。                            |
 | -v       | 日志选项：q为静默标志；f为fps显示标志。         |
 | -slt     | 输出帧对应的校验文件。                          |
+| -bufmode | 缓冲模式：hi – 半内部分配模式（默认）；i – 纯内部分配模式；e – 纯外部分配模式。 |
 | -help    | 打开帮助文档。                                  |
 
 mpi_dec_test的命令参数中，输入文件（i）和码流类型（t）为强制要求配置的参数，其他参数如输出文件（o）、图像宽度（w）、图像高度（h）和解码帧数（n）等为可选参数，可以根据不同的测试需求进行配置。
@@ -941,7 +1072,7 @@ I mpp_info: mpp version: 6cc173d1 author: Ding Wei 2022-08-29 [hal_avsd]: Fix cr
 
 ## 4.2 编码器demo
 
-编码器demo为mpi_enc_test系列程序，包括单线程的mpi_enc_test及多实例的mpi_enc_multi_test。
+编码器demo为mpi_enc_test系列程序，包括单线程的mpi_enc_test及多线程的mpi_enc_mt_test。
 
 以下以Android平台上的mpi_enc_test为例进行使用说明。直接运行测试用例mpi_enc_test，可以在日志中打印帮助文档，如下图所示：
 
@@ -962,16 +1093,17 @@ I mpp_info: mpp version: 6cc173d1 author: Ding Wei 2022-08-29 [hal_avsd]: Fix cr
 | -f | 图像色彩空间格式以及内存排布方式，默认为NV12。                                                  |
 | -t | 码流文件的协议类型。                                                                            |
 | -tsrc                        | 源码流格式，仅在测试整体编解码性能时使用。                                                      |
-| -n                           | 最大解码帧数。测试时若码流较长，可仅输出前n帧。                                                 |
+| -n                           | 最大编码帧数。测试时若码流较长，可仅编码前n帧。设置为-1时为无限循环编码。                             |
 | -g                           | gop参考模式，对应不同的TSVC码流。                                                               |
-| -rc                          | 码率控制模式。0:VBR; 1:CBR; 2:FIXQP; 3:AVBR。                                                   |
+| -rc                          | 码率控制模式。0:VBR; 1:CBR; 2:FIXQP; 3:AVBR; 4:SMTRC。                                           |
 | -bps                         | 码率约束参数。命令格式：bps_target:bps_min:bps_max。                                            |
 | -fps                         | 输入/输出帧率控制，默认为30。该命令参数仅说明输入帧率和输出帧率之间的比例关系，与实际帧率无关。 |
 | -qc                          | 质量控制。                                                                                      |
 | -s                           | MPP实例数，默认为1。                                                                            |
 | -v                           | 日志选项：q为静默标志；f为fps显示标志。                                                         |
-| -ini                         | 额外的编码配置文件ini（暂未生效）。                                                                   |
-| -slt                         | 输出码流对应的校验文件。                                                                    |
+| -slt                         | 输出码流对应的校验文件。                                                                        |
+| -fqc                         | 帧级质量控制，格式：fqp_min_i:fqp_max_i:fqp_min_p:fqp_max_p。                                      |
+| -cfg                         | 编码配置文件路径。                                                                              |
 
 mpi_enc_test的命令参数中，图像宽度（w）、图像高度（h）和码流类型（t）为强制要求配置的参数，其他参数如输入文件（i）、输出文件（o）、编码帧数（n）和色彩空间格式及内存排布方式（f）等为可选参数。如果没有指定输入文件，mpi_enc_test会生成默认的彩条图像进行编码。
 
@@ -1011,7 +1143,7 @@ mpi_enc_test -w 1920 -h 1080 -t 7 -i /data/ocrean.yuv -o /data/out.h264 -n 30
 
 `I mpp_enc : MPP_ENC_SET_RC_CFG bps 7776000 [486000 : 8262000] fps [30:30] gop 60`
 
-默认的编码器的码率控制参数，目标码率为7.8Mbps，码率参考下界为0.5Mbps，码率参考上界为8.3Mbps；默认的输入和输出帧率为30；默认gop数为60。
+旧版编码器的码率控制参数日志（当前版本已改为MppEncCfg配置方式）。目标码率为7.8Mbps，码率参考下界为0.5Mbps，码率参考上界为8.3Mbps；默认的输入和输出帧率为30；默认gop数为60。
 
 `I mpi_enc_test: chn 0 encoded frame 0 size 218616 qp 11`
 
