@@ -456,7 +456,7 @@ typedef struct H264eVepu511aSqiCfg_t {
     /* 0x00002014 reg2053 */
     struct {
         RK_U32 rdo_smear_lvl16_multi    : 8;
-        RK_U32 rdo_smear_dlt_qp         : 4;
+        RK_S32 rdo_smear_dlt_qp         : 4;
         RK_U32 reserved                 : 1;
         RK_U32 stated_mode              : 2;
         RK_U32 rdo_smear_en             : 1;
@@ -616,7 +616,7 @@ typedef struct H264eVepu511aSqiCfg_t {
         RK_U32 reserved        : 16;
     } smear_st_thd;
 
-    /* 0x2058 - 0x206c */
+    /* 0x2058 */
     RK_U32 reserved_2070;
 
     /* 0x0000205c reg2071 */
@@ -729,7 +729,7 @@ typedef struct H264eVepu511aSqiCfg_t {
     } cmplx_statc_wgt1_comb;
 
     /* 0x000020e8 reg2106 - 0x0000215c reg2135*/
-    RK_U32 reserved_2106_2135[29];
+    RK_U32 reserved_2106_2135[30];
 
     /* 0x00002160 reg2136 */
     struct {

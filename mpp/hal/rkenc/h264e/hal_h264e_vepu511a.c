@@ -1889,6 +1889,7 @@ static void setup_vepu511a_aq(HalH264eVepu511aCtx *ctx)
     s->aq_stp2.aq_stp_13t14 = aq_step[13] & 0x1f;
     s->aq_stp2.aq_stp_14t15 = aq_step[14] & 0x1f;
     s->aq_stp2.aq_stp_b15 = aq_step[15] & 0x1f;
+    s->aq_clip.aq16_rnge = 15;
 }
 
 static void setup_vepu511a_anti_stripe(HalH264eVepu511aCtx *ctx)
