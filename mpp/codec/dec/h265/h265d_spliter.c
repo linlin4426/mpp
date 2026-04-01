@@ -214,6 +214,7 @@ static RK_S32 h265d_combine_frame(H265dSpl *p, RK_S32 next, const RK_U8 **buf, R
 {
     void *ring_ptr;
     RK_U32 output_size = 0;
+    RK_S32 carry_count = 0;
 
     h265d_dbg_split("combine_frame next %d buf_size %d data_size %u write_pos %u data_start %u\n",
                     next, *buf_size, p->data_size, p->write_pos, p->data_start);
@@ -248,6 +249,7 @@ static RK_S32 h265d_combine_frame(H265dSpl *p, RK_S32 next, const RK_U8 **buf, R
 
             if (p->data_start + p->data_size > old_size) {
                 RK_U32 tail_size = old_size - p->data_start;
+
                 wrap_size = p->data_size - tail_size;
 
                 h265d_dbg_split("resize wrapped data_start %u data_size %u tail %u wrap %u\n",
@@ -328,6 +330,7 @@ static RK_S32 h265d_combine_frame(H265dSpl *p, RK_S32 next, const RK_U8 **buf, R
     ring_ptr = mpp_ring_get_ptr(p->ring);
 
     if (p->data_size) {
+        RK_U32 old_data_size = p->data_size;
         RK_S32 frame_size = p->data_size + next;  // next can be negative
 
         h265d_dbg_split("output frame_size %d data_size %u next %d\n",
@@ -354,6 +357,26 @@ static RK_S32 h265d_combine_frame(H265dSpl *p, RK_S32 next, const RK_U8 **buf, R
         // Save remaining new input data for next frame
         // NOTE: For zero-copy, remaining data stays in input buffer (not copied to ring)
         // This prevents overwriting the zero-copy output frame
+
+        // When next < 0: carry over trailing bytes that belong to next frame
+        if (next < 0) {
+            RK_U8 tmp[16];
+            RK_U32 carry_pos = (p->data_start + frame_size) % p->ring_size;
+            RK_U8 *ring_u8 = (RK_U8 *)mpp_ring_get_ptr(p->ring);
+
+            carry_count = -next;
+
+            if (carry_pos + carry_count > p->ring_size) {
+                RK_U32 tail = p->ring_size - carry_pos;
+
+                memcpy(tmp, ring_u8 + carry_pos, tail);
+                memcpy(tmp + tail, ring_u8, carry_count - tail);
+                memcpy(ring_u8, tmp, carry_count);
+            } else {
+                memcpy(ring_u8, ring_u8 + carry_pos, carry_count);
+            }
+        }
+
         if (next > 0 && *buf_size > next) {
             // Remaining data stays in input buffer
             // Don't copy to ring, just clear ring state
@@ -378,6 +401,7 @@ static RK_S32 h265d_combine_frame(H265dSpl *p, RK_S32 next, const RK_U8 **buf, R
 
         *buf = frame_data;
         *buf_size = p->overlap_offset = frame_size;
+        output_size = old_data_size;
 
         // Save actual output data start for spliter_frame comparison
         p->last_output_data_start = output_data_start;
@@ -422,6 +446,13 @@ static RK_S32 h265d_combine_frame(H265dSpl *p, RK_S32 next, const RK_U8 **buf, R
         next++;
     }
 
+    // Restore carry-over ring state after overlap scan.
+    // Must be done after scan: scan uses data_size==0 to select output_size as scan_pos.
+    if (carry_count > 0) {
+        p->data_size = carry_count;
+        p->write_pos = carry_count;
+    }
+
     if (p->overlap_bytes) {
         h265d_dbg_split("overlap_final bytes %d state %llX\n",
                         p->overlap_bytes, p->scan_state & 0xFFFFFFFF);
@@ -439,27 +470,29 @@ void h265d_spliter_sync(H265dSpliter ctx, RK_S32 frame_id)
 
     (void)frame_id;  // frame_id is not used in FIFO mode
 
-    h265d_dbg_split("sync pending_count %d\n", p->pending_frame_count);
-
     // FIFO: Release the oldest frame (index 0)
     RK_U32 old_data_start = p->pending_frames[0].data_start;
     RK_U32 old_data_size = p->pending_frames[0].data_size;
 
-    // Skip the released frame's data from data_start
-    // Note: data_size is already updated during output, only update data_start here
+    // Skip the released frame's data from data_start.
+    // Only advance when data_start matches the released frame's position.
+    // When carry-over data exists (data_size > 0, data_start = 0), the carry
+    // bytes are at ring[0] which is a different region than the released frame,
+    // so advancing would skip past and lose the carry-over data.
     RK_U32 prev_data_start = p->data_start;
-    p->data_start += old_data_size;
-    if (p->data_start >= p->ring_size)
-        p->data_start -= p->ring_size;
+    if (p->data_start == old_data_start) {
+        p->data_start += old_data_size;
+        if (p->data_start >= p->ring_size)
+            p->data_start -= p->ring_size;
+    }
 
     // Sync write_pos with data_start to maintain ring buffer consistency
-    // When data_size is 0 (entire frame was output), ring was cleared.
-    // In this case, sync write_pos to match data_start for next accumulation.
-    if (p->data_size == 0) {
-        p->write_pos = p->data_start;
-    } else if (p->data_start > prev_data_start && p->write_pos < p->data_start) {
-        // data_start moved forward without wrap, sync write_pos if needed
-        p->write_pos = p->data_start;
+    if (p->data_start != prev_data_start) {
+        if (p->data_size == 0) {
+            p->write_pos = p->data_start;
+        } else if (p->data_start > prev_data_start && p->write_pos < p->data_start) {
+            p->write_pos = p->data_start;
+        }
     }
 
     h265d_dbg_split("sync_release old_start %u old_size %u new_start %u data_size %u write_pos %u\n",
