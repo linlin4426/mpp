@@ -18,16 +18,12 @@ include_directories(hal/common)
 include_directories(vproc/inc)
 
 # ----------------------------------------------------------------------------
-# Set script suffix based on host OS
+# Helper for cleaning extracted .o files
 # ----------------------------------------------------------------------------
 if(CMAKE_HOST_WIN32)
-    set(SCRIPT_SUFFIX ".bat")
     set(CLEAN_OBJ_FILES cmd /c "if exist *.o del /F /Q *.o")
-    set(PRINT_CURRENT_DIR cmd /c cd)
 else()
-    set(SCRIPT_SUFFIX ".sh")
     set(CLEAN_OBJ_FILES rm *.o || true)
-    set(PRINT_CURRENT_DIR pwd)
 endif()
 
 # ----------------------------------------------------------------------------
@@ -101,11 +97,27 @@ target_link_libraries(${MPP_STATIC} PRIVATE kmpp
     ${BEGIN_WHOLE_ARCHIVE} mpp_vproc mpp_codec mpp_hal mpp_base kmpp_base osal ${END_WHOLE_ARCHIVE})
 
 add_custom_command(TARGET ${MPP_STATIC} POST_BUILD
-    COMMAND ${CMAKE_AR} x $<TARGET_FILE:${MPP_STATIC}>
-    COMMAND ${CMAKE_AR} rcs lib${MPP_SHARED}.a *.o
-    COMMAND ${CMAKE_COMMAND} -E env ANDROID_NDK=${ANDROID_NDK} ${CMAKE_SOURCE_DIR}/merge_static_lib${SCRIPT_SUFFIX} ${CMAKE_BINARY_DIR} ${MPP_SHARED}
-    COMMAND ${CMAKE_STRIP} --strip-debug lib${MPP_SHARED}.a
-    COMMAND ${PRINT_CURRENT_DIR}
+    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+    # 1) Generate MRI script to merge all .a into one
+    COMMAND ${CMAKE_COMMAND} -E echo "CREATE _all.a" > _merge.mri
+    COMMAND ${CMAKE_COMMAND} -E echo "ADDLIB $<TARGET_FILE:${MPP_STATIC}>" >> _merge.mri
+    COMMAND ${CMAKE_COMMAND} -E echo "ADDLIB $<TARGET_FILE:mpp_codec>" >> _merge.mri
+    COMMAND ${CMAKE_COMMAND} -E echo "ADDLIB $<TARGET_FILE:mpp_hal>" >> _merge.mri
+    COMMAND ${CMAKE_COMMAND} -E echo "ADDLIB $<TARGET_FILE:mpp_vproc>" >> _merge.mri
+    COMMAND ${CMAKE_COMMAND} -E echo "SAVE" >> _merge.mri
+    COMMAND ${CMAKE_COMMAND} -E echo "END" >> _merge.mri
+    # 2) Merge archives, extract all .o, list members into response file
+    COMMAND ${CMAKE_AR} -M < _merge.mri
+    COMMAND ${CMAKE_AR} x _all.a
+    COMMAND ${CMAKE_AR} t _all.a > _obj_list.txt
+    # 3) ld -r merge all .o into single object (no glob needed)
+    COMMAND ${CMAKE_LINKER} -r -o _merged.o @_obj_list.txt
+    # 4) Create single-member archive
+    COMMAND ${CMAKE_COMMAND} -E remove -f "lib${MPP_SHARED}.a"
+    COMMAND ${CMAKE_AR} rcs "lib${MPP_SHARED}.a" _merged.o
+    # 5) Strip and cleanup
+    COMMAND ${CMAKE_STRIP} --strip-debug "lib${MPP_SHARED}.a"
+    COMMAND ${CMAKE_COMMAND} -E remove _all.a _merge.mri _obj_list.txt _merged.o
     COMMAND ${CLEAN_OBJ_FILES}
     )
 
