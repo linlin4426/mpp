@@ -2783,6 +2783,7 @@ static MPP_RET try_proc_normal_task(MppEncImpl *enc, EncAsyncTaskInfo *task)
 
     // 18. drop, force pskip and reencode  process
     while (frm->reencode && frm->reencode_times < enc->cfg->rc.max_reenc_times) {
+        frm->reencode_times++;
         hal_task->length -= hal_task->hw_length;
         hal_task->hw_length = 0;
 

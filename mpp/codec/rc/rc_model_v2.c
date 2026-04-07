@@ -1753,6 +1753,9 @@ MPP_RET rc_model_v2_check_reenc(void *ctx, EncRcTask *task)
         if (usr_cfg->drop_gap && p->drop_cnt >= usr_cfg->drop_gap)
             drop_mode = MPP_ENC_RC_DROP_FRM_DISABLED;
 
+        if (p->reenc_cnt > 0)
+            drop_mode = MPP_ENC_RC_DROP_FRM_DISABLED;
+
         rc_dbg_drop("reenc drop_mode %d drop_cnt %d\n", drop_mode, p->drop_cnt);
 
         switch (drop_mode) {
