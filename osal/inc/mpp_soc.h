@@ -7,11 +7,18 @@
 #define MPP_SOC_H
 
 #include "mpp_dev_defs.h"
+#include "mpp_frame.h"
 
 #define SOC_CAP_FBC_NONE       0
 #define SOC_CAP_AFBC_V1        (1 << 0)
 #define SOC_CAP_AFBC_V2        (1 << 1)
 #define SOC_CAP_RKFBC          (1 << 2)
+
+#define SOC_CAP_RASTER         (1U << MPP_FMT_RASTER)
+#define SOC_CAP_AFBC16X16      (1U << MPP_FMT_AFBC16X16)
+#define SOC_CAP_AFBC32X8       (1U << MPP_FMT_AFBC32X8)
+#define SOC_CAP_RKFBC64X4      (1U << MPP_FMT_RKFBC64X4)
+#define SOC_CAP_TILE4X4        (1U << MPP_FMT_TILE4X4)
 
 /* Do NOT use this outside MPP it may be changed in new version */
 typedef enum RockchipSocType_e {
@@ -58,14 +65,13 @@ typedef struct MppDecHwCap_t {
     rk_u32          cap_8k              : 1;
     rk_u32          cap_colmv_compress  : 1;
     rk_u32          cap_hw_h265_rps     : 1;
-    rk_u32          cap_hw_vp9_prob     : 1;
     rk_u32          cap_jpg_pp_out      : 1;
     rk_u32          cap_10bit           : 1;
     rk_u32          cap_down_scale      : 1;
     rk_u32          cap_lmt_linebuf     : 1;
     rk_u32          cap_core_num        : 3;
     rk_u32          cap_hw_jpg_fix      : 1;
-    rk_u32          reserved            : 8;
+    rk_u32          cap_data_layout     : 8;
 } MppDecHwCap;
 
 typedef struct MppEncHwCap_t {
@@ -78,7 +84,8 @@ typedef struct MppEncHwCap_t {
     rk_u32          cap_8k          : 1;
     rk_u32          cap_hw_osd      : 1;
     rk_u32          cap_hw_roi      : 1;
-    rk_u32          reserved        : 16;
+    rk_u32          cap_data_layout : 8;
+    rk_u32          reserved        : 8;
 } MppEncHwCap;
 
 typedef struct {

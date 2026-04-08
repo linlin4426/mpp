@@ -298,6 +298,15 @@ typedef enum {
     MPP_FMT_BUTT,
 } MppFrameFormat;
 
+typedef enum MppFmtLayout_e {
+    MPP_FMT_RASTER,
+    MPP_FMT_AFBC16X16,
+    MPP_FMT_AFBC32X8,
+    MPP_FMT_RKFBC64X4,
+    MPP_FMT_TILE4X4,
+    MPP_FMT_BUT,
+} MppFmtLayout;
+
 /**
  * Rational number (pair of numerator and denominator).
  */
