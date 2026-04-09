@@ -116,6 +116,37 @@ static MPP_RET mpp_dec_check_fbc_cap(MppDecImpl *p)
     return MPP_OK;
 }
 
+static MPP_RET mpp_dec_check_data_layout(MppDecImpl *p)
+{
+    MppDecBaseCfg *base = &p->cfg->base;
+    RK_U32 fbc_s = (RK_U32)base->out_fmt & (MPP_FRAME_FBC_MASK | MPP_FRAME_TILE_FLAG);
+    MppFmtLayout data_layout = MPP_FMT_BUT;
+
+    if (NULL == p->hw_info)
+        return MPP_OK;
+
+    if (MPP_FRAME_FMT_IS_AFBC(fbc_s)) {
+        if (p->hw_info->cap_data_layout & SOC_CAP_AFBC16X16)
+            data_layout = MPP_FMT_AFBC16X16;
+        else if (p->hw_info->cap_data_layout & SOC_CAP_AFBC32X8)
+            data_layout = MPP_FMT_AFBC32X8;
+        else
+            mpp_logw_f("afbc not support, fbc_s 0x%x platform support 0x%x\n",
+                       fbc_s, p->hw_info->cap_data_layout);
+    } else if (MPP_FRAME_FMT_IS_RKFBC(fbc_s)) {
+        data_layout = MPP_FMT_RKFBC64X4;
+    } else if (MPP_FRAME_FMT_IS_TILE(fbc_s)) {
+        data_layout = MPP_FMT_TILE4X4;
+    } else {
+        data_layout = MPP_FMT_RASTER;
+    }
+
+    mpp_slots_set_prop(p->packet_slots, SLOTS_DATA_LAYOUT, &data_layout);
+    mpp_slots_set_prop(p->frame_slots, SLOTS_DATA_LAYOUT, &data_layout);
+
+    return MPP_OK;
+}
+
 MPP_RET mpp_dec_proc_cfg(MppDecImpl *dec, MpiCmd cmd, void *param)
 {
     MPP_RET ret = MPP_OK;
@@ -134,6 +165,8 @@ MPP_RET mpp_dec_proc_cfg(MppDecImpl *dec, MpiCmd cmd, void *param)
         /* update output frame format */
         dec->cfg->base.out_fmt = mpp_frame_get_fmt(frame);
         mpp_log_f("found MPP_DEC_SET_FRAME_INFO fmt %x\n", dec->cfg->base.out_fmt);
+        mpp_dec_check_fbc_cap(dec);
+        mpp_dec_check_data_layout(dec);
 
         mpp_slots_set_prop(dec->frame_slots, SLOTS_FRAME_INFO, frame);
 
@@ -166,6 +199,7 @@ MPP_RET mpp_dec_proc_cfg(MppDecImpl *dec, MpiCmd cmd, void *param)
         ret = mpp_dec_set_cfg_by_cmd(dec->cfg_obj, cmd, param);
         mpp_dec_update_cfg(dec);
         mpp_dec_check_fbc_cap(dec);
+        mpp_dec_check_data_layout(dec);
     } break;
     case MPP_DEC_QUERY: {
         MppDecQueryCfg *query = (MppDecQueryCfg *)param;
@@ -199,6 +233,7 @@ MPP_RET mpp_dec_proc_cfg(MppDecImpl *dec, MpiCmd cmd, void *param)
             kmpp_obj_update(dec->cfg_obj, (KmppObj)param);
             mpp_dec_update_cfg(dec);
             mpp_dec_check_fbc_cap(dec);
+            mpp_dec_check_data_layout(dec);
         }
 
         dec_dbg_func("set dec cfg\n");
@@ -636,6 +671,7 @@ MPP_RET mpp_dec_init(MppDec *dec, MppDecInitCfg *cfg)
         p->dev = hal_cfg.dev;
         /* check fbc cap after hardware info is valid */
         mpp_dec_check_fbc_cap(p);
+        mpp_dec_check_data_layout(p);
 
         ParserCfg parser_cfg = {
             coding,

@@ -199,6 +199,7 @@ struct MppBufSlotsImpl_t {
     RK_U32              display_count;
 
     MppCodingType       coding_type;
+    MppFmtLayout        data_layout;
 
     // if slot changed, all will be hold until all slot is unused
     RK_U32              info_changed;
@@ -493,9 +494,11 @@ static void generate_info_set(MppBufSlotsImpl *impl, MppFrame frame, RK_U32 forc
     mpp_frame_set_hor_stride(impl->info_set, info_set_ptr->h_stride_by_byte);
     mpp_frame_set_ver_stride(impl->info_set, info_set_ptr->v_stride);
     mpp_frame_set_hor_stride_pixel(impl->info_set, info_set_ptr->h_stride_by_pixel);
+    mpp_frame_set_fmt_layout(impl->info_set, impl->data_layout);
     mpp_frame_set_hor_stride(frame, info_set_ptr->h_stride_by_byte);
     mpp_frame_set_ver_stride(frame, info_set_ptr->v_stride);
     mpp_frame_set_hor_stride_pixel(frame, info_set_ptr->h_stride_by_pixel);
+    mpp_frame_set_fmt_layout(frame, impl->data_layout);
     impl->buf_size = info_set_ptr->size_total;
     if (mpp_frame_get_thumbnail_en(frame) == MPP_FRAME_THUMBNAIL_MIXED)
         impl->buf_size += mpp_buf_slots_setup_thumbnail_frame(frame, NULL, NULL, 0);
@@ -1558,6 +1561,9 @@ MPP_RET mpp_slots_set_prop(MppBufSlots slots, SlotsPropType type, void *val)
     } break;
     case SLOTS_CODING_TYPE : {
         impl->coding_type = *((MppCodingType *)val);
+    } break;
+    case SLOTS_DATA_LAYOUT : {
+        impl->data_layout = *((MppFmtLayout *)val);
     } break;
     case SLOTS_WIDTH_ALIGN: {
         impl->hal_width_align = (AlignFunc)val;

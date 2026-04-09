@@ -180,6 +180,12 @@ struct MppFrameImpl_t {
      */
     RK_U32          fbc_offset;
     size_t          fbc_size;
+    struct {
+        MppFmtLayout    fmt_layout       : 8;
+        RK_U32          fbc_uncompress   : 1;
+        RK_U32          fbc_sparse       : 1;
+        RK_U32          reserved         : 22;
+    };
 
     /*
      * frame buffer contain downsacle pic
