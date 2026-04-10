@@ -65,6 +65,7 @@ __FAILED:
 static MPP_RET parser_pps(BitReadCtx_t *p_bitctx, H264_SPS_t *cur_sps, H264_PPS_t *cur_pps)
 {
     MPP_RET ret = MPP_ERR_UNKNOW;
+    RK_U32 more_rbsp_support = 1;
 
     READ_UE(p_bitctx, &cur_pps->pic_parameter_set_id);
     READ_UE(p_bitctx, &cur_pps->seq_parameter_set_id);
@@ -96,7 +97,16 @@ static MPP_RET parser_pps(BitReadCtx_t *p_bitctx, H264_SPS_t *cur_sps, H264_PPS_
     READ_ONEBIT(p_bitctx, &cur_pps->redundant_pic_cnt_present_flag);
     VAL_CHECK(ret , cur_pps->redundant_pic_cnt_present_flag == 0);
 
-    if (mpp_has_more_rbsp_data(p_bitctx)) {
+    if ((cur_sps->profile_idc == H264_PROFILE_BASELINE ||
+         cur_sps->profile_idc == H264_PROFILE_MAIN ||
+         cur_sps->profile_idc == H264_PROFILE_EXTENDED) &&
+        (cur_sps->constrained_set0_flag ||
+         cur_sps->constrained_set1_flag ||
+         cur_sps->constrained_set2_flag)) {
+        more_rbsp_support = 0;
+    }
+
+    if (more_rbsp_support && mpp_has_more_rbsp_data(p_bitctx)) {
         READ_ONEBIT(p_bitctx, &cur_pps->transform_8x8_mode_flag);
         READ_ONEBIT(p_bitctx, &cur_pps->pic_scaling_matrix_present_flag);
         if (cur_pps->pic_scaling_matrix_present_flag) {
