@@ -182,6 +182,22 @@ MPP_RET hal_dbg_dump_data(HalDbgCtx *ctx, char *fname, void *data,
     RK_U32 loop_cnt;
     RK_U32 i;
 
+    if (hal_dbg_flag_en(ctx, HAL_DBG_LOAD_DATA)) {
+        char *dot = strrchr(fname, '.');
+        char load_fname_path[HAL_DBG_PATH_MAX_LEN * 2];
+
+        if (dot != NULL) {
+            RK_U32 base_len = dot - fname;
+
+            snprintf(load_fname_path, sizeof(load_fname_path), "%.*s_cmd%s",
+                     base_len, fname, dot);
+        } else {
+            snprintf(load_fname_path, sizeof(load_fname_path), "%s_cmd", fname);
+        }
+
+        hal_dbg_load_data(ctx, load_fname_path, buf_p, data_bit_size / 8);
+    }
+
     if (0 == hal_dbg_flag_en(ctx, HAL_DBG_DUMP))
         return MPP_OK;
 
@@ -259,6 +275,70 @@ MPP_RET hal_dbg_dump_data(HalDbgCtx *ctx, char *fname, void *data,
     }
 
     fclose(dump_fp);
+
+    return MPP_OK;
+}
+
+static inline RK_U8 hal_dbg_hex_to_val(char c)
+{
+    if (c >= '0' && c <= '9')
+        return c - '0';
+    if (c >= 'a' && c <= 'f')
+        return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F')
+        return c - 'A' + 10;
+
+    return 0;
+}
+
+MPP_RET hal_dbg_load_data(HalDbgCtx *ctx, const char *fname, void *buf, RK_U32 buf_size)
+{
+    char load_fname_path[HAL_DBG_PATH_MAX_LEN * 2];
+    char line_buf[HAL_DBG_PATH_MAX_LEN * 2];
+    RK_U8 *dst = (RK_U8 *)buf;
+    RK_U8 lo = 0, hi = 0;
+    RK_U32 len_sz;
+    RK_U32 loaded = 0;
+    FILE *fp = NULL;
+    char *p;
+
+    if (ctx->target_frm_idx != HAL_DBG_TGT_FRM_NONE
+        && ctx->cur_frm_idx != ctx->target_frm_idx)
+        return MPP_OK;
+
+    if (NULL == fname || NULL == buf || 0 == buf_size) {
+        mpp_loge_f("invalid args: fname=%p buf=%p buf_size=%d\n", fname, buf, buf_size);
+        return MPP_NOK;
+    }
+
+    snprintf(load_fname_path, sizeof(load_fname_path), "%s/%s", ctx->dump_cur_dir, fname);
+    fp = fopen(load_fname_path, "r");
+    if (!fp)
+        return MPP_NOK;
+    mpp_logi_f("open file: %s success for load data\n", load_fname_path);
+
+    while (fgets(line_buf, sizeof(line_buf), fp)) {
+        len_sz = strlen(line_buf);
+
+        if (0 == len_sz)
+            continue;
+
+        while (line_buf[len_sz - 1] == '\n' || line_buf[len_sz - 1] == '\r')
+            line_buf[--len_sz] = '\0';
+
+        /* default little-endian */
+        hal_dbg_flip_string(line_buf);
+
+        /* convert hex pairs to bytes */
+        for (p = line_buf; *p && loaded < buf_size; p += 2) {
+            lo = hal_dbg_hex_to_val(*p);
+            hi = (p[1]) ? hal_dbg_hex_to_val(p[1]) : 0;
+            dst[loaded++] = (hi << 4) | lo;
+        }
+    }
+
+    fclose(fp);
+    hal_dbg_info("loaded %u bytes from %s\n", loaded, load_fname_path);
 
     return MPP_OK;
 }

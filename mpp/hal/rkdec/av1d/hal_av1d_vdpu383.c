@@ -275,8 +275,6 @@ MPP_RET vdpu383_av1d_gen_regs(void *hal, HalTaskInfo *task)
         regs->comm_addrs.reg169_error_ref_base = mpp_buffer_get_fd(mbuffer);
         hal_dbg_dumpf_buf(ctx->dbg_ctx, "stream_in.dat", mbuffer, 0,
                           p_hal->strm_len, 128, "w+");
-        hal_dbg_dumpf_buf(ctx->dbg_ctx, "stream_in_no_offset.dat", mbuffer, 0,
-                          p_hal->strm_len, 128, "w+");
     }
 
     vdpu38x_av1d_rcb_setup(p_hal, task, dxva, &regs->comm_addrs.rcb_regs,
