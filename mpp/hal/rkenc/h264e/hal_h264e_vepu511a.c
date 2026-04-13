@@ -131,6 +131,8 @@ typedef struct HalH264eVepu511aCtx_t {
     RK_S32                  qpmap_en;
 } HalH264eVepu511aCtx;
 
+#include "hal_h264e_vepu511a_tune.c"
+
 /* Custom Quant Matrices: Joint Video Team */
 static RK_U8 vepu511a_h264_cqm_jvt8i[64] = {
     6, 10, 13, 16, 18, 23, 25, 27,
@@ -238,7 +240,7 @@ static MPP_RET hal_h264e_vepu511a_deinit(void *hal)
     }
 
     if (p->tune) {
-        // vepu511a_h264e_tune_deinit(p->tune);
+        vepu511a_h264e_tune_deinit(p->tune);
         p->tune = NULL;
     }
 
@@ -329,7 +331,7 @@ static MPP_RET hal_h264e_vepu511a_init(void *hal, MppEncHalCfg *cfg)
     cfg->cap_recn_out = 1;
     h264e_vepu_stream_amend_init(&p->amend);
 
-    // p->tune = vepu511a_h264e_tune_init(p);
+    p->tune = vepu511a_h264e_tune_init(p);
 
 DONE:
     if (ret)
@@ -1261,7 +1263,7 @@ static void setup_vepu511a_io_buf(HalVepu511aRegSet *regs, MppDevRegOffCfgs *off
     mpp_dev_multi_offset_update(offsets, 174, off_out);
 
     reg_frm->common.meiw_addr = task->md_info ? mpp_buffer_get_fd(task->md_info) : 0;
-    reg_frm->common.enc_pic.mei_stor = 0;
+    reg_frm->common.enc_pic.mei_stor = task->md_info ? 1 : 0;
     reg_frm->common.pic_ofst.pic_ofst_y = mpp_frame_get_offset_y(task->frame);
     reg_frm->common.pic_ofst.pic_ofst_x = mpp_frame_get_offset_x(task->frame);
 
@@ -2308,6 +2310,7 @@ static MPP_RET hal_h264e_vepu511a_gen_regs(void *hal, HalEncTask *task)
     if (ctx->roi_data)
         vepu511a_set_roi(&ctx->regs_set->reg_rc_roi.roi_cfg, ctx->roi_data,
                          ctx->cfg->prep.width, ctx->cfg->prep.height);
+    vepu511a_h264e_tune_reg_patch(ctx->tune, task);
 
     /* two pass register patch */
     if (frm->save_pass1)
