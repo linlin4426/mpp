@@ -161,7 +161,6 @@ static RK_S32 h265d_rps_prediction(BitReadCtx_t *bit, H265dStRps *rps,
     RK_S32 ref_delta;
     RK_S32 pic_count = 0;
     RK_S32 neg_count = 0;
-    RK_U8 used_array[32] = {0};
     RK_S32 i;
 
     rps->flags = 0;
@@ -202,7 +201,8 @@ static RK_S32 h265d_rps_prediction(BitReadCtx_t *bit, H265dStRps *rps,
                 cur_poc = ref_delta;
 
             rps->poc_delta[pic_count] = cur_poc;
-            used_array[pic_count] = used_flag;
+            if (used_flag)
+                rps->flags |= MPP_BIT(pic_count);
 
             if (cur_poc < 0)
                 neg_count++;
@@ -217,10 +217,6 @@ static RK_S32 h265d_rps_prediction(BitReadCtx_t *bit, H265dStRps *rps,
     if (pic_count > 0) {
         h265d_sort_delta_poc(rps);
         h265d_flip_negative_pics(rps);
-
-        for (i = 0; i < pic_count; i++)
-            if (used_array[i])
-                rps->flags |= MPP_BIT(i);
     }
 
     return 0;
