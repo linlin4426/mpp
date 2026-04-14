@@ -235,8 +235,11 @@ static void fill_picture_parameters(const H265dPrs *p, DXVA_PicParams_HEVC *pp)
 
     // First pass: collect valid reference frames
     RK_U32 ref_idx = 0;
-    for (RK_U32 dpb_idx = 0; dpb_idx < MPP_ARRAY_ELEMS(p->dpb) && ref_idx < 15; dpb_idx++) {
+    RK_U32 dpb_idx = 0;
+
+    for (dpb_idx = 0; dpb_idx < MPP_ARRAY_ELEMS(p->dpb) && ref_idx < 15; dpb_idx++) {
         const H265dFrame *frm = &p->dpb[dpb_idx];
+
         if (frm == current_picture || frm->slot_index == 0xff)
             continue;
         if (!frm->ref_status.st_ref && !frm->ref_status.lt_ref)
@@ -244,7 +247,9 @@ static void fill_picture_parameters(const H265dPrs *p, DXVA_PicParams_HEVC *pp)
 
         // Check if this frame is in rps_used
         RK_BOOL is_used = RK_FALSE;
-        for (RK_U32 k = 0; k < nb_rps_used; k++) {
+        RK_U32 k = 0;
+
+        for (k = 0; k < nb_rps_used; k++) {
             if (rps_used[k] == (RK_U32)frm->poc) {
                 is_used = RK_TRUE;
                 break;
@@ -254,6 +259,7 @@ static void fill_picture_parameters(const H265dPrs *p, DXVA_PicParams_HEVC *pp)
             continue;
 
         RK_U32 long_term = frm->ref_status.lt_ref ? 1 : 0;
+
         fill_picture_entry(&pp->RefPicList[ref_idx], frm->slot_index, long_term);
         pp->PicOrderCntValList[ref_idx] = frm->poc;
         mpp_buf_slot_set_flag(p->slots, frm->slot_index, SLOT_HAL_INPUT);

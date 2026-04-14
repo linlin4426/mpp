@@ -92,12 +92,11 @@
 
 #define ENTRY_TO_TRIE(prefix, ftype, type, name, flag, ...) \
     do { \
-            KmppEntry tbl = { \
-                .tbl.elem_offset = ((size_t)&(((KMPP_OBJ_IMPL_TYPE *)0)->CONCAT_DOT(__VA_ARGS__))), \
-                .tbl.elem_size = sizeof(((KMPP_OBJ_IMPL_TYPE *)0)->CONCAT_DOT(__VA_ARGS__)), \
-                .tbl.elem_type = ELEM_TYPE_##ftype, \
-                .tbl.flag_offset = FLAG_TYPE_TO_OFFSET(name, flag, #flag), \
-            }; \
+            KmppEntry tbl = { .val = 0 }; \
+            tbl.tbl.elem_offset = ((size_t)&(((KMPP_OBJ_IMPL_TYPE *)0)->CONCAT_DOT(__VA_ARGS__))); \
+            tbl.tbl.elem_size = sizeof(((KMPP_OBJ_IMPL_TYPE *)0)->CONCAT_DOT(__VA_ARGS__)); \
+            tbl.tbl.elem_type = ELEM_TYPE_##ftype; \
+            tbl.tbl.flag_offset = FLAG_TYPE_TO_OFFSET(name, flag, #flag); \
             MppCfgObj CONCAT_US(obj, name) = NULL; \
             kmpp_objdef_add_entry(KMPP_OBJ_DEF(prefix), ENTRY_TO_NAME_START(name), &tbl); \
             if (tbl.tbl.elem_type == ELEM_TYPE_starr) { \
@@ -126,12 +125,11 @@
 #else
 #define ENTRY_TO_TRIE(prefix, ftype, type, name, flag, ...) \
     do { \
-        KmppEntry tbl = { \
-            .tbl.elem_offset = ((size_t)&(((KMPP_OBJ_IMPL_TYPE *)0)->CONCAT_DOT(__VA_ARGS__))), \
-            .tbl.elem_size = sizeof(((KMPP_OBJ_IMPL_TYPE *)0)->CONCAT_DOT(__VA_ARGS__)), \
-            .tbl.elem_type = ELEM_TYPE_##ftype, \
-            .tbl.flag_offset = FLAG_TYPE_TO_OFFSET(name, flag, #flag), \
-        }; \
+        KmppEntry tbl = { .val = 0 }; \
+        tbl.tbl.elem_offset = ((size_t)&(((KMPP_OBJ_IMPL_TYPE *)0)->CONCAT_DOT(__VA_ARGS__))); \
+        tbl.tbl.elem_size = sizeof(((KMPP_OBJ_IMPL_TYPE *)0)->CONCAT_DOT(__VA_ARGS__)); \
+        tbl.tbl.elem_type = ELEM_TYPE_##ftype; \
+        tbl.tbl.flag_offset = FLAG_TYPE_TO_OFFSET(name, flag, #flag); \
         kmpp_objdef_add_entry(KMPP_OBJ_DEF(prefix), ENTRY_TO_NAME_START(name), &tbl); \
         ENTRY_TO_NAME_END(name); \
     } while (0);

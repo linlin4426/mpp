@@ -56,7 +56,7 @@ typedef struct MppHalImpl_t {
 } MppHalImpl;
 
 /* max 32 coding type and max 2 apis on each soc for each coding type hardware decoder */
-static const MppHalApi *vdec_apis[32][2] = { 0 };
+static const MppHalApi *vdec_apis[32][2] = {{ 0 }};
 
 static RK_U32 mpp_hal_debug = 0;
 RK_U32 hal_h265d_debug = 0;

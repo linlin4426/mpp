@@ -1852,11 +1852,13 @@ static MPP_RET read_frame_header_obu(Av1Codec *ctx, BitReadCtx_t *gb,
             return MPP_ERR_UNKNOW;
         } else {
             BitReadCtx_t fh;
+            size_t i;
 
             mpp_set_bitread_ctx(&fh, ctx->frame_header_data, ctx->frame_header_size);
-            for (size_t i = 0; i < ctx->frame_header_size; i += 8) {
+            for (i = 0; i < ctx->frame_header_size; i += 8) {
                 RK_S32 val;
                 RK_S32 b = MPP_MIN(ctx->frame_header_size - i, 8);
+
                 mpp_assert(b < 32);
                 mpp_read_bits(&fh, b, &val);
                 READ_BITS_LONG(gb, b, &val);

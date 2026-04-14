@@ -464,6 +464,7 @@ static RK_S32 h265d_combine_frame(H265dSpl *p, RK_S32 next, const RK_U8 **buf, R
 void h265d_spliter_sync(H265dSpliter ctx, RK_S32 frame_id)
 {
     H265dSpl *p = (H265dSpl *)ctx;
+    RK_S32 i;
 
     if (!p || p->pending_frame_count == 0)
         return;
@@ -499,7 +500,7 @@ void h265d_spliter_sync(H265dSpliter ctx, RK_S32 frame_id)
                     old_data_start, old_data_size, p->data_start, p->data_size, p->write_pos);
 
     // Remove processed frame from pending_frames (shift left)
-    for (RK_S32 i = 0; i < p->pending_frame_count - 1; i++) {
+    for (i = 0; i < p->pending_frame_count - 1; i++) {
         p->pending_frames[i] = p->pending_frames[i + 1];
     }
     p->pending_frame_count--;

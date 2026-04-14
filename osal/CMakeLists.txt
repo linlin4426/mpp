@@ -13,6 +13,20 @@ set(MPP_ALLOCATOR
     allocator/allocator_drm.c
 )
 
+if(ANDROID)
+    set(PLATFORM_OS_SOURCES
+        android/os_mem.c
+        android/os_env.c
+        android/os_log.c
+    )
+else()
+    set(PLATFORM_OS_SOURCES
+        linux/os_mem.c
+        linux/os_env.c
+        linux/os_log.c
+    )
+endif()
+
 set(MPP_DRIVER
     driver/mpp_server.c
     driver/mpp_device.c
@@ -45,14 +59,8 @@ add_library(osal OBJECT
     mpp_env.c
     mpp_log.c
     osal_2str.c
-    # Those files have a compiler marco protection, so only target
-    # OS will be built
-    android/os_mem.c
-    android/os_env.c
-    android/os_log.c
-    linux/os_mem.c
-    linux/os_env.c
-    linux/os_log.c
+    # Platform-specific os files selected at CMake level
+    ${PLATFORM_OS_SOURCES}
     ${MPP_ALLOCATOR}
     ${MPP_DRIVER}
 )

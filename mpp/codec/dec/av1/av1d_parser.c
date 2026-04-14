@@ -387,6 +387,7 @@ static MPP_RET set_current_skip_mode_params(Av1Codec *s)
 static MPP_RET set_current_coded_lossless_param(Av1Codec *s)
 {
     const AV1FrameHeader *f = s->frame_header;
+    RK_S32 i;
 
     if (f->delta_q_y_dc || f->delta_q_u_ac ||
         f->delta_q_u_dc || f->delta_q_v_ac || f->delta_q_v_dc) {
@@ -396,7 +397,7 @@ static MPP_RET set_current_coded_lossless_param(Av1Codec *s)
     }
 
     s->cur_frame.coded_lossless = 1;
-    for (RK_S32 i = 0; i < AV1_MAX_SEGMENTS; i++) {
+    for (i = 0; i < AV1_MAX_SEGMENTS; i++) {
         RK_S32 qindex;
         if (f->feature_enabled[i][AV1_SEG_LVL_ALT_Q]) {
             qindex = (f->base_q_idx +
@@ -441,14 +442,19 @@ static MPP_RET get_tiles_info(Av1DecCtx *ctx, const AV1TileGroup *tile_group)
 {
     Av1Codec *s = ctx->priv_data;
     BitReadCtx_t m_gb, *gb = &m_gb;
+    RK_S32 tile_num;
 
     // Initialize BitReadCtx_t
     mpp_set_bitread_ctx(gb, tile_group->tile_data.data, tile_group->tile_data.data_size);
     if (s->tile_offset)
         s->tile_offset += tile_group->tile_data.offset;
 
-    for (RK_S32 tile_num = tile_group->tg_start; tile_num <= tile_group->tg_end; tile_num++) {
-        RK_S32 used_bytes, left_bytes, size_bytes, size, i;
+    for (tile_num = tile_group->tg_start; tile_num <= tile_group->tg_end; tile_num++) {
+        RK_S32 used_bytes;
+        RK_S32 left_bytes;
+        RK_S32 size_bytes;
+        RK_S32 size;
+        RK_S32 i;
 
         if (tile_num == tile_group->tg_end) {
             used_bytes = mpp_get_bits_count(gb) / 8;
@@ -591,8 +597,9 @@ static MPP_RET update_reference_list(Av1DecCtx *ctx)
     Av1Codec *s = ctx->priv_data;
     const AV1FrameHeader *f = s->frame_header;
     MPP_RET ret = MPP_OK;
+    RK_S32 i;
 
-    for (RK_S32 i = 0; i < AV1_NUM_REF_FRAMES; i++) {
+    for (i = 0; i < AV1_NUM_REF_FRAMES; i++) {
         if (f->refresh_frame_flags & (1 << i)) {
             s->ref_s[i].valid = 1;
             s->ref_s[i].frame_id = f->current_frame_id;
@@ -636,7 +643,7 @@ static MPP_RET update_reference_list(Av1DecCtx *ctx)
         s->cur_frame.ref->alt2_frame_offset = s->ref[alt2_buf_idx].order_hint;
     }
 
-    for (RK_S32 i = 0; i < AV1_NUM_REF_FRAMES; i++) {
+    for (i = 0; i < AV1_NUM_REF_FRAMES; i++) {
         av1d_dbg(AV1D_DBG_REF, "header->refresh_frame_flags = %d",
                  f->refresh_frame_flags);
         if (f->refresh_frame_flags & (1 << i)) {
@@ -1149,7 +1156,7 @@ MPP_RET av1d_parser_frame(Av1DecCtx *ctx, HalDecTask *task)
     Av1Codec *s = ctx->priv_data;
     AV1TileGroup *raw_tile_group = NULL;
     MPP_RET ret = MPP_OK;
-
+    RK_S32 i;
 
     av1d_dbg_func("enter ctx %p\n", ctx);
     task->valid = 0;
@@ -1172,7 +1179,7 @@ MPP_RET av1d_parser_frame(Av1DecCtx *ctx, HalDecTask *task)
         return ret;
     }
 
-    for (RK_S32 i = 0; i < s->current_obu.nb_units; i++) {
+    for (i = 0; i < s->current_obu.nb_units; i++) {
         Av1ObuUnit *unit = &s->current_obu.units[i];
         AV1OBU *obu = &unit->obu;
         const AV1OBUHeader *header = &obu->header;
