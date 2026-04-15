@@ -841,16 +841,16 @@ int vdpp_test(VdppComCtx *vdppCtx, VdppTestCfg *cfg)
         // write crc, DONOT modify the code here!
         if (cfg->fp_slt) {
             if (pdst && cfg->work_mode != VDPP_WORK_MODE_DCI) {
-                crc_data_calc(&checkcrc, pdst, dstfrmsize);
-                crc_data_write(&checkcrc, cfg->fp_slt);
+                crc_data_calc(checkcrc, pdst, dstfrmsize);
+                crc_data_write(checkcrc, cfg->fp_slt);
             }
             if (pdst_c && yuv_out_diff && cfg->work_mode != VDPP_WORK_MODE_DCI) {
-                crc_data_calc(&checkcrc, pdst_c, dstfrmsize_c);
-                crc_data_write(&checkcrc, cfg->fp_slt);
+                crc_data_calc(checkcrc, pdst_c, dstfrmsize_c);
+                crc_data_write(checkcrc, cfg->fp_slt);
             }
             if (phist) {
-                crc_data_calc(&checkcrc, phist, DCI_HIST_SIZE);
-                crc_data_write(&checkcrc, cfg->fp_slt);
+                crc_data_calc(checkcrc, phist, DCI_HIST_SIZE);
+                crc_data_write(checkcrc, cfg->fp_slt);
             }
         }
 

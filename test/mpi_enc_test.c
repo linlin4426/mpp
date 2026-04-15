@@ -424,9 +424,9 @@ MPP_RET test_mpp_run(MpiEncMultiCtxInfo *info)
                     fwrite(ptr, 1, len, p->fp_output[chn]);
 
                 if (p->fp_verify && !p->pkt_eos) {
-                    crc_data_calc(&checkcrc, (RK_U8 *)ptr, (RK_U32)len);
+                    crc_data_calc(checkcrc, (RK_U8 *)ptr, (RK_U32)len);
                     mpp_log("p->frm_cnt_out=%d, len=%d\n", p->frm_cnt_out, len);
-                    crc_data_write(&checkcrc, p->fp_verify);
+                    crc_data_write(checkcrc, p->fp_verify);
                 }
 
                 log_len += snprintf(log_buf + log_len, log_size - log_len,

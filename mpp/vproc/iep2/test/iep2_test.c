@@ -322,10 +322,10 @@ void iep2_test(iep2_test_cfg *cfg)
         iep2->ops->control(iep2->priv, IEP_CMD_RUN_SYNC, &dei_info);
 
         if (cfg->fp_slt) {
-            crc_data_calc(&checkcrc, pdst[out_order], dstfrmsize);
-            crc_data_write(&checkcrc, cfg->fp_slt);
-            crc_data_calc(&checkcrc, pdst[1 - out_order], dstfrmsize);
-            crc_data_write(&checkcrc, cfg->fp_slt);
+            crc_data_calc(checkcrc, pdst[out_order], dstfrmsize);
+            crc_data_write(checkcrc, cfg->fp_slt);
+            crc_data_calc(checkcrc, pdst[1 - out_order], dstfrmsize);
+            crc_data_write(checkcrc, cfg->fp_slt);
         }
 
         out_order = dei_info.dil_order == IEP2_FIELD_ORDER_BFF ? 1 : 0;
