@@ -1807,7 +1807,8 @@ setup_vepu511a_l2(HalH264eVepu511aCtx *ctx)
 {
     HalVepu511aRegSet *regs = ctx->regs_set;
     MppEncSceneMode sm = ctx->cfg->tune.scene_mode;
-    RK_S32 lambda_idx = ctx->cfg->tune.lambda_idx_i; //TODO: lambda_idx_p
+    RK_S32 lambda_idx = (ctx->slice->slice_type == H264_I_SLICE) ?
+                        ctx->cfg->tune.lambda_idx_i : ctx->cfg->tune.lambda_idx_p;
 
     hal_h264e_dbg_func("enter\n");
 
