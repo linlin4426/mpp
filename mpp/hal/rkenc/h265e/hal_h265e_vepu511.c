@@ -1230,21 +1230,23 @@ static void vepu511_h265_set_pp_regs(H265eV511RegSet *regs, VepuFmtCfg *fmt,
     }
 
     if (reg_frm->reg0198_src_fmt.src_cfmt < VEPU5xx_FMT_ARGB1555) {
-        reg_frm->reg0199_src_udfy.csc_wgt_r2y = 77;
-        reg_frm->reg0199_src_udfy.csc_wgt_g2y = 150;
-        reg_frm->reg0199_src_udfy.csc_wgt_b2y = 29;
+        const VepuRgb2YuvCfg *cfg_coeffs = get_rgb2yuv_cfg(prep_cfg->range, prep_cfg->color);
 
-        reg_frm->reg0200_src_udfu.csc_wgt_r2u = -43;
-        reg_frm->reg0200_src_udfu.csc_wgt_g2u = -85;
-        reg_frm->reg0200_src_udfu.csc_wgt_b2u = 128;
+        reg_frm->reg0199_src_udfy.csc_wgt_r2y = cfg_coeffs->_2y.r_coeff;
+        reg_frm->reg0199_src_udfy.csc_wgt_g2y = cfg_coeffs->_2y.g_coeff;
+        reg_frm->reg0199_src_udfy.csc_wgt_b2y = cfg_coeffs->_2y.b_coeff;
 
-        reg_frm->reg0201_src_udfv.csc_wgt_r2v = 128;
-        reg_frm->reg0201_src_udfv.csc_wgt_g2v = -107;
-        reg_frm->reg0201_src_udfv.csc_wgt_b2v = -21;
+        reg_frm->reg0200_src_udfu.csc_wgt_r2u = cfg_coeffs->_2u.r_coeff;
+        reg_frm->reg0200_src_udfu.csc_wgt_g2u = cfg_coeffs->_2u.g_coeff;
+        reg_frm->reg0200_src_udfu.csc_wgt_b2u = cfg_coeffs->_2u.b_coeff;
 
-        reg_frm->reg0202_src_udfo.csc_ofst_y = 0;
-        reg_frm->reg0202_src_udfo.csc_ofst_u = 128;
-        reg_frm->reg0202_src_udfo.csc_ofst_v = 128;
+        reg_frm->reg0201_src_udfv.csc_wgt_r2v = cfg_coeffs->_2v.r_coeff;
+        reg_frm->reg0201_src_udfv.csc_wgt_g2v = cfg_coeffs->_2v.g_coeff;
+        reg_frm->reg0201_src_udfv.csc_wgt_b2v = cfg_coeffs->_2v.b_coeff;
+
+        reg_frm->reg0202_src_udfo.csc_ofst_y = cfg_coeffs->_2y.offset;
+        reg_frm->reg0202_src_udfo.csc_ofst_u = cfg_coeffs->_2u.offset;
+        reg_frm->reg0202_src_udfo.csc_ofst_v = cfg_coeffs->_2v.offset;
     }
 
     reg_frm->reg0205_src_strd0.src_strd0  = stridey;

@@ -745,21 +745,21 @@ static MPP_RET setup_vepu511_prep(HalVepu511RegSet *regs, MppEncPrepCfg *prep, H
 
         hal_h264e_dbg_flow("input color range %d colorspace %d", prep->range, prep->color);
 
-        regs->reg_frm.src_udfy.csc_wgt_b2y = 29;
-        regs->reg_frm.src_udfy.csc_wgt_g2y = 150;
-        regs->reg_frm.src_udfy.csc_wgt_r2y = 77;
+        regs->reg_frm.src_udfy.csc_wgt_b2y = cfg_coeffs->_2y.b_coeff;
+        regs->reg_frm.src_udfy.csc_wgt_g2y = cfg_coeffs->_2y.g_coeff;
+        regs->reg_frm.src_udfy.csc_wgt_r2y = cfg_coeffs->_2y.r_coeff;
 
-        regs->reg_frm.src_udfu.csc_wgt_b2u = 128;
-        regs->reg_frm.src_udfu.csc_wgt_g2u = -85;
-        regs->reg_frm.src_udfu.csc_wgt_r2u = -43;
+        regs->reg_frm.src_udfu.csc_wgt_b2u = cfg_coeffs->_2u.b_coeff;
+        regs->reg_frm.src_udfu.csc_wgt_g2u = cfg_coeffs->_2u.g_coeff;
+        regs->reg_frm.src_udfu.csc_wgt_r2u = cfg_coeffs->_2u.r_coeff;
 
-        regs->reg_frm.src_udfv.csc_wgt_b2v = -21;
-        regs->reg_frm.src_udfv.csc_wgt_g2v = -107;
-        regs->reg_frm.src_udfv.csc_wgt_r2v = 128;
+        regs->reg_frm.src_udfv.csc_wgt_b2v = cfg_coeffs->_2v.b_coeff;
+        regs->reg_frm.src_udfv.csc_wgt_g2v = cfg_coeffs->_2v.g_coeff;
+        regs->reg_frm.src_udfv.csc_wgt_r2v = cfg_coeffs->_2v.r_coeff;
 
-        regs->reg_frm.src_udfo.csc_ofst_y  = 0;
-        regs->reg_frm.src_udfo.csc_ofst_u  = 128;
-        regs->reg_frm.src_udfo.csc_ofst_v  = 128;
+        regs->reg_frm.src_udfo.csc_ofst_y  = cfg_coeffs->_2y.offset;
+        regs->reg_frm.src_udfo.csc_ofst_u  = cfg_coeffs->_2u.offset;
+        regs->reg_frm.src_udfo.csc_ofst_v  = cfg_coeffs->_2v.offset;
 
         hal_h264e_dbg_flow("use color range %d colorspace %d", cfg_coeffs->dst_range, cfg_coeffs->color);
     } else {
