@@ -61,7 +61,7 @@ set(MPP_VERSION "0")
 set(MPP_ABI_VERSION "1")
 
 add_library(${MPP_SHARED} SHARED ${MPP_SRC})
-target_link_libraries(${MPP_SHARED} ${ASAN_LIB})
+target_link_libraries(${MPP_SHARED} PRIVATE ${ASAN_LIB})
 set_target_properties(${MPP_SHARED} PROPERTIES C_VISIBILITY_PRESET default)
 set_target_properties(${MPP_SHARED} PROPERTIES CXX_VISIBILITY_PRESET default)
 
