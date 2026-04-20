@@ -38,6 +38,36 @@ typedef struct MppTrieInfo_t {
     rk_u32      str_len     : 8;
 } MppTrieInfo;
 
+/*
+ * MppTrieResult - result type from layered walk / resolve
+ *
+ * Provides clear semantics: negative - error, 0 - leaf, 1 - subroot.
+ */
+#define MPP_TRIE_LEAF       0   /* normal leaf node found */
+#define MPP_TRIE_SUBROOT    1   /* subtree root (array), need continue */
+
+/*
+ * MppTrieStatus - special pave / walk status for objdef KmppEntry add / get
+ */
+typedef struct MppTrieStatus_t {
+    /*
+     * [in] starting node index
+     * 0        - trie root
+     * non-zero - subtree root index
+     */
+    rk_s32 root_idx;
+    /*
+     * [out] current node index (valid when return >= 0)
+     */
+    rk_s32 node_idx;
+    /*
+     * [out] parsed digit value on array pattern
+     * negative - not parsed
+     * >= zero  - parsed digit value
+     */
+    rk_s32 array_idx;
+} MppTrieStatus;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -81,6 +111,10 @@ MppTrieInfo *mpp_trie_get_info_first(MppTrie trie);
 MppTrieInfo *mpp_trie_get_info_next(MppTrie trie, MppTrieInfo *info);
 /* root base lookup function */
 MppTrieInfo *mpp_trie_get_info_from_root(void *root, const char *name);
+
+/* objdef related KmppEntry pave / walk function */
+rk_s32 mpp_trie_add_entry(MppTrie trie, MppTrieStatus *st, const char *name, KmppEntry *entry);
+rk_s32 mpp_trie_get_entry(MppTrie trie, MppTrieStatus *st, const char *name);
 
 void mpp_trie_dump(MppTrie trie, const char *func);
 #define mpp_trie_dump_f(trie)   mpp_trie_dump(trie, __FUNCTION__)

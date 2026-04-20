@@ -19,18 +19,14 @@
 #include <string.h>
 
 #include "mpp_log.h"
-#include "mpp_mem.h"
 #include "mpp_time.h"
 #include "mpp_common.h"
 
 #include "mpp_trie.h"
 
-typedef void *(*TestProc)(void *, RK_S64 time);
-
 typedef struct TestAction_t {
     const char          *name;
     void                *ctx;
-    TestProc            proc;
 } TestAction;
 
 typedef struct TestCase_t {
@@ -38,84 +34,403 @@ typedef struct TestCase_t {
     MPP_RET             ret;
 } TestCase;
 
-void *print_opt(void *ctx, RK_S64 time)
-{
-    RK_U8 **str = (RK_U8 **)ctx;
-
-    if (str && *str)
-        mpp_log("get option %-16s time %lld us\n", *str, time);
-
-    return NULL;
-}
-
 TestAction test_info[] = {
-    { "rc:mode",        &test_info[0],  print_opt},
-    { "rc:bps_target",  &test_info[1],  print_opt},
-    { "rc:bps_max",     &test_info[2],  print_opt},
-    { "rc:bps_min",     &test_info[3],  print_opt},
+    { "rc:mode",        &test_info[0]},
+    { "rc:bps_target",  &test_info[1]},
+    { "rc:bps_max",     &test_info[2]},
+    { "rc:bps_min",     &test_info[3]},
     /* test valid info end in the middle */
-    { "rc:bps",         &test_info[4],  print_opt},
+    { "rc:bps",         &test_info[4]},
 };
 
 TestCase test_case[] = {
-    { "rc:mode",                    MPP_OK, },
-    { "rc:bps_target",              MPP_OK, },
-    { "rc:bps_max",                 MPP_OK, },
-    { "rc:bps",                     MPP_OK, },
-    { "this is an error string",    MPP_NOK, },
-    { "",                           MPP_NOK, },
+    { "rc:mode",            MPP_OK, },
+    { "rc:bps_target",      MPP_OK, },
+    { "rc:bps_max",         MPP_OK, },
+    { "rc:bps",             MPP_OK, },
+    { "an invalid string",  MPP_NOK, },
+    { "",                   MPP_NOK, },
+};
+
+static const char *test_names[] = {
+    "rc:qp_min",
+    "rc:qp_max",
+    "rc:qp_step",
+    "h264:profile",
+    "h264:level",
+    "h265:profile",
+    "h265:level",
+    "ref:st:0:idx",
+    "ref:st:0:pic",
+    "ref:st:1:idx",
+    "ref:st:1:pic",
+    "ref:lt:0:idx",
+    "ref:lt:1:idx",
+    "gop:len",
+    "gop:mode",
+    "fps:num",
+    "fps:denom",
+};
+
+typedef struct TrieTestStep_t {
+    const char  *path;
+    rk_s32      is_add;     /* 1=add_entry, 0=get_entry */
+    rk_s32      expect;     /* -2=any ok, -1=must fail, 0=leaf, 1=subroot */
+    rk_s32      set_root;   /* 1=set root_idx=node_idx on success */
+    rk_s32      reset;      /* 1=memset st to zero before this step */
+    rk_u32      val;        /* entry.val for add, 0 for get */
+} TrieTestStep;
+
+static rk_s32 trie_test_run_steps(MppTrie trie, TrieTestStep *steps, rk_s32 count)
+{
+    MppTrieStatus st = {0};
+    KmppEntry entry = {0};
+    rk_s32 ret;
+    rk_s32 i;
+
+    for (i = 0; i < count; i++) {
+        TrieTestStep *s = &steps[i];
+        const char *op = s->is_add ? "add" : "get";
+
+        if (s->reset)
+            memset(&st, 0, sizeof(st));
+
+        entry.val = s->val;
+        if (s->is_add)
+            ret = mpp_trie_add_entry(trie, &st, s->path, &entry);
+        else
+            ret = mpp_trie_get_entry(trie, &st, s->path);
+
+        switch (s->expect) {
+        case -2:
+            if (ret < 0) goto fail;
+            break;
+        case -1:
+            if (ret >= 0) goto fail;
+            break;
+        case 0:
+            if (ret != MPP_TRIE_LEAF) goto fail;
+            break;
+        case 1:
+            if (ret != MPP_TRIE_SUBROOT) goto fail;
+            break;
+        }
+
+        if (s->set_root)
+            st.root_idx = st.node_idx;
+
+        if (ret == MPP_TRIE_SUBROOT && st.array_idx >= 0)
+            mpp_logi("  %-4s %-16s -> subroot (idx %d)\n", op, s->path, st.array_idx);
+        else
+            mpp_logi("  %-4s %-16s -> ok\n", op, s->path);
+        continue;
+
+    fail:
+        mpp_loge("  %-4s %-16s -> failed ret %d\n", op, s->path, ret);
+        return MPP_NOK;
+    }
+
+    return MPP_OK;
+}
+
+/*
+ * mpp_trie_raw_lookup_test - lookup before finalize (raw trie)
+ */
+static rk_s32 mpp_trie_raw_lookup_test(MppTrie trie)
+{
+    rk_s32 info_cnt = MPP_ARRAY_ELEMS(test_info);
+    rk_s64 start = mpp_time();
+    rk_s32 ret = MPP_OK;
+    rk_s32 i;
+
+    for (i = 0; i < info_cnt; i++)
+        mpp_trie_add_info(trie, test_info[i].name, &test_info[i], sizeof(test_info[i]));
+
+    mpp_logi("    add %d info entries time %lld us\n", info_cnt, mpp_time() - start);
+
+    /* lookup on raw (unfinalized) trie */
+    for (i = 0; i < (rk_s32)MPP_ARRAY_ELEMS(test_case); i++) {
+        MppTrieInfo *info = mpp_trie_get_info(trie, test_case[i].name);
+        rk_s32 ok = (info && !test_case[i].ret) || (!info && test_case[i].ret);
+
+        if (!ok) {
+            mpp_loge("    raw lookup '%s' unexpected result\n", test_case[i].name);
+            ret = MPP_NOK;
+        }
+    }
+
+    mpp_logi("    node %d, info %d, name_max %d\n",
+             mpp_trie_get_node_count(trie),
+             mpp_trie_get_info_count(trie),
+             mpp_trie_get_name_max(trie));
+
+    return ret;
+}
+
+/*
+ * mpp_trie_finalize_test - finalize then verify compacted trie
+ */
+static rk_s32 mpp_trie_finalize_test(MppTrie trie)
+{
+    rk_s32 info_cnt = MPP_ARRAY_ELEMS(test_info);
+    rk_s32 ret = MPP_OK;
+    rk_s32 i;
+
+    for (i = 0; i < info_cnt; i++)
+        mpp_trie_add_info(trie, test_info[i].name, &test_info[i], sizeof(test_info[i]));
+
+    ret = mpp_trie_add_info(trie, NULL, NULL, 0);
+    if (ret) {
+        mpp_loge("    finalize failed\n");
+        return ret;
+    }
+
+    /* lookup on finalized (compacted) trie */
+    for (i = 0; i < (rk_s32)MPP_ARRAY_ELEMS(test_case); i++) {
+        MppTrieInfo *info = mpp_trie_get_info(trie, test_case[i].name);
+        rk_s32 ok = (info && !test_case[i].ret) || (!info && test_case[i].ret);
+
+        if (!ok) {
+            mpp_loge("    finalized lookup '%s' unexpected result\n", test_case[i].name);
+            ret = MPP_NOK;
+        }
+    }
+
+    mpp_logi("    node %d, info %d, name_max %d\n",
+             mpp_trie_get_node_count(trie),
+             mpp_trie_get_info_count(trie),
+             mpp_trie_get_name_max(trie));
+
+    return ret;
+}
+
+/*
+ * mpp_trie_colon_test - colon must NOT be skipped
+ * "a:b:c" and "abc" are different paths
+ */
+static rk_s32 mpp_trie_colon_test(MppTrie trie)
+{
+    MppTrieInfo *info;
+    rk_s32 ret = MPP_NOK;
+    rk_u32 val;
+
+    val = 100;
+    ret = mpp_trie_add_info(trie, "a:b:c", &val, sizeof(val));
+    if (ret) {
+        mpp_loge("    add 'a:b:c' failed\n");
+        return ret;
+    }
+
+    val = 200;
+    ret = mpp_trie_add_info(trie, "abc", &val, sizeof(val));
+    if (ret) {
+        mpp_loge("    add 'abc' failed\n");
+        return ret;
+    }
+
+    ret = mpp_trie_add_info(trie, NULL, NULL, 0);
+    if (ret)
+        return ret;
+
+    info = mpp_trie_get_info(trie, "a:b:c");
+    if (!info || *(rk_u32 *)mpp_trie_info_ctx(info) != 100) {
+        mpp_loge("    lookup 'a:b:c' expected 100\n");
+        return MPP_NOK;
+    }
+
+    info = mpp_trie_get_info(trie, "abc");
+    if (!info || *(rk_u32 *)mpp_trie_info_ctx(info) != 200) {
+        mpp_loge("    lookup 'abc' expected 200\n");
+        return MPP_NOK;
+    }
+
+    mpp_logi("    'a:b:c'=%d  'abc'=%d  distinct OK\n", 100, 200);
+    return MPP_OK;
+}
+
+/*
+ * mpp_trie_progressive_test - progressive entry API
+ *
+ * Register full path "ref:st:16:idx", then query at
+ * different segmentation levels:
+ *   ref:st          -> subroot
+ *   ref:st:16       -> subroot (set as root for next)
+ *   ref:st:16:idx   -> leaf
+ * Also test another branch: ref:st:1, ref:st:1:idx
+ */
+static rk_s32 mpp_trie_progressive_test(MppTrie trie)
+{
+    TrieTestStep steps[] = {
+        /* register full path with relative segments */
+        /* path              add  expect  set_root  reset  val    */
+        {"ref:st:16",       1,   1,      1,        1,     0x1000},
+        {"idx",             1,   0,      0,        0,     0x1001},
+
+        /* reset and query at different levels */
+        {"ref:st",          0,   -2,     0,        1,     0     },
+        {"ref:st:16",       0,   1,      1,        0,     0     },
+        /* root now at ref:st:16, use relative path */
+        {"idx",             0,   0,      0,        0,     0     },
+
+        /* query a different branch */
+        {"ref:st:1",        0,   1,      1,        1,     0     },
+        /* root now at ref:st:1, idx may resolve via shared path */
+        {"idx",             0,   -2,     0,        0,     0     },
+    };
+
+    return trie_test_run_steps(trie, steps, MPP_ARRAY_ELEMS(steps));
+}
+
+/*
+ * mpp_trie_boundary_test - edge cases for path parsing
+ */
+static rk_s32 mpp_trie_boundary_test(MppTrie trie)
+{
+    TrieTestStep steps[] = {
+        /* path              add  expect  set_root  reset  val    */
+        {"ref:st:8",        1,   1,      1,        1,     0x2000},
+        {"field",           1,   -2,     0,        0,     0x2001},
+        /* empty trailing segment -> subroot (matches ref:st:8) */
+        {"ref:st:",         0,   -2,     0,        1,     0     },
+        /* consecutive colons -> invalid */
+        {"ref::st",         0,   -1,     0,        1,     0     },
+        /* valid subroot */
+        {"ref:st:3",        0,   1,      0,        1,     0     },
+        /* empty trailing segment on existing node -> still subroot */
+        {"ref:st:3:",       0,   1,      0,        1,     0     },
+        /* re-query same subroot */
+        {"ref:st:3",        0,   1,      1,        1,     0     },
+        /* leaf under ref:st:3 */
+        {"field",           0,   -2,     0,        0,     0     },
+    };
+
+    return trie_test_run_steps(trie, steps, MPP_ARRAY_ELEMS(steps));
+}
+
+/*
+ * mpp_trie_export_import_test - test export and import from root
+ */
+static rk_s32 mpp_trie_export_import_test(MppTrie trie_src)
+{
+    MppTrie trie_dst = NULL;
+    void *root = NULL;
+    rk_s32 ret = MPP_NOK;
+    rk_s32 i;
+
+    /* add test entries */
+    for (i = 0; i < (rk_s32)MPP_ARRAY_ELEMS(test_names); i++) {
+        rk_u32 val = i + 100;
+        ret = mpp_trie_add_info(trie_src, test_names[i], &val, sizeof(val));
+        if (ret) {
+            mpp_loge("add '%s' failed\n", test_names[i]);
+            goto done;
+        }
+    }
+
+    /* finalize the trie */
+    ret = mpp_trie_add_info(trie_src, NULL, NULL, 0);
+    if (ret)
+        goto done;
+
+    /* get root and import to new trie */
+    root = mpp_trie_get_node_root(trie_src);
+    if (!root)
+        goto done;
+
+    ret = mpp_trie_init_by_root(&trie_dst, root);
+    if (ret)
+        goto done;
+
+    /* verify lookup on imported trie */
+    for (i = 0; i < (rk_s32)MPP_ARRAY_ELEMS(test_names); i++) {
+        MppTrieInfo *info = mpp_trie_get_info(trie_dst, test_names[i]);
+        if (!info) {
+            mpp_loge("lookup '%s' on imported trie failed\n", test_names[i]);
+            ret = MPP_NOK;
+            goto done;
+        }
+    }
+
+    ret = MPP_OK;
+
+done:
+    mpp_trie_deinit(trie_dst);
+    return ret;
+}
+
+/*
+ * mpp_trie_perf_test - performance measurement
+ */
+static rk_s32 mpp_trie_perf_test(MppTrie trie)
+{
+    rk_s32 ret = MPP_NOK;
+    rk_s32 i;
+
+    /* add test entries */
+    for (i = 0; i < (rk_s32)MPP_ARRAY_ELEMS(test_names); i++) {
+        rk_u32 val = i + 100;
+        ret = mpp_trie_add_info(trie, test_names[i], &val, sizeof(val));
+        if (ret)
+            goto done;
+    }
+
+    /* finalize the trie */
+    ret = mpp_trie_add_info(trie, NULL, NULL, 0);
+    if (ret)
+        goto done;
+
+    /* use mpp_trie_timing_test for clean performance measurement */
+    mpp_trie_timing_test(trie);
+
+    ret = MPP_OK;
+
+done:
+    return ret;
+}
+
+typedef rk_s32 (*TrieTestFunc)(MppTrie);
+
+typedef struct TrieTest_t {
+    const char      *name;
+    TrieTestFunc    func;
+} TrieTest;
+
+static TrieTest trie_tests[] = {
+    {"raw_lookup",      mpp_trie_raw_lookup_test},
+    {"finalize",        mpp_trie_finalize_test},
+    {"colon",           mpp_trie_colon_test},
+    {"progressive",     mpp_trie_progressive_test},
+    {"boundary",        mpp_trie_boundary_test},
+    {"export_import",   mpp_trie_export_import_test},
+    {"perf",            mpp_trie_perf_test},
 };
 
 int main(void)
 {
-    MppTrie trie = NULL;
-    RK_S32 i;
-    RK_S64 end = 0;
-    RK_S64 start = 0;
-    RK_S32 info_cnt = MPP_ARRAY_ELEMS(test_info);
-    RK_S32 ret = MPP_OK;
+    rk_s32 ret = MPP_OK;
+    rk_s32 i;
 
-    mpp_log("mpp_trie_test start\n");
+    for (i = 0; i < (rk_s32)MPP_ARRAY_ELEMS(trie_tests); i++) {
+        const char *name = trie_tests[i].name;
+        MppTrie trie = NULL;
+        rk_s32 test_ret;
 
-    mpp_trie_init(&trie, "test_trie");
+        mpp_logi("trie %-16s test start\n", name);
 
-    start = mpp_time();
-    for (i = 0; i < info_cnt; i++)
-        mpp_trie_add_info(trie, test_info[i].name, &test_info[i], sizeof(test_info[i]));
-    end = mpp_time();
-    mpp_log("add act time %lld us\n", end - start);
+        test_ret = mpp_trie_init(&trie, name);
+        if (test_ret) {
+            mpp_loge("trie %-16s init failed\n", name);
+        } else {
+            test_ret = trie_tests[i].func(trie);
+        }
 
-    ret = mpp_trie_add_info(trie, NULL, NULL, 0);
-    if (ret) {
-        mpp_loge("mpp_trie_add_info last failed\n");
-        goto DONE;
+        mpp_logi("trie %-16s test %s\n", name, test_ret ? "failed" : "success");
+
+        mpp_trie_deinit(trie);
+        ret |= test_ret;
     }
 
-    for (i = 0; i < (RK_S32)MPP_ARRAY_ELEMS(test_case); i++) {
-        MppTrieInfo *info = NULL;
-        TestAction *act = NULL;
-        const char *name = test_case[i].name;
-
-        start = mpp_time();
-        info = mpp_trie_get_info(trie, name);
-        end = mpp_time();
-
-        if (info)
-            act = (TestAction *)mpp_trie_info_ctx(info);
-
-        if (act && act->proc)
-            act->proc(act->ctx, end - start);
-        else
-            mpp_loge("search %s failed time %lld us\n", name, end - start);
-
-        ret |= ((info && !test_case[i].ret) ||
-                (!info && test_case[i].ret)) ? MPP_OK : MPP_NOK;
-    }
-
-    mpp_trie_deinit(trie);
-
-DONE:
-    mpp_log("mpp_trie_test ret %s\n", ret ? "failed" : "success");
+    mpp_logi("mpp_trie_test ret %s\n", ret ? "failed" : "success");
 
     return ret;
 }
