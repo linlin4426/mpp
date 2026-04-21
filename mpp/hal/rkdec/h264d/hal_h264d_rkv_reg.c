@@ -473,6 +473,7 @@ MPP_RET rkv_h264d_gen_regs(void *hal, HalTaskInfo *task)
         task->dec.reg_index = 0;
     }
 
+    hal_h264d_explain_input_buffer(hal, &task->dec);
     prepare_spspps(p_hal, (RK_U64 *)reg_ctx->spspps, sizeof(reg_ctx->spspps));
     prepare_framerps(p_hal, (RK_U64 *)reg_ctx->rps, sizeof(reg_ctx->rps));
     prepare_scanlist(p_hal, (RK_U64 *)reg_ctx->sclst, sizeof(reg_ctx->sclst));
