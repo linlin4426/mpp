@@ -574,13 +574,19 @@ static void vdpp_dump_bufs(HwpqVdppParams *p_proc_param, RK_S32 index)
     }
 
     if (hwpq_vdpp_debug & HWPQ_VDPP_DUMP_IN) {
-        RK_S32 map_flag = 0;
         const HwpqVdppImgInfo *src_info = &p_proc_param->src_img_info;
+        RK_S32 map_flag = 0;
+        MPP_RET ret = MPP_OK;
 
-        mpp_mkdir_p(HWPQ_VDPP_DEBUG_DUMP_PATH); // 0755
+        ret = mpp_mkdir_p(HWPQ_VDPP_DEBUG_DUMP_PATH); // 0755
+        if (ret) {
+            hwpq_logw("failed to mkdir for dump path: %s, %s\n", HWPQ_VDPP_DEBUG_DUMP_PATH,
+                      strerror(errno));
+            return;
+        }
+
         snprintf(filename, 255, "%s/hwpq_vdpp_in_%dx%d_fmt%d.bin", HWPQ_VDPP_DEBUG_DUMP_PATH,
                  src_info->img_yrgb.w_vir, src_info->img_yrgb.h_vir, src_info->img_fmt);
-
         // fp_in = try_env_file("hwpq_vdpp_dump_in", filename, tid, index);
         fp_in = fopen(filename, "w+b");
         if (NULL == fp_in) {
@@ -591,9 +597,9 @@ static void vdpp_dump_bufs(HwpqVdppParams *p_proc_param, RK_S32 index)
                               src_info->img_cbcr.w_vir * src_info->img_cbcr.h_vir * 2;
             void *ptr = src_info->img_yrgb.addr;
 
-            if (!ptr) {
-                vdpp_map_buffer_with_fd(fd, buf_size);
-                map_flag = 1;
+            if (ptr == NULL) {
+                ptr = vdpp_map_buffer_with_fd(fd, buf_size);
+                map_flag = (ptr != NULL);
             }
 
             if (ptr == NULL)
@@ -601,22 +607,29 @@ static void vdpp_dump_bufs(HwpqVdppParams *p_proc_param, RK_S32 index)
             else
                 fwrite(ptr, 1, buf_size, fp_in);
 
-            fclose(fp_in);
             if (map_flag)
                 vdpp_unmap_buffer(ptr, buf_size);
 
             hwpq_logi("dump input buffer to: %s, fd=%d, addr=%p, size=%u\n",
                       filename, fd, ptr, buf_size);
         }
+
+        MPP_FCLOSE(fp_in);
     }
 
     if (hwpq_vdpp_debug & HWPQ_VDPP_DUMP_OUT) {
         const HwpqVdppImgInfo *dst_info = &p_proc_param->dst_img_info;
+        MPP_RET ret = MPP_OK;
 
-        mpp_mkdir_p(HWPQ_VDPP_DEBUG_DUMP_PATH); // 0755
+        ret = mpp_mkdir_p(HWPQ_VDPP_DEBUG_DUMP_PATH); // 0755
+        if (ret) {
+            hwpq_logw("failed to mkdir for dump path: %s, %s\n", HWPQ_VDPP_DEBUG_DUMP_PATH,
+                      strerror(errno));
+            return;
+        }
+
         snprintf(filename, 255, "%s/hwpq_vdpp_out_%dx%d_fmt%d.bin", HWPQ_VDPP_DEBUG_DUMP_PATH,
                  dst_info->img_yrgb.w_vir, dst_info->img_yrgb.h_vir, dst_info->img_fmt);
-
         // fp_out = try_env_file("hwpq_vdpp_dump_out", filename, tid, index);
         fp_out = fopen(filename, "w+b");
         if (NULL == fp_out) {
@@ -635,12 +648,12 @@ static void vdpp_dump_bufs(HwpqVdppParams *p_proc_param, RK_S32 index)
             if (ptr_y == NULL) {
                 if (dst_info->img_yrgb.fd == dst_info->img_cbcr.fd) {
                     ptr_y = vdpp_map_buffer_with_fd(dst_info->img_yrgb.fd, buf_size_y + buf_size_c);
-                    map_size_y = buf_size_y + buf_size_c;
+                    map_size_y = ptr_y ? (buf_size_y + buf_size_c) : 0;
                     if (ptr_c == NULL)
                         ptr_c = (char *)ptr_y + dst_info->img_cbcr.offset;
                 } else {
                     ptr_y = vdpp_map_buffer_with_fd(dst_info->img_yrgb.fd, buf_size_y);
-                    map_size_y = buf_size_y;
+                    map_size_y = ptr_y ? buf_size_y : 0;
                 }
             }
             if (ptr_c == NULL) {
@@ -648,16 +661,15 @@ static void vdpp_dump_bufs(HwpqVdppParams *p_proc_param, RK_S32 index)
                     ptr_c = (char *)ptr_y + dst_info->img_cbcr.offset;
                 else {
                     ptr_c = (char *)vdpp_map_buffer_with_fd(dst_info->img_cbcr.fd, buf_size_c);
-                    map_size_c = buf_size_c;
+                    map_size_c = ptr_c ? buf_size_c : 0;
                 }
             }
 
-            if (ptr_y)
+            if (ptr_y != NULL)
                 fwrite(ptr_y, 1, buf_size_y, fp_out);
-            if (ptr_c)
+            if (ptr_c != NULL)
                 fwrite(ptr_c, 1, buf_size_c, fp_out);
 
-            fclose(fp_out);
             if (map_size_y > 0)
                 vdpp_unmap_buffer(ptr_y, map_size_y);
             if (map_size_c > 0)
@@ -667,10 +679,9 @@ static void vdpp_dump_bufs(HwpqVdppParams *p_proc_param, RK_S32 index)
                       filename, dst_info->img_yrgb.fd, dst_info->img_cbcr.fd,
                       ptr_y, ptr_c, buf_size_y, buf_size_c);
         }
-    }
 
-    MPP_FCLOSE(fp_in);
-    MPP_FCLOSE(fp_out);
+        MPP_FCLOSE(fp_out);
+    }
 }
 
 static MppFrameFormat img_format_convert(HwpqVdppFormat img_fmt_in)
