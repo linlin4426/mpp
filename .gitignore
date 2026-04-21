@@ -102,6 +102,7 @@ Build
 #
 # Clangd
 #
+.cache
 .clangd
 .clang-format
 compile_commands.json
