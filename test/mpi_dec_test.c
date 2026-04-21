@@ -48,7 +48,7 @@ typedef struct {
     FrmCrc          checkcrc;
 } MpiDecLoopData;
 
-static int dec_simple(MpiDecLoopData *data)
+static MPP_RET dec_simple(MpiDecLoopData *data)
 {
     RK_U32 pkt_done = 0;
     RK_U32 pkt_eos  = 0;
@@ -66,6 +66,10 @@ static int dec_simple(MpiDecLoopData *data)
 
     mpp_assert(ret == MPP_OK);
     mpp_assert(slot);
+    if (NULL == slot) {
+        mpp_loge_f("get slot failed, check input file exist\n");
+        return MPP_NOK;
+    }
 
     pkt_eos = slot->eos;
 
@@ -373,8 +377,7 @@ void *thread_decode(void *arg)
     t_s = mpp_time();
 
     if (cmd->simple) {
-        while (!data->loop_end)
-            dec_simple(data);
+        while (!data->loop_end && MPP_OK == dec_simple(data));
     } else {
         /* NOTE: change output format before jpeg decoding */
         if (MPP_FRAME_FMT_IS_YUV(cmd->format) || MPP_FRAME_FMT_IS_RGB(cmd->format)) {

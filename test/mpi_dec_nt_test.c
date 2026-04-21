@@ -48,7 +48,7 @@ typedef struct {
     FrmCrc          checkcrc;
 } MpiDecLoopData;
 
-static int dec_loop(MpiDecLoopData *data)
+static MPP_RET dec_loop(MpiDecLoopData *data)
 {
     RK_U32 pkt_done = 0;
     RK_U32 pkt_eos  = 0;
@@ -66,6 +66,10 @@ static int dec_loop(MpiDecLoopData *data)
 
     mpp_assert(ret == MPP_OK);
     mpp_assert(slot);
+    if (NULL == slot) {
+        mpp_loge_f("get slot failed, check input file exist\n");
+        return MPP_NOK;
+    }
 
     pkt_eos = slot->eos;
 
@@ -281,8 +285,7 @@ void *thread_decode(void *arg)
 
     t_s = mpp_time();
 
-    while (!data->loop_end)
-        dec_loop(data);
+    while (!data->loop_end && MPP_OK == dec_loop(data));
 
     t_e = mpp_time();
     data->elapsed_time = t_e - t_s;
