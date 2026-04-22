@@ -1427,7 +1427,7 @@ static void setup_vepu580_io_buf(HalVepu580RegSet *regs, MppDevRegOffCfgs *offse
 
     mpp_dev_multi_offset_update(offsets, 161, off_in[0]);
     mpp_dev_multi_offset_update(offsets, 162, off_in[1]);
-    mpp_dev_multi_offset_update(offsets, 172, siz_out);
+    mpp_dev_multi_offset_update(offsets, 172, siz_out - 1);
     mpp_dev_multi_offset_update(offsets, 175, off_out);
 
     hal_h264e_dbg_func("leave\n");

@@ -1170,7 +1170,7 @@ static void vepu511_h265_set_hw_address(H265eV511HalContext *ctx, HevcVepu511Fra
     regs->reg0186_adr_roir   = 0;
 
     mpp_dev_multi_offset_update(ctx->reg_cfg, 174, mpp_packet_get_length(task->packet));
-    mpp_dev_multi_offset_update(ctx->reg_cfg, 172, mpp_buffer_get_size(enc_task->output));
+    mpp_dev_multi_offset_update(ctx->reg_cfg, 172, mpp_buffer_get_size(enc_task->output) - 1);
 
     regs->reg0204_pic_ofst.pic_ofst_y = mpp_frame_get_offset_y(task->frame);
     regs->reg0204_pic_ofst.pic_ofst_x = mpp_frame_get_offset_x(task->frame);

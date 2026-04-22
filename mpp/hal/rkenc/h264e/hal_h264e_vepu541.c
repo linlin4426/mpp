@@ -969,7 +969,7 @@ static void setup_vepu541_io_buf(Vepu541H264eRegSet *regs, MppDev dev,
 
     mpp_dev_set_reg_offset(dev, 71, off_in[0]);
     mpp_dev_set_reg_offset(dev, 72, off_in[1]);
-    mpp_dev_set_reg_offset(dev, 83, siz_out);
+    mpp_dev_set_reg_offset(dev, 83, siz_out - 1);
     mpp_dev_set_reg_offset(dev, 86, off_out);
 
     hal_h264e_dbg_func("leave\n");

@@ -780,7 +780,7 @@ vepu541_h265_set_patch_info(MppDev dev, H265eSyntax_new *syn, VepuFmt input_fmt,
             mpp_err_f("set input cr addr offset failed %d\n", ret);
     }
 
-    mpp_dev_set_reg_offset(dev, 83, mpp_buffer_get_size(task->output));
+    mpp_dev_set_reg_offset(dev, 83, mpp_buffer_get_size(task->output) - 1);
     if (ret)
         mpp_err_f("set output max addr offset failed %d\n", ret);
 

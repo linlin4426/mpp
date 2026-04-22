@@ -2936,7 +2936,7 @@ MPP_RET hal_h265e_v580_start(void *hal, HalEncTask *enc_task)
                 reg_base->reg0173_bsbb_addr = mpp_buffer_get_fd(enc_task->output);
 
                 mpp_dev_multi_offset_update(frm->reg_cfg, 175, offset);
-                mpp_dev_multi_offset_update(frm->reg_cfg, 172, mpp_buffer_get_size(enc_task->output));
+                mpp_dev_multi_offset_update(frm->reg_cfg, 172, mpp_buffer_get_size(enc_task->output) - 1);
             } else {
                 reg_base->reg0172_bsbt_addr = mpp_buffer_get_fd(frm->hw_tile_stream[k - 1]);
                 /* TODO: stream size relative with syntax */
@@ -2945,7 +2945,7 @@ MPP_RET hal_h265e_v580_start(void *hal, HalEncTask *enc_task)
                 reg_base->reg0175_adr_bsbs  = reg_base->reg0172_bsbt_addr;
 
                 mpp_dev_multi_offset_update(frm->reg_cfg, 175, 0);
-                mpp_dev_multi_offset_update(frm->reg_cfg, 172, mpp_buffer_get_size(frm->hw_tile_stream[k - 1]));
+                mpp_dev_multi_offset_update(frm->reg_cfg, 172, mpp_buffer_get_size(frm->hw_tile_stream[k - 1]) - 1);
             }
 
             offset = ctx->fbc_header_len;

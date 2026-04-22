@@ -1383,7 +1383,7 @@ static void setup_vepu511_io_buf(HalVepu511RegSet *regs, MppDevRegOffCfgs *offse
 
     mpp_dev_multi_offset_update(offsets, 161, off_in[0]);
     mpp_dev_multi_offset_update(offsets, 162, off_in[1]);
-    mpp_dev_multi_offset_update(offsets, 172, siz_out);
+    mpp_dev_multi_offset_update(offsets, 172, siz_out - 1);
     mpp_dev_multi_offset_update(offsets, 174, off_out);
 
     regs->reg_frm.meiw_addr = task->md_info ? mpp_buffer_get_fd(task->md_info) : 0;

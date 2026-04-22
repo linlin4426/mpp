@@ -1105,7 +1105,7 @@ void vepu540c_h265_set_hw_address(H265eV540cHalContext *ctx, hevc_vepu540c_base 
 
 
     mpp_dev_set_reg_offset(ctx->dev, 174, mpp_packet_get_length(task->packet));
-    mpp_dev_set_reg_offset(ctx->dev, 172, mpp_buffer_get_size(enc_task->output));
+    mpp_dev_set_reg_offset(ctx->dev, 172, mpp_buffer_get_size(enc_task->output) - 1);
 
     regs->reg0204_pic_ofst.pic_ofst_y = mpp_frame_get_offset_y(task->frame);
     regs->reg0204_pic_ofst.pic_ofst_x = mpp_frame_get_offset_x(task->frame);

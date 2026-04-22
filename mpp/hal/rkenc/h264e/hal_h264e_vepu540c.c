@@ -1006,7 +1006,7 @@ static void setup_vepu540c_io_buf(HalVepu540cRegSet *regs, MppDev dev,
     regs->reg_base.bsbb_addr  = fd_out;
     regs->reg_base.adr_bsbs   = fd_out;
     regs->reg_base.bsbr_addr  = fd_out;
-    mpp_dev_set_reg_offset(dev, 172, siz_out);
+    mpp_dev_set_reg_offset(dev, 172, siz_out - 1);
     mpp_dev_set_reg_offset(dev, 174, off_out);
 
     regs->reg_base.rfpt_h_addr = 0xffffffff;
