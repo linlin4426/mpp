@@ -946,10 +946,13 @@ rk_s32 mpp_trie_add_entry(MppTrie trie, MppTrieStatus *st,
     rk_s32 idx;
     rk_s32 s;
 
-    if (!p || !st || !name) {
-        mpp_loge_f("invalid param trie %p st %p name %p\n", p, st, name);
+    if (!p || !st) {
+        mpp_loge_f("invalid param trie %p st %p\n", p, st);
         return rk_nok;
     }
+
+    if (!name)
+        return mpp_trie_last_info(p);
 
     st->node_idx = -1;
     st->array_idx = -1;
