@@ -84,13 +84,9 @@ typedef enum EntryStrFlag_e {
 
 typedef enum EntryLocTblFlag_e {
     /*
-     * bit 4    - element can be accessed by kernel
-     * bit 5    - element can be accessed by userspace
-     * bit 6    - element is read-only
+     * bit 1    - array sub-root node (array pattern :N:)
      */
-    LOCTBL_KERNEL       = 0x1,
-    LOCTBL_USERSPACE    = 0x2,
-    LOCTBL_READONLY     = 0x4,
+    LOCTBL_ARRAY_SUBROOT = 0x1,
 } EntryLocTblFlag;
 
 typedef enum ElemType_e {
@@ -110,6 +106,9 @@ typedef enum ElemType_e {
     /* share memory between kernel and userspace */
     ELEM_TYPE_shm       = (ELEM_TYPE_SHARE + 0),
 
+    /* array type data */
+    ELEM_TYPE_arr       = 0x7,
+
     /* kernel access only data */
     ELEM_TYPE_KERNEL    = 0x8,
     /* kenrel object poineter */
@@ -128,8 +127,6 @@ typedef enum ElemType_e {
     /* userspace function poineter */
     ELEM_TYPE_ufp       = (ELEM_TYPE_USER + 2),
 
-    /* array type data */
-    ELEM_TYPE_arr       = 0x10,
     ELEM_TYPE_s8        = 0x11,
     ELEM_TYPE_u8        = 0x12,
     ELEM_TYPE_s16       = 0x13,
@@ -158,11 +155,11 @@ typedef union KmppEntry_u {
         } str;
         struct {
             EntryType       type            : 4;
-            EntryLocTblFlag flag            : 4;
+            EntryLocTblFlag tbl_flag        : 4;
             ElemType        elem_type       : 8;
             rk_u16          elem_size;
             rk_u16          elem_offset;
-            rk_u16          flag_offset;    /* define by ElemFlagType */
+            rk_u16          flag_offset;
         } tbl;
     };
 } KmppEntry;
