@@ -428,7 +428,7 @@ MPP_RET vdpu38x_get_fbc_off(MppFrame mframe, RK_U32 *head_stride, RK_U32 *pld_st
     RK_U32 fbc_unit_h = 0;
     RK_U32 bit_depth;
     Vdpu38xFmt fmt_type;
-    static const RK_FLOAT fmt_coeff[MPP_HAL_FMT_BUTT] = {1, 1.5, 2, 3};
+    static const RK_FLOAT fmt_coeff[MPP_HAL_FMT_BUTT] = {1.5, 1.5, 2, 3};
     RK_U32 ver_virstride = 0;
     RK_U32 fbc_hdr_stride = mpp_frame_get_fbc_hdr_stride(mframe);
     RK_U32 fbc_unit_bit_sz;
