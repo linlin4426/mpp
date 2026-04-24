@@ -911,6 +911,7 @@ static void vepu511_h265_set_prep(void *hal, HalEncTask *task, H265eV511RegSet *
 
     /* H.265 mode */
     reg_frm->reg0192_enc_pic.enc_stnd      = 1;
+    reg_frm->base_cfg.jpeg_stnd            = 0;
     /* current frame will be refered */
     reg_frm->reg0192_enc_pic.cur_frm_ref   = !syn->sp.non_reference_flag;
 

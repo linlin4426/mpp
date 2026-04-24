@@ -870,6 +870,7 @@ static void setup_vepu511_codec(HalVepu511RegSet *regs, HalH264eVepu511Ctx *ctx)
     hal_h264e_dbg_func("enter\n");
 
     regs->reg_frm.enc_pic.enc_stnd       = 0;
+    regs->reg_frm.base_cfg.jpeg_stnd     = 0;
     regs->reg_frm.enc_pic.cur_frm_ref    = slice->nal_reference_idc > 0;
     regs->reg_frm.enc_pic.bs_scp         = 1;
 

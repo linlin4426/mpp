@@ -589,6 +589,18 @@ typedef struct HevcVepu511Frame_t {
         RK_U32 slice_end_y    : 10;
         RK_U32 reserved1      : 6;
     } slice_enc_cfg1;
+
+    RK_U32 reserved256_286[31];
+
+    /* 0x0000047c reg287 */
+    struct {
+        RK_U32 jpeg_ri              : 25;
+        RK_U32 jpeg_out_mode        : 1;
+        RK_U32 jpeg_start_rst_m     : 3;
+        RK_U32 jpeg_pic_last_ecs    : 1;
+        RK_U32 reserved             : 1;
+        RK_U32 jpeg_stnd            : 1;
+    } base_cfg;
 } HevcVepu511Frame;
 
 /* class: rc/roi/aq/klut */
