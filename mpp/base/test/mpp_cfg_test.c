@@ -17,6 +17,22 @@
 
 #include "mpp_cfg_io.h"
 
+#define RUN_AND_CHECK(_tag, _call) do { \
+        ret = (_call);                    \
+        if (ret < 0) {                        \
+            mpp_loge("%s " #_tag " failed %d\n", str, ret); \
+            goto DONE;                     \
+        }                                \
+    } while (0)
+
+#define RUN_CHECK_IDX(_tag, _call) do { \
+        ret = (_call);                    \
+        if (ret < 0) {                        \
+            mpp_loge("%s " #_tag " idx %d failed %d\n", str, i, ret); \
+            goto DONE;                     \
+        }                                \
+    } while (0)
+
 static const char *str_fmt[] = {
     "log",
     "json",
@@ -54,7 +70,7 @@ static rk_s32 test_typed_arrays(MppCfgObj root)
 
     mpp_logi("test typed arrays\n");
 
-    ret = mpp_cfg_get_array(&array, "s8_array", 4);
+    ret = mpp_cfg_get_array(&array, "s8_array");
     if (ret) {
         mpp_loge("mpp_cfg_get_array s8 failed\n");
         goto DONE;
@@ -72,7 +88,7 @@ static rk_s32 test_typed_arrays(MppCfgObj root)
     }
     array = NULL;
 
-    ret = mpp_cfg_get_array(&array, "u8_array", 4);
+    ret = mpp_cfg_get_array(&array, "u8_array");
     if (ret) {
         mpp_loge("mpp_cfg_get_array u8 failed\n");
         goto DONE;
@@ -90,7 +106,7 @@ static rk_s32 test_typed_arrays(MppCfgObj root)
     }
     array = NULL;
 
-    ret = mpp_cfg_get_array(&array, "s16_array", 4);
+    ret = mpp_cfg_get_array(&array, "s16_array");
     if (ret) {
         mpp_loge("mpp_cfg_get_array s16 failed\n");
         goto DONE;
@@ -108,7 +124,7 @@ static rk_s32 test_typed_arrays(MppCfgObj root)
     }
     array = NULL;
 
-    ret = mpp_cfg_get_array(&array, "u16_array", 4);
+    ret = mpp_cfg_get_array(&array, "u16_array");
     if (ret) {
         mpp_loge("mpp_cfg_get_array u16 failed\n");
         goto DONE;
@@ -126,7 +142,7 @@ static rk_s32 test_typed_arrays(MppCfgObj root)
     }
     array = NULL;
 
-    ret = mpp_cfg_get_array(&array, "s64_array", 4);
+    ret = mpp_cfg_get_array(&array, "s64_array");
     if (ret) {
         mpp_loge("mpp_cfg_get_array s64 failed\n");
         goto DONE;
@@ -144,7 +160,7 @@ static rk_s32 test_typed_arrays(MppCfgObj root)
     }
     array = NULL;
 
-    ret = mpp_cfg_get_array(&array, "u64_array", 4);
+    ret = mpp_cfg_get_array(&array, "u64_array");
     if (ret) {
         mpp_loge("mpp_cfg_get_array u64 failed\n");
         goto DONE;
@@ -162,7 +178,7 @@ static rk_s32 test_typed_arrays(MppCfgObj root)
     }
     array = NULL;
 
-    ret = mpp_cfg_get_array(&array, "bool_array", 4);
+    ret = mpp_cfg_get_array(&array, "bool_array");
     if (ret) {
         mpp_loge("mpp_cfg_get_array bool failed\n");
         goto DONE;
@@ -182,7 +198,7 @@ static rk_s32 test_typed_arrays(MppCfgObj root)
 
     {
         const char *str_values[] = {"str0", "str1", "str2", "str3"};
-        ret = mpp_cfg_get_array(&array, "string_array", 4);
+        ret = mpp_cfg_get_array(&array, "string_array");
         if (ret) {
             mpp_loge("mpp_cfg_get_array string failed\n");
             goto DONE;
@@ -218,7 +234,7 @@ static rk_s32 test_object_array(MppCfgObj root)
 
     mpp_logi("test object array\n");
 
-    ret = mpp_cfg_get_array(&array, "object_array", 3);
+    ret = mpp_cfg_get_array(&array, "object_array");
     if (ret) {
         mpp_loge("mpp_cfg_get_array object failed\n");
         goto DONE;
@@ -303,14 +319,14 @@ static rk_s32 test_nested_array(MppCfgObj root)
 
     mpp_logi("test nested array\n");
 
-    ret = mpp_cfg_get_array(&outer_array, "nested_array", 3);
+    ret = mpp_cfg_get_array(&outer_array, "nested_array");
     if (ret) {
         mpp_loge("mpp_cfg_get_array outer failed\n");
         goto DONE;
     }
 
     for (i = 0; i < 3; i++) {
-        ret = mpp_cfg_get_array(&inner_array, NULL, 3);
+        ret = mpp_cfg_get_array(&inner_array, NULL);
         if (ret) {
             mpp_loge("mpp_cfg_get_array inner failed\n");
             goto DONE;
@@ -403,6 +419,219 @@ DONE:
     return ret;
 }
 
+static rk_s32 test_fix_raw_array(MppCfgObj root)
+{
+    const char *str = "fix_raw_arr";
+    MppCfgObj array = NULL;
+    MppCfgVal val;
+    KmppEntry vla;
+    rk_s32 elem_count = 4;
+    rk_s32 ret = rk_nok;
+    rk_s32 i;
+
+    /* vla_add_val: fixed-size simple type array */
+    RUN_AND_CHECK(get_array, mpp_cfg_get_array(&array, str));
+
+    vla.val = 0;
+    vla.vla.type = ENTRY_TYPE_VLA_INFO;
+    vla.vla.elem_size = sizeof(rk_s32);
+    vla.vla.elem_count = elem_count;
+
+    /* MPP_CFG_TYPE_s32 -> simple type */
+    RUN_AND_CHECK(set_vla,   mpp_cfg_set_vla(array, &vla, MPP_CFG_TYPE_s32));
+
+    /* check idx out of fixed range */
+    val.s32 = 1000 + elem_count * 100;
+    ret = mpp_cfg_vla_add_raw(array, elem_count, &val);
+    if (ret != rk_nok) {
+        mpp_loge("%s mpp_cfg_vla_add_raw idx %d must nok failed %d\n", str, ret);
+        ret = rk_nok;
+        goto DONE;
+    }
+
+    /* check idx in fixed range */
+    for (i = 0; i < elem_count; i++) {
+        val.s32 = 1000 + i * 100;
+        RUN_CHECK_IDX(add_raw, mpp_cfg_vla_add_raw(array, i, &val));
+    }
+
+    RUN_AND_CHECK(add,      mpp_cfg_add(root, array));
+
+    array = NULL;
+    ret = rk_ok;
+
+DONE:
+    if (ret)
+        mpp_cfg_put_all(array);
+
+    mpp_logi("test %s %s\n", str, ret ? "failed" : "success");
+
+    return ret;
+}
+
+static rk_s32 test_flex_raw_array(MppCfgObj root)
+{
+    const char *str = "flex_raw_arr";
+    MppCfgObj array = NULL;
+    MppCfgVal val;
+    KmppEntry vla;
+    rk_s32 elem_count = 4;
+    rk_s32 ret = rk_nok;
+    rk_s32 i;
+
+    /* vla_add_val: variable-count simple type array */
+    RUN_AND_CHECK(get_array, mpp_cfg_get_array(&array, str));
+
+    vla.val = 0;
+    vla.vla.type = ENTRY_TYPE_VLA_INFO;
+    vla.vla.vla_flag = VLAINFO_FLEX_COUNT;
+    vla.vla.elem_size = sizeof(rk_s32);
+    vla.vla.elem_count = elem_count;
+
+    /* MPP_CFG_TYPE_s32 -> simple type */
+    RUN_AND_CHECK(set_vla, mpp_cfg_set_vla(array, &vla, MPP_CFG_TYPE_s32));
+
+    /* check idx out of fixed range */
+    val.s32 = -1;
+    ret = mpp_cfg_vla_add_raw(array, elem_count * 2, &val);
+    if (ret != rk_nok) {
+        mpp_loge("%s mpp_cfg_vla_add_raw idx %d must nok failed %d\n", str, ret);
+        ret = rk_nok;
+        goto DONE;
+    }
+
+    for (i = 0; i < elem_count * 2; i++) {
+        val.s32 = 1000 + i * 100;
+        RUN_CHECK_IDX(add_raw, mpp_cfg_vla_add_raw(array, i, &val));
+    }
+
+    RUN_AND_CHECK(add, mpp_cfg_add(root, array));
+
+    array = NULL;
+    ret = rk_ok;
+
+DONE:
+    if (ret)
+        mpp_cfg_put_all(array);
+
+    mpp_logi("test %s %s\n", str, ret ? "failed" : "success");
+
+    return ret;
+}
+
+static rk_s32 test_fix_elem_array(MppCfgObj root)
+{
+    const char *str = "fix_elem_arr";
+    MppCfgObj array = NULL;
+    MppCfgObj elem = NULL;
+    MppCfgVal val;
+    KmppEntry vla;
+    rk_s32 elem_count = 4;
+    rk_s32 ret = rk_nok;
+    rk_s32 i;
+
+    /* vla_add_elem: fixed-size complex type array */
+    RUN_AND_CHECK(get_array, mpp_cfg_get_array(&array, str));
+
+    vla.val = 0;
+    vla.vla.type = ENTRY_TYPE_VLA_INFO;
+    vla.vla.elem_count = elem_count;
+
+    RUN_AND_CHECK(set_vla,   mpp_cfg_set_vla(array, &vla, MPP_CFG_TYPE_OBJECT));
+
+    /* check idx in fixed range */
+    for (i = 0; i < elem_count; i++) {
+        val.s32 = 100 + i;
+        RUN_CHECK_IDX(get_obj,  mpp_cfg_get_object(&elem, NULL, MPP_CFG_TYPE_s32, &val));
+        RUN_CHECK_IDX(add_elem, mpp_cfg_vla_add_elem(array, i, elem));
+        elem = NULL;
+    }
+
+    /* check idx out of fixed range */
+    val.s32 = 100 + elem_count;
+    RUN_CHECK_IDX(get_obj,  mpp_cfg_get_object(&elem, NULL, MPP_CFG_TYPE_s32, &val));
+    ret = mpp_cfg_vla_add_elem(array, elem_count, elem);
+    if (ret != rk_nok) {
+        mpp_loge("%s mpp_cfg_vla_add_elem idx %d must nok failed %d\n", str, ret);
+        ret = rk_nok;
+        goto DONE;
+    }
+    mpp_cfg_put_all(elem);
+    elem = NULL;
+
+    RUN_AND_CHECK(add,      mpp_cfg_add(root, array));
+
+    array = NULL;
+    ret = rk_ok;
+
+DONE:
+    if (ret) {
+        mpp_cfg_put_all(array);
+        mpp_cfg_put_all(elem);
+    }
+
+    mpp_logi("test %s %s\n", str, ret ? "failed" : "success");
+
+    return ret;
+}
+
+static rk_s32 test_flex_elem_array(MppCfgObj root)
+{
+    const char *str = "flex_elem_arr";
+    MppCfgObj array = NULL;
+    MppCfgObj elem = NULL;
+    MppCfgVal val;
+    KmppEntry vla;
+    rk_s32 elem_count = 3;
+    rk_s32 ret = rk_nok;
+    rk_s32 i;
+
+    /* vla_add_elem: fixed-size complex type array */
+    RUN_AND_CHECK(get_array, mpp_cfg_get_array(&array, str));
+
+    vla.val = 0;
+    vla.vla.type = ENTRY_TYPE_VLA_INFO;
+    vla.vla.vla_flag   = VLAINFO_FLEX_COUNT;
+    vla.vla.elem_count = elem_count;
+
+    RUN_AND_CHECK(set_vla,   mpp_cfg_set_vla(array, &vla, MPP_CFG_TYPE_OBJECT));
+
+    /* check idx out of fixed range */
+    val.s64 = (rk_s64)(3000LL + elem_count * 2 * 111LL);
+    RUN_AND_CHECK(get_obj,  mpp_cfg_get_object(&elem, NULL, MPP_CFG_TYPE_s32, &val));
+    ret = mpp_cfg_vla_add_elem(array, elem_count * 2, elem);
+    if (ret != rk_nok) {
+        mpp_loge("%s mpp_cfg_vla_add_elem idx %d must nok failed %d\n", str, ret);
+        ret = rk_nok;
+        goto DONE;
+    }
+    mpp_cfg_put_all(elem);
+    elem = NULL;
+
+    /* check idx in fixed range */
+    for (i = 0; i < elem_count * 2; i++) {
+        val.s64 = (rk_s64)(3000LL + i * 111LL);
+        RUN_AND_CHECK(get_obj,  mpp_cfg_get_object(&elem, NULL, MPP_CFG_TYPE_s32, &val));
+        RUN_CHECK_IDX(add_elem, mpp_cfg_vla_add_elem(array, i, elem));
+        elem = NULL;
+    }
+
+    RUN_AND_CHECK(add,      mpp_cfg_add(root, array));
+
+    array = NULL;
+    ret = rk_ok;
+
+DONE:
+    if (ret) {
+        mpp_cfg_put_all(array);
+        mpp_cfg_put_all(elem);
+    }
+
+    mpp_logi("test %s %s\n", str, ret ? "failed" : "success");
+
+    return ret;
+}
+
 int main(int argc, char *argv[])
 {
     MppCfgObj root = NULL;
@@ -486,7 +715,7 @@ int main(int argc, char *argv[])
     }
 
     mpp_logi("test basic s32 array\n");
-    ret = mpp_cfg_get_array(&array, NULL, array_size);
+    ret = mpp_cfg_get_array(&array, NULL);
     if (ret) {
         mpp_loge("mpp_cfg_get_array failed\n");
         goto DONE;
@@ -572,6 +801,30 @@ int main(int argc, char *argv[])
         goto DONE;
     }
 
+    ret = test_fix_raw_array(root);
+    if (ret) {
+        mpp_loge("test_fix_raw_array failed\n");
+        goto DONE;
+    }
+
+    ret = test_flex_raw_array(root);
+    if (ret) {
+        mpp_loge("test_simple_fix_array failed\n");
+        goto DONE;
+    }
+
+    ret = test_fix_elem_array(root);
+    if (ret) {
+        mpp_loge("test_vla_add_elem_fix failed\n");
+        goto DONE;
+    }
+
+    ret = test_flex_elem_array(root);
+    if (ret) {
+        mpp_loge("test_flex_elem_array failed\n");
+        goto DONE;
+    }
+
     mpp_cfg_dump_f(root);
 
     {
@@ -594,7 +847,7 @@ int main(int argc, char *argv[])
             goto DONE;
         obj = NULL;
 
-        ret = mpp_cfg_get_array(&simple_array, "values", 4);
+        ret = mpp_cfg_get_array(&simple_array, "values");
         if (ret)
             goto DONE;
         for (i = 0; i < 4; i++) {

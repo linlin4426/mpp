@@ -46,6 +46,7 @@ typedef enum EntryType_e {
     ENTRY_TYPE_VAL      = 0x1,  /* 32-bit value  */
     ENTRY_TYPE_STR      = 0x2,  /* string info property */
     ENTRY_TYPE_LOC_TBL  = 0x3,  /* entry location table */
+    ENTRY_TYPE_VLA_INFO = 0x4,  /* entry location table */
     ENTRY_TYPE_BUTT,
 } EntryType;
 
@@ -136,31 +137,49 @@ typedef enum ElemType_e {
     ELEM_TYPE_BUTT      = 0x16,
 } ElemType;
 
+typedef enum EntryVLAFlag_e {
+    VLAINFO_FLEX_BASE   = 0x1,
+    VLAINFO_FLEX_COUNT  = 0x2,
+} EntryVLAFlag;
+
 typedef union KmppEntry_u {
     rk_u64                  val;
     union {
         EntryType           type            : 4;
-        struct {
+        struct KmppEntryVal {
             EntryType       prop            : 4;
             EntryValFlag    flag            : 4;
             EntryValUsage   usage           : 8;
             rk_u32          reserve         : 16;
             rk_u32          val;
         } v;
-        struct {
+        struct KmppEntryStr {
             EntryType       prop            : 4;
             EntryValFlag    flag            : 4;
             rk_u32          len             : 24;
             rk_u32          offset;
         } str;
-        struct {
-            EntryType       type            : 4;
+        struct KmppEntryLocTbl {
+            EntryType       type            : 4;    /* ENTRY_TYPE_LOC_TBL */
             EntryLocTblFlag tbl_flag        : 4;
             ElemType        elem_type       : 8;
             rk_u16          elem_size;
             rk_u16          elem_offset;
             rk_u16          flag_offset;
         } tbl;
+        /*
+         * helper struct for location table for Variable Length Array (VLA)
+         * which its base offset and count offset is not fixed
+         * used only on in subroot trie root node's info
+         */
+        struct KmppEntryVLAInfo {
+            EntryType       type            : 4;    /* ENTRY_TYPE_LOC_TBL */
+            EntryVLAFlag    vla_flag        : 4;    /* vla flag */
+            rk_u16          elem_size       : 8;    /* size of each array element */
+            rk_u16          elem_count;             /* count of array element (0 for dynamic) */
+            rk_u16          count_off;              /* offset of real array count in struct */
+            rk_u16          base_off;               /* offset of real array base offset in struct */
+        } vla;
     };
 } KmppEntry;
 

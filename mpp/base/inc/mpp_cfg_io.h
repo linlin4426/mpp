@@ -55,28 +55,32 @@ typedef union MppCfgVal_u {
 } MppCfgVal;
 
 typedef void* MppCfgObj;
-typedef rk_s32 (*MppCfgObjCond)(MppCfgObj obj);
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/* object create / destroy */
 rk_s32 mpp_cfg_get_object(MppCfgObj *obj, const char *name, MppCfgType type, MppCfgVal *val);
-rk_s32 mpp_cfg_get_array(MppCfgObj *obj, const char *name, rk_s32 count);
-rk_s32 mpp_cfg_put(MppCfgObj obj);
+rk_s32 mpp_cfg_get_array(MppCfgObj *obj, const char *name);
 rk_s32 mpp_cfg_put_all(MppCfgObj obj);
 
-/* object tree build */
+/* set KmppEntry.KmppEntryLocTbl for access location */
+rk_s32 mpp_cfg_set_entry(MppCfgObj obj, KmppEntry *entry);
+/* set KmppEntry.KmppEntryArrInf for Variable Length Array (VLA) info */
+rk_s32 mpp_cfg_set_vla(MppCfgObj obj, KmppEntry *entry, MppCfgType type);
+
+/* object tree management */
 rk_s32 mpp_cfg_add(MppCfgObj root, MppCfgObj leaf);
-/* object tree release */
-rk_s32 mpp_cfg_del(MppCfgObj obj);
+/* VLA with simple raw value: s8 / u8 / s16 / u16 / s32 / u32 / f32 / f64 */
+rk_s32 mpp_cfg_vla_add_raw(MppCfgObj array, rk_s32 idx, MppCfgVal *val);
+/* VLA with complex element object: string / raw / object / array */
+rk_s32 mpp_cfg_vla_add_elem(MppCfgObj array, rk_s32 idx, MppCfgObj elem);
+/* VLA complex object detail description  */
+rk_s32 mpp_cfg_add_detail(MppCfgObj root, MppCfgObj detail);
+
 /* find by name string */
 rk_s32 mpp_cfg_find(MppCfgObj *obj, MppCfgObj root, char *name, rk_s32 type);
-
-/* attach KmppEntry for access location */
-rk_s32 mpp_cfg_set_entry(MppCfgObj obj, KmppEntry *entry);
-/* add cfg obj condition for input / output option */
-rk_s32 mpp_cfg_set_cond(MppCfgObj obj, MppCfgObjCond cond);
 
 void mpp_cfg_dump(MppCfgObj obj, const char *func);
 #define mpp_cfg_dump_f(obj) mpp_cfg_dump(obj, __FUNCTION__)

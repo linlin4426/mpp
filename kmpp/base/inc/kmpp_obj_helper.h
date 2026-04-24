@@ -104,7 +104,7 @@
                 rk_s32 elem_cnt = (rk_s32)(tbl.tbl.elem_size / elem_size); \
                 rk_s32 i; \
                 char array_name[64]; \
-                mpp_cfg_get_array(&CONCAT_US(obj, name), TO_STR(name), 0); \
+                mpp_cfg_get_array(&CONCAT_US(obj, name), TO_STR(name)); \
                 for (i = 0; i < elem_cnt; i++) { \
                     KmppEntry tmp_tbl = { .val = 0 }; \
                     MppCfgObj tmp_obj = NULL; \
