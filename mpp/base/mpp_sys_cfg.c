@@ -209,9 +209,7 @@ MPP_RET mpp_sys_dec_buf_chk_proc(MppSysDecBufChkCfg *cfg)
             if (((soc_type == ROCKCHIP_SOC_RK3538) ||
                  (soc_type == ROCKCHIP_SOC_RK3572)) &&
                 MPP_FRAME_FMT_IS_AFBC(fmt)) {
-                ext_pix = ((aligned_height == cfg->height) ||
-                           (aligned_height - cfg->height < 8)) ?
-                          8 : 0;
+                ext_pix = 8;
             }
             sys_cfg_dbg_dec_buf("height padding: %d\n", ext_pix);
             aligned_pixel = MPP_ALIGN(cfg->width, 64);
@@ -233,9 +231,7 @@ MPP_RET mpp_sys_dec_buf_chk_proc(MppSysDecBufChkCfg *cfg)
             if (((soc_type == ROCKCHIP_SOC_RK3538) ||
                  (soc_type == ROCKCHIP_SOC_RK3572)) &&
                 MPP_FRAME_FMT_IS_AFBC(fmt)) {
-                ext_pix = ((aligned_height == cfg->height) ||
-                           (aligned_height - cfg->height < 16)) ?
-                          8 : 0;
+                ext_pix = 8;
             }
             sys_cfg_dbg_dec_buf("height padding: %d\n", ext_pix);
             aligned_pixel = MPP_ALIGN(cfg->width, 64);
