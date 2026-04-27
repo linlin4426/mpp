@@ -2398,6 +2398,17 @@ static MPP_RET try_get_enc_task(MppEncImpl *enc, EncAsyncTaskInfo *task, EncAsyn
             goto TASK_DONE;
         }
 
+        if (mpp_frame_has_meta(enc->frame)) {
+            MppMeta meta = mpp_frame_get_meta(enc->frame);
+            rk_s32 idr_req = 0;
+
+            if (meta) {
+                mpp_meta_get_s32(meta, KEY_INPUT_IDR_REQ, &idr_req);
+                if (idr_req)
+                    enc->frm_cfg.force_flag |= ENC_FORCE_IDR;
+            }
+        }
+
         status->frm_pkt_rdy = 1;
         enc_dbg_detail("task frame packet ready\n");
     }
@@ -3260,6 +3271,17 @@ static MPP_RET try_get_async_task(MppEncImpl *enc, EncAsyncWait *wait)
             hal_task->flags.drop_by_fps = 1;
             ret = MPP_OK;
             goto TASK_DONE;
+        }
+
+        if (mpp_frame_has_meta(frame)) {
+            MppMeta meta = mpp_frame_get_meta(frame);
+            rk_s32 idr_req = 0;
+
+            if (meta) {
+                mpp_meta_get_s32(meta, KEY_INPUT_IDR_REQ, &idr_req);
+                if (idr_req)
+                    enc->frm_cfg.force_flag |= ENC_FORCE_IDR;
+            }
         }
 
         status->frm_pkt_rdy = 1;
