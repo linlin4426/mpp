@@ -339,39 +339,12 @@ typedef struct Vdpu38xRegCommParas_t {
     /* SWREG82_ERROR_REF_Y_VIRSTRIDE */
     RK_U32 reg82_error_ref_virstride;
 
-    union {
-        struct {
-            RK_U32 hor_y_stride;
-            RK_U32 hor_uv_stride;
-            RK_U32 y_stride;
-        } ref_stride[VDPU38X_REG_MAX_REF_CNT];
-        struct {
-            RK_U32 reg83_ref0_hor_virstride;
-            RK_U32 reg84_ref0_raster_uv_hor_virstride;
-            RK_U32 reg85_ref0_virstride;
-            RK_U32 reg86_ref1_hor_virstride;
-            RK_U32 reg87_ref1_raster_uv_hor_virstride;
-            RK_U32 reg88_ref1_virstride;
-            RK_U32 reg89_ref2_hor_virstride;
-            RK_U32 reg90_ref2_raster_uv_hor_virstride;
-            RK_U32 reg91_ref2_virstride;
-            RK_U32 reg92_ref3_hor_virstride;
-            RK_U32 reg93_ref3_raster_uv_hor_virstride;
-            RK_U32 reg94_ref3_virstride;
-            RK_U32 reg95_ref4_hor_virstride;
-            RK_U32 reg96_ref4_raster_uv_hor_virstride;
-            RK_U32 reg97_ref4_virstride;
-            RK_U32 reg98_ref5_hor_virstride;
-            RK_U32 reg99_ref5_raster_uv_hor_virstride;
-            RK_U32 reg100_ref5_virstride;
-            RK_U32 reg101_ref6_hor_virstride;
-            RK_U32 reg102_ref6_raster_uv_hor_virstride;
-            RK_U32 reg103_ref6_virstride;
-            RK_U32 reg104_ref7_hor_virstride;
-            RK_U32 reg105_ref7_raster_uv_hor_virstride;
-            RK_U32 reg106_ref7_virstride;
-        };
-    };
+    /* SWREG83 - SWREG106 */
+    struct {
+        RK_U32 hor_y_stride;
+        RK_U32 hor_uv_stride;
+        RK_U32 y_stride;
+    } ref_stride[VDPU38X_REG_MAX_REF_CNT];
 } Vdpu38xRegCommParas;
 
 typedef struct Vdpu38xRegCommonAddr_t {

@@ -450,8 +450,11 @@ MPP_RET vdpu38x_get_fbc_off(MppFrame mframe, RK_U32 *head_stride, RK_U32 *pld_st
     bit_depth = MPP_FRAME_FMT_IS_YUV_10BIT(fmt) ? 10 : 8;
     fmt_type = vdpu38x_fmt_mpp2hal(fmt);
 
+    if (*compat_ext_fbc_hdr_256_odd)
+        fbc_hdr_stride = mpp_align_256_odd(fbc_hdr_stride);
+
     /* head stride */
-    head_vir_w = MPP_ALIGN(fbc_hdr_stride, fbc_unit_w) / fbc_unit_w * 16;
+    head_vir_w = MPP_DIVUP(fbc_unit_w, fbc_hdr_stride) * 16;
     *head_stride =  head_vir_w >> 4;
 
     /* pld stride */

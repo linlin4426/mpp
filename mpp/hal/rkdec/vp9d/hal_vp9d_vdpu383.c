@@ -261,7 +261,10 @@ static MPP_RET hal_vp9d_vdpu383_gen_regs(void *hal, HalTaskInfo *task)
     RK_U32 ref_frame_width_y;
     RK_U32 ref_frame_height_y;
     RK_S32 stream_len = 0, aglin_offset = 0;
-    RK_U32 y_hor_virstride, uv_hor_virstride, y_virstride;
+    RK_U32 hor_virstride, ver_virstride, y_virstride;
+    RK_U32 fbc_head_stride = 0;
+    RK_U32 fbc_pld_stride = 0;
+    RK_U32 fbc_offset = 0;
     RK_U8  *bitstream = NULL;
     MppBuffer streambuf = NULL;
     RK_U8  ref_idx = 0;
@@ -271,8 +274,9 @@ static MPP_RET hal_vp9d_vdpu383_gen_regs(void *hal, HalTaskInfo *task)
     RK_S32 intraFlag = 0;
     MppBuffer framebuf = NULL;
     HalBuf *mv_buf = NULL;
-    RK_U32 fbc_en = 0;
     HalBuf *origin_buf = NULL;
+    RK_U32 tile4x4_coeff;
+    MppFrameFormat fmt;
 
     HalVp9dCtx *p_hal = (HalVp9dCtx*)hal;
     Vdpu38xVp9dCtx *hw_ctx = (Vdpu38xVp9dCtx*)p_hal->hw_ctx;
@@ -457,71 +461,68 @@ static MPP_RET hal_vp9d_vdpu383_gen_regs(void *hal, HalTaskInfo *task)
     // vp9 only one colmv
     regs->comm_addrs.reg217_232_colmv_ref_base[0] = hw_ctx->pre_mv_base_addr;
 
-    fbc_en = MPP_FRAME_FMT_IS_FBC(mpp_frame_get_fmt(mframe));
     reg_ref_base = regs->comm_addrs.reg170_185_ref_base;
     reg_payload_ref_base = regs->comm_addrs.reg195_210_payload_st_ref_base;
+    fmt = mpp_frame_get_fmt(mframe);
     for (i = 0; i < 3; i++) {
         ref_idx = pic_param->frame_refs[i].Index7Bits;
         ref_frame_idx = pic_param->ref_frame_map[ref_idx].Index7Bits;
-        ref_frame_width_y = pic_param->ref_frame_coded_width[ref_idx];
-        ref_frame_height_y = pic_param->ref_frame_coded_height[ref_idx];
         if (ref_frame_idx < 0x7f)
             mpp_buf_slot_get_prop(cfg->frame_slots, ref_frame_idx, SLOT_FRAME_PTR, &ref_frame);
-        if (fbc_en) {
-            y_hor_virstride = uv_hor_virstride = MPP_ALIGN(ref_frame_width_y, 64) / 64;
-            if (*compat_ext_fbc_hdr_256_odd)
-                y_hor_virstride = uv_hor_virstride = (MPP_ALIGN(ref_frame_width_y, 256) | 256) / 64;
-        } else {
-            if (ref_frame)
-                y_hor_virstride = uv_hor_virstride = (mpp_frame_get_hor_stride(ref_frame) >> 4);
-            else
-                y_hor_virstride = uv_hor_virstride = (mpp_align_128_odd_plus_64((ref_frame_width_y * bit_depth) >> 3) >> 4);
-        }
-        if (ref_frame)
-            y_virstride = y_hor_virstride * mpp_frame_get_ver_stride(ref_frame);
         else
-            y_virstride = y_hor_virstride * mpp_align_64(ref_frame_height_y);
+            ref_frame = NULL;
+        ref_frame_width_y = pic_param->ref_frame_coded_width[ref_idx];
+        ref_frame_height_y = pic_param->ref_frame_coded_height[ref_idx];
+        if (NULL != ref_frame) {
+            hor_virstride = mpp_frame_get_hor_stride(ref_frame);
+            ver_virstride = mpp_frame_get_ver_stride(ref_frame);
+            y_virstride = hor_virstride * ver_virstride;
+            if (MPP_FRAME_FMT_IS_AFBC(fmt)) {
+                mpp_loge_f("afbc format is not supported in vdpu383\n");
+            } else if (MPP_FRAME_FMT_IS_RKFBC(fmt)) {
+                vdpu38x_get_fbc_off(ref_frame, &fbc_head_stride, &fbc_pld_stride, &fbc_offset);
+                regs->comm_paras.ref_stride[i].hor_y_stride = fbc_head_stride;
+                regs->comm_paras.ref_stride[i].hor_uv_stride = fbc_pld_stride;
+                regs->comm_paras.ref_stride[i].y_stride = fbc_offset;
+            } else if (MPP_FRAME_FMT_IS_TILE(fmt)) {
+                if (vdpu38x_get_tile4x4_h_stride_coeff(fmt, &tile4x4_coeff)) {
+                    mpp_loge_f("get tile 4x4 coeff failed\n");
+                    return MPP_NOK;
+                }
+                hor_virstride = MPP_ALIGN(hor_virstride * tile4x4_coeff, 16);
+                y_virstride += y_virstride / 2;
+                regs->comm_paras.ref_stride[i].hor_y_stride = hor_virstride >> 4;
+                regs->comm_paras.ref_stride[i].hor_uv_stride = hor_virstride >> 4;
+                regs->comm_paras.ref_stride[i].y_stride = y_virstride >> 4;
+            } else {
+                regs->comm_paras.ref_stride[i].hor_y_stride = hor_virstride >> 4;
+                regs->comm_paras.ref_stride[i].hor_uv_stride = hor_virstride >> 4;
+                regs->comm_paras.ref_stride[i].y_stride = y_virstride >> 4;
+            }
+        } else {
+            hor_virstride = mpp_align_128_odd_plus_64((ref_frame_width_y * bit_depth) >> 3);
+            y_virstride = hor_virstride * mpp_align_64(ref_frame_height_y);
+
+            regs->comm_paras.ref_stride[i].hor_y_stride = hor_virstride >> 4;
+            regs->comm_paras.ref_stride[i].hor_uv_stride = hor_virstride >> 4;
+            regs->comm_paras.ref_stride[i].y_stride = y_virstride >> 4;
+        }
 
         if (ref_frame_idx < 0x7f) {
-            mpp_buf_slot_get_prop(cfg->frame_slots, ref_frame_idx, SLOT_BUFFER, &framebuf);
             if (hw_ctx->origin_bufs && mpp_frame_get_thumbnail_en(mframe) == MPP_FRAME_THUMBNAIL_ONLY) {
                 origin_buf = hal_bufs_get_buf(hw_ctx->origin_bufs, ref_frame_idx);
                 framebuf = origin_buf->buf[0];
-            }
-
-            switch (i) {
-            case 0: {
-                regs->comm_paras.reg83_ref0_hor_virstride = y_hor_virstride;
-                regs->comm_paras.reg84_ref0_raster_uv_hor_virstride = uv_hor_virstride;
-                regs->comm_paras.reg85_ref0_virstride = y_virstride;
-            } break;
-            case 1: {
-                regs->comm_paras.reg86_ref1_hor_virstride = y_hor_virstride;
-                regs->comm_paras.reg87_ref1_raster_uv_hor_virstride = uv_hor_virstride;
-                regs->comm_paras.reg88_ref1_virstride = y_virstride;
-            } break;
-            case 2: {
-                regs->comm_paras.reg89_ref2_hor_virstride = y_hor_virstride;
-                regs->comm_paras.reg90_ref2_raster_uv_hor_virstride = uv_hor_virstride;
-                regs->comm_paras.reg91_ref2_virstride = y_virstride;
-            } break;
-            default:
-                break;
-            }
-
-            /*0 map to 11*/
-            /*1 map to 12*/
-            /*2 map to 13*/
-            if (framebuf != NULL) {
-                reg_ref_base[i] = mpp_buffer_get_fd(framebuf);
-                reg_payload_ref_base[i] = mpp_buffer_get_fd(framebuf);
-            } else {
-                mpp_log("ref buff address is no valid used out as base slot index 0x%x", ref_frame_idx);
-                reg_ref_base[i] = regs->comm_addrs.reg168_decout_base;
-                reg_payload_ref_base[i] = regs->comm_addrs.reg168_decout_base;
-            }
-            mv_buf = hal_bufs_get_buf(hw_ctx->cmv_bufs, ref_frame_idx);
+            } else
+                mpp_buf_slot_get_prop(cfg->frame_slots, ref_frame_idx, SLOT_BUFFER, &framebuf);
         } else {
+            framebuf = NULL;
+        }
+
+        if (NULL != framebuf) {
+            reg_ref_base[i] = mpp_buffer_get_fd(framebuf);
+            reg_payload_ref_base[i] = mpp_buffer_get_fd(framebuf);
+        } else {
+            mpp_log("ref buff address is no valid used out as base slot index 0x%x", ref_frame_idx);
             reg_ref_base[i] = regs->comm_addrs.reg168_decout_base;
             reg_payload_ref_base[i] = regs->comm_addrs.reg168_decout_base;
         }
