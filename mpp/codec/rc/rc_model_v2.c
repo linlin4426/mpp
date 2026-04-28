@@ -130,6 +130,12 @@ MPP_RET bits_model_param_deinit(RcModelV2Ctx *ctx)
         mpp_data_deinit_v2(ctx->gop_bits);
         ctx->gop_bits = NULL;
     }
+
+    if (ctx->i_refresh_bit != NULL) {
+        mpp_data_deinit_v2(ctx->i_refresh_bit);
+        ctx->i_refresh_bit = NULL;
+    }
+
     if (ctx->motion_level != NULL) {
         mpp_data_deinit_v2(ctx->motion_level);
         ctx->motion_level = NULL;
