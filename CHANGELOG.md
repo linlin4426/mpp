@@ -63,7 +63,6 @@
 - [dec_test]: Remove unused code
 - [mpp_singleton]: Update name print
 - [hal]: Organize the relevant processes for vepu fmt
-- Rename Dolby for sdk release requirement
 - [kmpp_meta]: Disable failure log
 - [mpp_enc_cfg]: Add base:smart_en option
 - [kmpp_obj]: Add is_kobj query function
