@@ -64,10 +64,10 @@
 #ifdef KMPP_OBJ_IMPL_TYPE
 #ifdef KMPP_OBJ_HIERARCHY_ENABLE
 
-#define MPP_CFG_TYPE_ptr   MPP_CFG_TYPE_OBJECT
-#define MPP_CFG_TYPE_st    MPP_CFG_TYPE_OBJECT
-#define MPP_CFG_TYPE_starr MPP_CFG_TYPE_ARRAY
-#define ELEM_TYPE_starr    ELEM_TYPE_arr
+#define MPP_CFG_TYPE_ptr    MPP_CFG_TYPE_OBJECT
+#define MPP_CFG_TYPE_st     MPP_CFG_TYPE_OBJECT
+#define MPP_CFG_TYPE_arr    MPP_CFG_TYPE_ARRAY
+#define ELEM_TYPE_arr       ELEM_TYPE_arr
 
 #define KMPP_TYPE_TO_ELEM_TYPE(type) ({ \
     ElemType _ret = ELEM_TYPE_BUTT; \
@@ -90,7 +90,7 @@
     _ret; \
 })
 
-#define ENTRY_TO_TRIE(prefix, ftype, type, name, flag, ...) \
+#define ENTRY_TO_TRIE(prefix, ftype, etype, name, flag, ...) \
     do { \
             KmppEntry tbl = { .val = 0 }; \
             tbl.tbl.elem_offset = ((size_t)&(((KMPP_OBJ_IMPL_TYPE *)0)->CONCAT_DOT(__VA_ARGS__))); \
@@ -99,27 +99,22 @@
             tbl.tbl.flag_offset = FLAG_TYPE_TO_OFFSET(name, flag, #flag); \
             MppCfgObj CONCAT_US(obj, name) = NULL; \
             kmpp_objdef_add_entry(KMPP_OBJ_DEF(prefix), ENTRY_TO_NAME_START(name), &tbl); \
-            if (tbl.tbl.elem_type == ELEM_TYPE_starr) { \
-                rk_s32 elem_size = sizeof(type); \
-                rk_s32 elem_cnt = (rk_s32)(tbl.tbl.elem_size / elem_size); \
-                rk_s32 i; \
-                char array_name[64]; \
+            if (tbl.tbl.elem_type == ELEM_TYPE_arr) { \
                 mpp_cfg_get_array(&CONCAT_US(obj, name), TO_STR(name)); \
-                for (i = 0; i < elem_cnt; i++) { \
-                    KmppEntry tmp_tbl = { .val = 0 }; \
-                    MppCfgObj tmp_obj = NULL; \
-                    tmp_tbl.tbl.elem_offset = tbl.tbl.elem_offset + i * elem_size; \
-                    tmp_tbl.tbl.elem_size = elem_size; \
-                    tmp_tbl.tbl.elem_type = KMPP_TYPE_TO_ELEM_TYPE(type); \
-                    snprintf(array_name, sizeof(array_name), "array_%d", i); \
-                    mpp_cfg_get_object(&tmp_obj, array_name, mpp_cfg_type_from_elem_type(tmp_tbl.tbl.elem_type), NULL); \
-                    mpp_cfg_set_entry(tmp_obj, &tmp_tbl); \
-                    mpp_cfg_add(CONCAT_US(obj, name), tmp_obj); \
-                } \
-            } else \
+                KmppEntry _vla = { .val = 0 }; \
+                _vla.vla.type = ENTRY_TYPE_VLA_INFO; \
+                _vla.vla.vla_flag = 0; \
+                _vla.vla.elem_size = sizeof(etype); \
+                _vla.vla.elem_count = (rk_s32)(tbl.tbl.elem_size / sizeof(etype)); \
+                mpp_cfg_set_vla(CONCAT_US(obj, name), &_vla, \
+                    mpp_cfg_type_from_elem_type(KMPP_TYPE_TO_ELEM_TYPE(etype))); \
+                mpp_cfg_set_entry(CONCAT_US(obj, name), &tbl); \
+                mpp_cfg_add(__parent, CONCAT_US(obj, name)); \
+            } else { \
                 mpp_cfg_get_object(&CONCAT_US(obj, name), TO_STR(name), MPP_CFG_TYPE_##ftype, NULL); \
-            mpp_cfg_set_entry(CONCAT_US(obj, name), &tbl); \
-            mpp_cfg_add(__parent, CONCAT_US(obj, name)); \
+                mpp_cfg_set_entry(CONCAT_US(obj, name), &tbl); \
+                mpp_cfg_add(__parent, CONCAT_US(obj, name)); \
+            } \
             ENTRY_TO_NAME_END(name); \
     } while (0);
 #else
@@ -133,7 +128,9 @@
         kmpp_objdef_add_entry(KMPP_OBJ_DEF(prefix), ENTRY_TO_NAME_START(name), &tbl); \
         ENTRY_TO_NAME_END(name); \
     } while (0);
+
 #endif /* KMPP_OBJ_HIERARCHY_ENABLE */
+
 #else
 #define ENTRY_TO_TRIE(prefix, ftype, type, name, flag, ...)
 #endif /* KMPP_OBJ_IMPL_TYPE */
@@ -426,6 +423,7 @@ static void CONCAT_US(KMPP_OBJ_NAME, register)(void)
                              ENTRY_TO_TRIE, ENTRY_TO_TRIE, ENTRY_TO_TRIE)
         kmpp_objdef_add_entry(KMPP_OBJ_DEF(KMPP_OBJ_NAME), NULL, NULL);
         once = 0;
+
 #else
         KMPP_OBJ_DBG_LOG(TO_STR(KMPP_OBJ_NAME) " has no implementation\n");
         return;
@@ -676,6 +674,8 @@ extern "C" {
 #undef HOOK_QUERY
 #undef MPP_CFG_TYPE_ptr
 #undef MPP_CFG_TYPE_st
+#undef MPP_CFG_TYPE_arr
+#undef ELEM_TYPE_arr
 
 #undef OBJECT_HERLPER_H
 

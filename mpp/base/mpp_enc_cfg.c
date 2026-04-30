@@ -85,8 +85,8 @@
     ENTRY(prefix, s32,  rk_s32,     qp_ip,                  FLAG_REC_INC(4),                    rc, qp_delta_ip) \
     ENTRY(prefix, s32,  rk_s32,     qp_vi,                  FLAG_INCR,                          rc, qp_delta_vi) \
     ENTRY(prefix, s32,  rk_s32,     hier_qp_en,             FLAG_INCR,                          rc, hier_qp_en) \
-    STRCT(prefix, starr, rk_s32,    hier_qp_delta,          FLAG_PREV,                          rc, hier_qp_delta); \
-    STRCT(prefix, starr, rk_s32,    hier_frame_num,         FLAG_PREV,                          rc, hier_frame_num); \
+    ENTRY(prefix, arr,  rk_s32,     hier_qp_delta,          FLAG_INCR,                          rc, hier_qp_delta) \
+    ENTRY(prefix, arr,  rk_s32,     hier_frame_num,         FLAG_INCR,                          rc, hier_frame_num) \
     ENTRY(prefix, s32,  rk_s32,     stats_time,             FLAG_INCR,                          rc, stats_time) \
     ENTRY(prefix, u32,  rk_u32,     refresh_en,             FLAG_INCR,                          rc, refresh_en) \
     ENTRY(prefix, u32,  rk_u32,     refresh_mode,           FLAG_PREV,                          rc, refresh_mode) \
@@ -204,9 +204,9 @@
     ENTRY(prefix, s32,  rk_s32,     q_factor,               FLAG_INCR,                          jpeg, q_factor_ext); \
     ENTRY(prefix, s32,  rk_s32,     qf_max,                 FLAG_PREV,                          jpeg, qf_max_ext); \
     ENTRY(prefix, s32,  rk_s32,     qf_min,                 FLAG_PREV,                          jpeg, qf_min_ext); \
-    ENTRY(prefix, starr, rk_u8,     qtable_y,               FLAG_INCR,                          jpeg, qtable_y); \
-    ENTRY(prefix, starr, rk_u8,     qtable_u,               FLAG_PREV,                          jpeg, qtable_u); \
-    ENTRY(prefix, starr, rk_u8,     qtable_v,               FLAG_PREV,                          jpeg, qtable_v); \
+    ENTRY(prefix, arr,  rk_u8,      qtable_y,               FLAG_INCR,                          jpeg, qtable_y) \
+    ENTRY(prefix, arr,  rk_u8,      qtable_u,               FLAG_INCR,                          jpeg, qtable_u) \
+    ENTRY(prefix, arr,  rk_u8,      qtable_v,               FLAG_INCR,                          jpeg, qtable_v) \
     STRUCT_END(jpeg); \
     /* split config */ \
     STRUCT_START(split); \
@@ -218,20 +218,20 @@
     STRUCT_START(hw); \
     ENTRY(prefix, s32,  rk_s32,     qp_row,                 FLAG_BASE(0),                       hw, qp_delta_row) \
     ENTRY(prefix, s32,  rk_s32,     qp_row_i,               FLAG_INCR,                          hw, qp_delta_row_i) \
-    STRCT(prefix, starr, rk_u32,    aq_thrd_i,              FLAG_INCR,                          hw, aq_thrd_i) \
-    STRCT(prefix, starr, rk_u32,    aq_thrd_p,              FLAG_INCR,                          hw, aq_thrd_p) \
-    STRCT(prefix, starr, rk_s32,    aq_step_i,              FLAG_INCR,                          hw, aq_step_i) \
-    STRCT(prefix, starr, rk_s32,    aq_step_p,              FLAG_INCR,                          hw, aq_step_p) \
+    ENTRY(prefix, arr,  rk_u32,     aq_thrd_i,              FLAG_INCR,                          hw, aq_thrd_i) \
+    ENTRY(prefix, arr,  rk_u32,     aq_thrd_p,              FLAG_INCR,                          hw, aq_thrd_p) \
+    ENTRY(prefix, arr,  rk_s32,     aq_step_i,              FLAG_INCR,                          hw, aq_step_i) \
+    ENTRY(prefix, arr,  rk_s32,     aq_step_p,              FLAG_INCR,                          hw, aq_step_p) \
     ENTRY(prefix, s32,  rk_s32,     mb_rc_disable,          FLAG_INCR,                          hw, mb_rc_disable) \
-    STRCT(prefix, starr, rk_s32,    aq_rnge_arr,            FLAG_INCR,                          hw, aq_rnge_arr) \
-    STRCT(prefix, starr, rk_s32,    mode_bias,              FLAG_INCR,                          hw, mode_bias) \
+    ENTRY(prefix, arr,  rk_s32,     aq_rnge_arr,            FLAG_INCR,                          hw, aq_rnge_arr) \
+    ENTRY(prefix, arr,  rk_s32,     mode_bias,              FLAG_INCR,                          hw, mode_bias) \
     ENTRY(prefix, s32,  rk_s32,     skip_bias_en,           FLAG_INCR,                          hw, skip_bias_en) \
     ENTRY(prefix, s32,  rk_s32,     skip_sad,               FLAG_PREV,                          hw, skip_sad) \
     ENTRY(prefix, s32,  rk_s32,     skip_bias,              FLAG_PREV,                          hw, skip_bias) \
     ENTRY(prefix, s32,  rk_s32,     qbias_i,                FLAG_INCR,                          hw, qbias_i) \
     ENTRY(prefix, s32,  rk_s32,     qbias_p,                FLAG_INCR,                          hw, qbias_p) \
     ENTRY(prefix, s32,  rk_s32,     qbias_en,               FLAG_INCR,                          hw, qbias_en) \
-    STRCT(prefix, st,   rk_s32,     qbias_arr,              FLAG_INCR,                          hw, qbias_arr) \
+    ENTRY(prefix, arr, rk_s32,      qbias_arr,              FLAG_INCR,                          hw, qbias_arr) \
     ENTRY(prefix, s32,  rk_s32,     flt_str_i,              FLAG_INCR,                          hw, flt_str_i) \
     ENTRY(prefix, s32,  rk_s32,     flt_str_p,              FLAG_INCR,                          hw, flt_str_p) \
     STRUCT_END(hw); \
@@ -523,7 +523,7 @@ MPP_RET mpp_enc_cfg_extract(MppEncCfg cfg, MppCfgStrFmt fmt, char **buf)
         mpp_cfg_put_all(obj);
     }
 
-    return MPP_OK;
+    return (buf && *buf) ? MPP_OK : MPP_NOK;
 }
 
 MPP_RET mpp_enc_cfg_apply(MppEncCfg cfg, MppCfgStrFmt fmt, char *buf)
