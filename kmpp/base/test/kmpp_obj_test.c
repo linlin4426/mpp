@@ -234,6 +234,244 @@ done:
     return ret;
 }
 
+/*
+ * resize test: two arrays with cap/cnt/off fields, resize callback auto-updates offsets.
+ * Layout after resize: [KmppObjResizeTest | flags | st_arr[st_cap] | lt_arr[lt_cap]]
+ */
+typedef struct KmppObjResizeTest_t {
+    rk_s32 st_cap;
+    rk_s32 st_cnt;
+    rk_s32 st_off;
+    rk_s32 lt_cap;
+    rk_s32 lt_cnt;
+    rk_s32 lt_off;
+} KmppObjResizeTest;
+
+static void *resize_test_get_st_arr(KmppObjResizeTest *t)
+{
+    return (char *)t + t->st_off;
+}
+
+static void *resize_test_get_lt_arr(KmppObjResizeTest *t)
+{
+    return (char *)t + t->lt_off;
+}
+
+static rk_s32 resize_test_impl_resize(void *entry, KmppObj obj, const char *caller)
+{
+    KmppObjResizeTest *t = (KmppObjResizeTest *)entry;
+    KmppObjDef def = kmpp_obj_to_objdef(obj);
+    rk_s32 old_lt_off = t->lt_off;
+    rk_s32 data_off;
+
+    (void)caller;
+
+    data_off = kmpp_objdef_get_entry_size(def) + kmpp_obj_to_flags_size(obj);
+    t->st_off = data_off;
+    t->lt_off = data_off + t->st_cap * sizeof(rk_s32);
+
+    /* relocate lt array data when offset shifts */
+    if (old_lt_off && t->lt_off != old_lt_off && t->lt_cnt > 0)
+        memmove((char *)t + t->lt_off, (char *)t + old_lt_off,
+                t->lt_cnt * sizeof(rk_s32));
+
+    return rk_ok;
+}
+
+static rk_s32 kmpp_obj_resize_test(const char *name, rk_u32 flag)
+{
+    KmppObjDef def = NULL;
+    KmppObj obj = NULL;
+    KmppObjResizeTest *t;
+    void *handle_before;
+    rk_s32 *st_arr;
+    rk_s32 *lt_arr;
+    rk_s32 st_cap = 4;
+    rk_s32 lt_cap = 8;
+    rk_s32 st_cnt = 2;
+    rk_s32 lt_cnt = 5;
+    rk_s32 vla_size;
+    rk_s32 ret = rk_ok;
+    rk_s32 i;
+    (void)name;
+
+    /* register objdef with split mode */
+    ret = kmpp_objdef_register(&def, 0, sizeof(KmppObjResizeTest), "resize_test");
+    if (ret || !def) {
+        mpp_log("kmpp_objdef_register resize_test failed ret %d\n", ret);
+        goto done;
+    }
+
+    /* enable flexible entry for resize support */
+    kmpp_objdef_set_prop(def, "flex_entry", 1);
+
+    /* register resize callback */
+    kmpp_objdef_add_resize(def, resize_test_impl_resize);
+
+    /* finalize objdef: create pool */
+    kmpp_objdef_add_entry(def, NULL, NULL);
+
+    /* allocate object */
+    ret = kmpp_obj_get_f(&obj, def);
+    if (ret) {
+        mpp_log("kmpp_obj_get resize_test failed ret %d\n", ret);
+        goto done;
+    }
+
+    handle_before = obj;
+
+    /* set capacities, then resize triggers callback to update offsets */
+    t = (KmppObjResizeTest *)kmpp_obj_to_entry(obj);
+    t->st_cap = st_cap;
+    t->lt_cap = lt_cap;
+
+    vla_size = (st_cap + lt_cap) * sizeof(rk_s32);
+    ret = kmpp_obj_resize_f(obj, vla_size);
+    if (ret) {
+        mpp_log("kmpp_obj_resize resize_test failed ret %d\n", ret);
+        goto done;
+    }
+
+    /* verify handle stability: handle must NOT change after resize */
+    if (obj != handle_before) {
+        mpp_log("resize_test handle changed after resize: %p -> %p\n", handle_before, obj);
+        ret = rk_nok;
+        goto done;
+    }
+
+    /* callback should have updated offsets */
+    t = (KmppObjResizeTest *)kmpp_obj_to_entry(obj);
+    st_arr = (rk_s32 *)resize_test_get_st_arr(t);
+    lt_arr = (rk_s32 *)resize_test_get_lt_arr(t);
+
+    test_detail("resize_test st_cap %d st_off %d lt_cap %d lt_off %d vla_size %d\n",
+                t->st_cap, t->st_off, t->lt_cap, t->lt_off, vla_size);
+
+    /* write st array: cnt < cap */
+    for (i = 0; i < st_cnt; i++)
+        st_arr[i] = i;
+    t->st_cnt = st_cnt;
+
+    /* write lt array: cnt < cap */
+    for (i = 0; i < lt_cnt; i++)
+        lt_arr[i] = i * 10;
+    t->lt_cnt = lt_cnt;
+
+    /* verify st array */
+    for (i = 0; i < st_cnt; i++) {
+        if (st_arr[i] != i) {
+            mpp_log("resize_test st_arr[%d] mismatch: got %d expect %d\n",
+                    i, st_arr[i], i);
+            ret = rk_nok;
+            goto done;
+        }
+    }
+
+    /* verify lt array */
+    for (i = 0; i < lt_cnt; i++) {
+        if (lt_arr[i] != i * 10) {
+            mpp_log("resize_test lt_arr[%d] mismatch: got %d expect %d\n",
+                    i, lt_arr[i], i * 10);
+            ret = rk_nok;
+            goto done;
+        }
+    }
+
+    /* second resize with same vla_size: should skip realloc */
+    handle_before = obj;
+    ret = kmpp_obj_resize_f(obj, vla_size);
+    if (ret) {
+        mpp_log("kmpp_obj_resize second resize failed ret %d\n", ret);
+        goto done;
+    }
+
+    if (obj != handle_before) {
+        mpp_log("resize_test handle changed after second resize: %p -> %p\n", handle_before, obj);
+        ret = rk_nok;
+        goto done;
+    }
+
+    /* verify original data still intact after second resize */
+    t = (KmppObjResizeTest *)kmpp_obj_to_entry(obj);
+    st_arr = (rk_s32 *)resize_test_get_st_arr(t);
+    lt_arr = (rk_s32 *)resize_test_get_lt_arr(t);
+
+    for (i = 0; i < st_cnt; i++) {
+        if (st_arr[i] != i) {
+            mpp_log("resize_test st_arr[%d] corrupted after second resize: got %d expect %d\n",
+                    i, st_arr[i], i);
+            ret = rk_nok;
+            goto done;
+        }
+    }
+
+    for (i = 0; i < lt_cnt; i++) {
+        if (lt_arr[i] != i * 10) {
+            mpp_log("resize_test lt_arr[%d] corrupted after second resize: got %d expect %d\n",
+                    i, lt_arr[i], i * 10);
+            ret = rk_nok;
+            goto done;
+        }
+    }
+
+    test_detail("resize_test second resize handle stable, data intact\n");
+
+    /* third resize with larger caps: callback relocates lt data to new offset */
+    handle_before = obj;
+    t = (KmppObjResizeTest *)kmpp_obj_to_entry(obj);
+    t->st_cap = st_cap * 2;
+    t->lt_cap = lt_cap * 2;
+    vla_size = (t->st_cap + t->lt_cap) * sizeof(rk_s32);
+
+    ret = kmpp_obj_resize_f(obj, vla_size);
+    if (ret) {
+        mpp_log("kmpp_obj_resize third resize failed ret %d\n", ret);
+        goto done;
+    }
+
+    /* callback relocated lt data, verify both arrays still correct */
+    t = (KmppObjResizeTest *)kmpp_obj_to_entry(obj);
+    st_arr = (rk_s32 *)resize_test_get_st_arr(t);
+    lt_arr = (rk_s32 *)resize_test_get_lt_arr(t);
+
+    for (i = 0; i < st_cnt; i++) {
+        if (st_arr[i] != i) {
+            mpp_log("resize_test st_arr[%d] corrupted after third resize: got %d expect %d\n",
+                    i, st_arr[i], i);
+            ret = rk_nok;
+            goto done;
+        }
+    }
+
+    for (i = 0; i < lt_cnt; i++) {
+        if (lt_arr[i] != i * 10) {
+            mpp_log("resize_test lt_arr[%d] corrupted after third resize: got %d expect %d\n",
+                    i, lt_arr[i], i * 10);
+            ret = rk_nok;
+            goto done;
+        }
+    }
+
+    test_detail("resize_test third resize caps doubled, callback relocated lt cnt data\n");
+
+    /* put the resized object */
+    ret = kmpp_obj_put_f(obj);
+    obj = NULL;
+
+done:
+    if (obj) {
+        kmpp_obj_put_f(obj);
+        obj = NULL;
+    }
+
+    if (def) {
+        kmpp_objdef_put(def);
+        def = NULL;
+    }
+
+    return ret;
+}
+
 static rk_s32 kmpp_shm_test(const char *name, rk_u32 flag)
 {
     rk_u32 sizes[] = {512, SZ_4K, SZ_16K, SZ_128K, SZ_256K, SZ_1M, SZ_4M, SZ_16M};
@@ -319,6 +557,11 @@ static KmppObjTest obj_tests[] = {
         "kmpp_shm_test",
         0,
         kmpp_shm_test,
+    },
+    {
+        "resize_test",
+        0,
+        kmpp_obj_resize_test,
     },
 };
 

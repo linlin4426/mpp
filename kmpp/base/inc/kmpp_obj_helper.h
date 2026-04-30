@@ -26,12 +26,14 @@
 #warning "KMPP_OBJ_FUNC_INIT            - add object init function"
 #warning "KMPP_OBJ_FUNC_DEINIT          - add object deinit function"
 #warning "KMPP_OBJ_FUNC_DUMP            - add object dump function"
+#warning "KMPP_OBJ_FUNC_RESIZE          - add object resize callback"
 #warning "KMPP_OBJ_SGLN                 - singleton macro (default MPP_SINGLETON)"
 #warning "KMPP_OBJ_SGLN_ID              - add object singleton id for singleton macro"
 #warning "KMPP_OBJ_FUNC_EXPORT_DISABLE  - disable function exprot by EXPORT_SYMBOL"
 #warning "KMPP_OBJ_ACCESS_DISABLE       - disable access function creation"
 #warning "KMPP_OBJ_SHARE_DISABLE        - disable object sharing by /dev/kmpp_objs to userspace"
 #warning "KMPP_OBJ_HIERARCHY_ENABLE     - enable hierarchy name creation"
+#warning "KMPP_OBJ_FLEX_ENTRY_ENABLE    - enable flexible entry allocation (VLA support)"
 #warning "KMPP_OBJ_MISMATCH_LOG_DISABLE - disable entry query mismatch log"
 
 #ifndef KMPP_OBJ_NAME
@@ -421,6 +423,9 @@ static void CONCAT_US(KMPP_OBJ_NAME, register)(void)
 
         KMPP_OBJ_ENTRY_TABLE(KMPP_OBJ_NAME, ENTRY_TO_TRIE, ENTRY_TO_TRIE,
                              ENTRY_TO_TRIE, ENTRY_TO_TRIE, ENTRY_TO_TRIE)
+#if defined(KMPP_OBJ_FLEX_ENTRY_ENABLE)
+        kmpp_objdef_set_prop(KMPP_OBJ_DEF(KMPP_OBJ_NAME), "flex_entry", 1);
+#endif
         kmpp_objdef_add_entry(KMPP_OBJ_DEF(KMPP_OBJ_NAME), NULL, NULL);
         once = 0;
 
@@ -445,6 +450,9 @@ static void CONCAT_US(KMPP_OBJ_NAME, register)(void)
 #endif
 #if defined(KMPP_OBJ_FUNC_DUMP)
     kmpp_objdef_add_dump(KMPP_OBJ_DEF(KMPP_OBJ_NAME), KMPP_OBJ_FUNC_DUMP);
+#endif
+#if defined(KMPP_OBJ_FUNC_RESIZE)
+    kmpp_objdef_add_resize(KMPP_OBJ_DEF(KMPP_OBJ_NAME), KMPP_OBJ_FUNC_RESIZE);
 #endif
 #if !defined(KMPP_OBJ_SHARE_DISABLE) && defined(__KERNEL__)
     kmpp_objdef_share(KMPP_OBJ_DEF(KMPP_OBJ_NAME));
@@ -655,12 +663,14 @@ extern "C" {
 #undef KMPP_OBJ_FUNC_DEINIT
 #undef KMPP_OBJ_FUNC_IOCTL
 #undef KMPP_OBJ_FUNC_DUMP
+#undef KMPP_OBJ_FUNC_RESIZE
 #undef KMPP_OBJ_SGLN_ID
 #undef KMPP_OBJ_FUNC_EXPORT_DISABLE
 #undef KMPP_OBJ_ACCESS_DISABLE
 #undef KMPP_OBJ_SHARE_DISABLE
 #undef KMPP_OBJ_HIERARCHY_ENABLE
 #undef KMPP_OBJ_MISMATCH_LOG_DISABLE
+#undef KMPP_OBJ_FLEX_ENTRY_ENABLE
 
 /* undef tmp macro */
 #undef ENTRY_TO_TRIE

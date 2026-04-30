@@ -1,6 +1,40 @@
 /* SPDX-License-Identifier: Apache-2.0 OR MIT */
 /*
  * Copyright (c) 2024 Rockchip Electronics Co., Ltd.
+ *
+ * kmpp_obj.h - Kernel MPP object management
+ *
+ * Memory layout (two modes):
+ *
+ * 1. Normal mode (flex_entry = 0): single contiguous allocation from pool
+ *
+ *    +----------+----------+----------+----------+----------+
+ *    | KmppObj  |  priv[]  | entry[]  | extra[]  | flags[]  |
+ *    +----------+----------+----------+----------+----------+
+ *    | obj_size |priv_size |entry_size|extra_size|flag_size |
+ *                          |<---------- buf_size ---------->|
+ *
+ * 2. Split mode (flex_entry = 1): impl and entry are separate allocations
+ *    Entry buffer can be resized via kmpp_obj_resize() to append VLA data.
+ *
+ *    Pool allocation (fixed):       Entry buffer (resizable):
+ *    +----------+----------+       +----------+----------+----------+----------+
+ *    | KmppObj  |  priv[]  |       | entry[]  | extra[]  | flags[]  |  vla[]   |
+ *    +----------+----------+       +----------+----------+----------+----------+
+ *    | obj_size |priv_size |       |entry_size|extra_size|flag_size | vla_size |
+ *                                  |<------------ entry_buf_size ------------->|
+ *
+ *    - obj_size   : sizeof(KmppObjImpl) (fixed)
+ *    - priv_size  : private data size, from KMPP_OBJ_PRIV_SIZE (compile-time)
+ *    - entry_size : struct size from KMPP_OBJ_IMPL_TYPE (compile-time)
+ *    - extra_size : extra bytes between entry and flags, from KMPP_OBJ_EXTRA_SIZE (compile-time)
+ *    - flag_size  : update flags bitmap, auto-computed from flag_max_pos (registration-time)
+ *    - vla_size   : variable-length array data, appended by kmpp_obj_resize() (runtime)
+ *
+ *    kmpp_obj_resize(obj, vla_size):
+ *      - Computes buf_size = entry_size + extra_size + flag_size + vla_size internally
+ *      - Skips realloc if buf_size <= current entry_buf_size
+ *      - Calls def->resize callback to update VLA offsets after successful resize
  */
 
 #ifndef KMPP_OBJ_H
@@ -12,6 +46,7 @@ typedef rk_s32 (*KmppObjInit)(void *entry, KmppObj obj, const char *caller);
 typedef rk_s32 (*KmppObjDeinit)(void *entry, KmppObj obj, const char *caller);
 typedef rk_s32 (*KmppObjPreset)(void *entry, KmppObj obj, const char *val, const char *caller);
 typedef rk_s32 (*KmppObjDump)(void *entry);
+typedef rk_s32 (*KmppObjResizeCb)(void *entry, KmppObj obj, const char *caller);
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,6 +75,8 @@ rk_s32 kmpp_objdef_add_deinit(KmppObjDef def, KmppObjDeinit deinit);
 rk_s32 kmpp_objdef_add_preset(KmppObjDef def, KmppObjPreset preset);
 /* userspace object dump function register */
 rk_s32 kmpp_objdef_add_dump(KmppObjDef def, KmppObjDump dump);
+/* userspace object resize callback: called after successful entry realloc */
+rk_s32 kmpp_objdef_add_resize(KmppObjDef def, KmppObjResizeCb resize);
 
 rk_s32 kmpp_objdef_set_prop(KmppObjDef def, const char *op, rk_s32 value);
 
@@ -59,6 +96,8 @@ rk_s32 kmpp_obj_get_by_name(KmppObj *obj, const char *name, const char *caller);
 rk_s32 kmpp_obj_get_by_sptr(KmppObj *obj, KmppShmPtr *sptr, const char *caller);
 /* release object and impl head */
 rk_s32 kmpp_obj_put(KmppObj obj, const char *caller);
+/* resize object: append vla_size bytes after entry+flags (skip if buffer already large enough) */
+rk_s32 kmpp_obj_resize(KmppObj obj, rk_s32 vla_size, const char *caller);
 /* release impl head only */
 rk_s32 kmpp_obj_impl_put(KmppObj obj, const char *caller);
 /* setup object to a preset value by string args input */
@@ -72,6 +111,7 @@ rk_s32 kmpp_obj_ioctl(KmppObj ctx, rk_s32 cmd, KmppObj in, KmppObj *out, const c
 #define kmpp_obj_get_by_name_f(obj, name)       kmpp_obj_get_by_name(obj, name, __FUNCTION__)
 #define kmpp_obj_get_by_sptr_f(obj, sptr)       kmpp_obj_get_by_sptr(obj, sptr, __FUNCTION__)
 #define kmpp_obj_put_f(obj)                     kmpp_obj_put(obj, __FUNCTION__)
+#define kmpp_obj_resize_f(obj, extra)           kmpp_obj_resize(obj, extra, __FUNCTION__)
 #define kmpp_obj_impl_put_f(obj)                kmpp_obj_impl_put(obj, __FUNCTION__)
 #define kmpp_obj_preset_f(obj, arg)             kmpp_obj_preset(obj, arg, __FUNCTION__)
 #define kmpp_obj_check_f(obj)                   kmpp_obj_check(obj, __FUNCTION__)

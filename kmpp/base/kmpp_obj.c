@@ -125,10 +125,13 @@ typedef struct KmppObjDefImpl_t {
     MppMemPool pool;
     /* object define from kernel or userspace */
     rk_s32 is_kobj;
+    /* split allocation: KmppObjImpl and entry are separate allocations */
+    rk_s32 flex_entry;
     KmppObjInit init;
     KmppObjDeinit deinit;
     KmppObjPreset preset;
     KmppObjDump dump;
+    KmppObjResizeCb resize;
 
     /* comment data of userspace / kernel objdef */
     MppTrie trie;
@@ -164,6 +167,8 @@ typedef struct KmppObjImpl_t {
     void *priv;
     KmppShmPtr *shm;
     void *entry;
+    /* current entry buffer size for split objects */
+    rk_s32 entry_buf_size;
 } KmppObjImpl;
 
 typedef struct KmppKtrieInfo_t {
@@ -647,10 +652,12 @@ static rk_s32 create_objdef_mem_pool(KmppObjDefImpl *impl)
         impl->buf_size = impl->entry_size + flag_size;
     }
 
-    impl->all_size = sizeof(KmppObjImpl) + impl->priv_size + impl->buf_size;
+    impl->all_size = sizeof(KmppObjImpl) + impl->priv_size +
+                     (impl->flex_entry ? 0 : impl->buf_size);
 
-    obj_dbg_pool("objdef %-16s entry size %4d buf size %4d -> %4d\n", impl->name,
-                 impl->entry_size, old_size, impl->all_size);
+    obj_dbg_pool("objdef %-16s entry size %4d buf size %4d -> %4d%s\n", impl->name,
+                 impl->entry_size, old_size, impl->all_size,
+                 impl->flex_entry ? " (flex_entry)" : "");
 
     impl->pool = mpp_mem_pool_init_f(impl->name, impl->all_size);
     if (!impl->pool)
@@ -794,6 +801,18 @@ rk_s32 kmpp_objdef_add_dump(KmppObjDef def, KmppObjDump dump)
     return rk_nok;
 }
 
+rk_s32 kmpp_objdef_add_resize(KmppObjDef def, KmppObjResizeCb resize)
+{
+    if (def) {
+        KmppObjDefImpl *impl = (KmppObjDefImpl *)def;
+
+        impl->resize = resize;
+        return rk_ok;
+    }
+
+    return rk_nok;
+}
+
 rk_s32 kmpp_objdef_set_prop(KmppObjDef def, const char *op, rk_s32 value)
 {
     if (def && op) {
@@ -801,6 +820,8 @@ rk_s32 kmpp_objdef_set_prop(KmppObjDef def, const char *op, rk_s32 value)
 
         if (!strcmp(op, "disable_mismatch_log")) {
             impl->disable_mismatch_log = (value != 0) ? 1 : 0;
+        } else if (!strcmp(op, "flex_entry")) {
+            impl->flex_entry = (value != 0) ? 1 : 0;
         } else {
             mpp_loge_f("unknown property %s value %d\n", op, value);
             return rk_nok;
@@ -945,7 +966,7 @@ static KmppObjImpl *_get_obj_from_def(KmppObjs *p, KmppObjDefImpl *def, KmppShmP
     rk_u8 *base;
 
     if (!impl) {
-        mpp_loge("%s get obj %s impl %d failed at %s\n",
+        mpp_loge("%s get obj %s size %d failed at %s\n",
                  func, def->name, def->all_size, caller);
         return NULL;
     }
@@ -958,20 +979,32 @@ static KmppObjImpl *_get_obj_from_def(KmppObjs *p, KmppObjDefImpl *def, KmppShmP
     if (def->priv_size) {
         impl->priv = base;
         base += def->priv_size;
-    } else {
-        impl->priv = NULL;
     }
 
     if (shm && p) {
+        /* kernel object: entry from shared memory */
         impl->shm = shm;
         impl->entry = (void *)(shm->uptr + p->entry_offset);
-
-        /* write userspace object address to share memory userspace private value */
         *(RK_U64 *)(shm->uptr + p->priv_offset) = (RK_U64)(intptr_t)impl;
 
         obj_dbg_flow("%s get kobj %-16s - %p entry [u:k] %llx:%llx at %s\n", func,
                      def->name, impl, shm->uaddr, shm->kaddr, caller);
+    } else if (def->flex_entry) {
+        /* flexible entry: allocate entry + flags separately */
+        impl->shm = NULL;
+        impl->entry = mpp_calloc_size(rk_u8, def->buf_size);
+        if (!impl->entry) {
+            mpp_loge("%s alloc flex entry %s size %d failed at %s\n",
+                     func, def->name, def->buf_size, caller);
+            mpp_mem_pool_put(def->pool, impl, caller);
+            return NULL;
+        }
+        impl->entry_buf_size = def->buf_size;
+
+        obj_dbg_flow("%s get flex %-16s - %p entry %p at %s\n", func,
+                     def->name, impl, impl->entry, caller);
     } else {
+        /* normal: entry contiguous with impl */
         impl->shm = NULL;
         impl->entry = base;
 
@@ -1150,12 +1183,86 @@ rk_s32 kmpp_obj_put(KmppObj obj, const char *caller)
             impl->shm = NULL;
         }
 
+        if (def->flex_entry) {
+            /* split allocation: free entry buffer, return impl to pool */
+            MPP_FREE(impl->entry);
+        }
+
         mpp_mem_pool_put(def->pool, impl, caller);
 
         return rk_ok;
     }
 
     return rk_nok;
+}
+
+rk_s32 kmpp_obj_resize(KmppObj obj, rk_s32 vla_size, const char *caller)
+{
+    KmppObjImpl *impl;
+    KmppObjDefImpl *def;
+    rk_s32 base_size;
+    rk_s32 buf_size;
+
+    if (!obj) {
+        mpp_loge_f("invalid param obj NULL at %s\n", caller);
+        return rk_nok;
+    }
+
+    if (vla_size < 0) {
+        mpp_loge_f("invalid vla_size %d at %s\n", vla_size, caller);
+        return rk_nok;
+    }
+
+    impl = (KmppObjImpl *)obj;
+    def = impl->def;
+
+    if (!def) {
+        mpp_loge_f("obj has no def at %s\n", caller);
+        return rk_nok;
+    }
+
+    if (!def->flex_entry) {
+        mpp_loge_f("obj %s resize not allowed for non-split objdef at %s\n",
+                   def->name, caller);
+        return rk_nok;
+    }
+
+    /* base_size = entry struct + flags, vla_size = variable-length data after flags */
+    base_size = def->entry_size + kmpp_obj_to_flags_size(obj);
+    buf_size = base_size + vla_size;
+
+    /* skip realloc if existing buffer is large enough */
+    if (buf_size <= impl->entry_buf_size) {
+        obj_dbg_flow("flex obj %-16s resize skip %d <= %d at %s\n",
+                     def->name, buf_size, impl->entry_buf_size, caller);
+
+        if (def->resize)
+            def->resize(impl->entry, impl, caller);
+
+        return rk_ok;
+    }
+
+    /* flex entry: only realloc entry buffer, handle stays stable */
+    rk_s32 old_buf_size = impl->entry_buf_size;
+    void *new_entry = mpp_realloc_size(impl->entry, rk_u8, buf_size);
+
+    if (!new_entry) {
+        mpp_loge_f("flex obj %s resize entry to %d failed at %s\n",
+                   def->name, buf_size, caller);
+        return rk_nok;
+    }
+
+    memset((rk_u8 *)new_entry + old_buf_size, 0, buf_size - old_buf_size);
+    impl->entry = new_entry;
+    impl->entry_buf_size = buf_size;
+
+    obj_dbg_flow("flex obj %-16s resize entry %d -> %d at %s\n",
+                 def->name, old_buf_size, buf_size, caller);
+
+    if (def->resize)
+        def->resize(new_entry, impl, caller);
+
+    return rk_ok;
 }
 
 rk_s32 kmpp_obj_impl_put(KmppObj obj, const char *caller)
@@ -1169,6 +1276,9 @@ rk_s32 kmpp_obj_impl_put(KmppObj obj, const char *caller)
         if (def) {
             if (def->deinit)
                 def->deinit(impl->entry, impl, caller);
+
+            if (def->flex_entry)
+                MPP_FREE(impl->entry);
 
             mpp_assert(def->pool);
             mpp_mem_pool_put(def->pool, impl, caller);
