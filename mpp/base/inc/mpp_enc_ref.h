@@ -23,6 +23,12 @@
 #define REF_MODE_IS_LT_MODE(mode)   ((mode > REF_MODE_LT) && (mode < REF_MODE_LT_BUTT))
 #define REF_MODE_IS_ST_MODE(mode)   ((mode > REF_MODE_ST) && (mode < REF_MODE_ST_BUTT))
 
+#define MPP_REF_ST_ARR(r)  ((MppEncRefStFrmCfg *)((char *)(r) + (r)->st_cfg_off))
+#define MPP_REF_LT_ARR(r)  ((MppEncRefLtFrmCfg *)((char *)(r) + (r)->lt_cfg_off))
+
+/*
+ * MppEncCpbInfo - CPB information computed from reference configuration
+ */
 typedef struct MppEncCpbInfo_t {
     RK_S32              dpb_size;
     RK_S32              max_lt_cnt;
@@ -34,35 +40,47 @@ typedef struct MppEncCpbInfo_t {
     RK_S32              st_gop;
 } MppEncCpbInfo;
 
+/*
+ * MppEncRefCfgImpl - offset-based VLA header for ref configuration
+ *
+ * Memory layout after kmpp_obj_resize:
+ *   [ MppEncRefCfgImpl ] [ update flags ] [ st_cfg[] ] [ lt_cfg[] ]
+ *   ^                                     ^            ^
+ *   entry                                 st_cfg_off   lt_cfg_off
+ *
+ * lt_cfg_cap / st_cfg_cap : total capacity (set at resize time)
+ * lt_cfg_cnt / st_cfg_cnt : actual entry count (incremented by add)
+ */
 typedef struct MppEncRefCfgImpl_t {
-    const char          *name;
-    RK_S32              ready;
-    RK_U32              debug;
-
-    /* config from user */
-    RK_S32              keep_cpb;
-    RK_S32              max_lt_cfg;
-    RK_S32              max_st_cfg;
-    RK_S32              lt_cfg_cnt;
-    RK_S32              st_cfg_cnt;
-    RK_S32              max_tlayers;
-    MppEncRefLtFrmCfg   *lt_cfg;
-    MppEncRefStFrmCfg   *st_cfg;
-
-    /* generated parameter for MppEncRefs */
-    MppEncCpbInfo       cpb_info;
+    RK_S32          keep_cpb;
+    RK_S32          lt_cfg_cap;     /* LT total capacity */
+    RK_S32          st_cfg_cap;     /* ST total capacity */
+    RK_U32          lt_cfg_off;     /* offset to lt_cfg[] */
+    RK_U32          st_cfg_off;     /* offset to st_cfg[] */
+    RK_S32          lt_cfg_cnt;     /* LT actual entry count */
+    RK_S32          st_cfg_cnt;     /* ST actual entry count */
+    RK_S32          new_lt_cfg_cap; /* pending new LT capacity for resize */
+    RK_S32          new_st_cfg_cap; /* pending new ST capacity for resize */
+    RK_S32          max_tlayers;    /* max temporal layers (computed) */
+    RK_S32          ready;          /* validation result */
+    MppEncCpbInfo   cpb_info;       /* computed CPB info */
 } MppEncRefCfgImpl;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-MppEncRefCfg mpp_enc_ref_default(void);
+/* kmpp_obj pool functions */
+rk_s32 mpp_enc_ref_cfg_get(MppEncRefCfg *obj);
+rk_s32 mpp_enc_ref_cfg_put(MppEncRefCfg obj);
+rk_s32 mpp_enc_ref_cfg_dump(MppEncRefCfg obj, const char *caller);
+
+/* object init with specified capacities */
+MPP_RET mpp_enc_ref_cfg_setup(MppEncRefCfg *obj, RK_S32 lt_cnt, RK_S32 st_cnt);
+
+/* internal helpers */
 MPP_RET mpp_enc_ref_cfg_copy(MppEncRefCfg dst, MppEncRefCfg src);
 MppEncCpbInfo *mpp_enc_ref_cfg_get_cpb_info(MppEncRefCfg ref);
-
-#define check_is_mpp_enc_ref_cfg(ref) _check_is_mpp_enc_ref_cfg(__FUNCTION__, ref)
-MPP_RET _check_is_mpp_enc_ref_cfg(const char *func, void *ref);
 
 #ifdef __cplusplus
 }

@@ -50,8 +50,9 @@ typedef enum MppSingletonId_e {
     MPP_SGLN_PACKET,
     /* userspace system module */
     MPP_SGLN_SYS_CFG,
-    MPP_SGLN_ENC_CFG,
     MPP_SGLN_DEC_CFG,
+    MPP_SGLN_ENC_CFG,
+    MPP_SGLN_ENC_REF_CFG,
     MPP_SGLN_ENC_RC_API,
 } MppSingletonId;
 

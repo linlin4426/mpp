@@ -100,7 +100,7 @@ MPP_RET h264e_vepu_stream_amend_config(HalH264eVepuStreamAmend *ctx,
                                        MppPacket packet, MppEncCfgSet *cfg,
                                        H264eSlice *slice, H264ePrefixNal *prefix)
 {
-    MppEncRefCfgImpl *ref = (MppEncRefCfgImpl *)cfg->ref_cfg;
+    MppEncRefCfgImpl *ref = (MppEncRefCfgImpl *)kmpp_obj_to_entry(cfg->ref_cfg);
     MppEncH264Cfg    *h264 = &cfg->h264;
     MppEncH264HwCfg  *hw_cfg = &h264->hw_cfg;
 

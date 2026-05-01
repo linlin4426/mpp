@@ -204,7 +204,7 @@ MPP_RET mpp_enc_refs_deinit(MppEncRefs *refs)
 
 MPP_RET mpp_enc_refs_set_cfg(MppEncRefs refs, MppEncRefCfg ref_cfg)
 {
-    if (NULL == refs || (ref_cfg && check_is_mpp_enc_ref_cfg(ref_cfg))) {
+    if (NULL == refs || !kmpp_obj_to_entry(ref_cfg)) {
         mpp_err_f("invalid input refs %p ref_cfg %p\n", refs, ref_cfg);
         return MPP_ERR_VALUE;
     }
@@ -213,12 +213,7 @@ MPP_RET mpp_enc_refs_set_cfg(MppEncRefs refs, MppEncRefCfg ref_cfg)
 
     MppEncRefsImpl *p = (MppEncRefsImpl *)refs;
     EncVirtualCpb *cpb = &p->cpb;
-    MppEncRefCfgImpl *cfg = NULL;
-
-    if (NULL == ref_cfg)
-        ref_cfg = mpp_enc_ref_default();
-
-    cfg = (MppEncRefCfgImpl *)ref_cfg;
+    MppEncRefCfgImpl *cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref_cfg);
 
     p->ref_cfg = cfg;
     p->changed |= ENC_REFS_REF_CFG_CHANGED;
@@ -237,7 +232,7 @@ MPP_RET mpp_enc_refs_set_cfg(MppEncRefs refs, MppEncRefCfg ref_cfg)
 
         for (i = 0; i < cfg->lt_cfg_cnt; i++) {
             RefsCnt *lt_cnt = &cpb->lt_cnter[i];
-            MppEncRefLtFrmCfg *lt_cfg = &cfg->lt_cfg[i];
+            MppEncRefLtFrmCfg *lt_cfg = &MPP_REF_LT_ARR(cfg)[i];
 
             lt_cnt->delay       = lt_cfg->lt_delay;
             lt_cnt->delay_cnt   = lt_cfg->lt_delay;
@@ -576,15 +571,15 @@ MPP_RET mpp_enc_refs_dryrun(MppEncRefs refs)
 
     MppEncRefsImpl *p = (MppEncRefsImpl *)refs;
     MppEncRefCfgImpl *cfg = p->ref_cfg;
-    MppEncRefStFrmCfg *st_cfg = cfg->st_cfg;
+    MppEncRefStFrmCfg *st_cfg = MPP_REF_ST_ARR(cfg);
     EncVirtualCpb *cpb = &p->cpb;
     MppEncCpbInfo *info = &cpb->info;
-    RK_S32 lt_cfg_cnt = cfg->lt_cfg_cnt;
-    RK_S32 st_cfg_cnt = cfg->st_cfg_cnt;
+    RK_S32 lt_cfg_pos = cfg->lt_cfg_cnt;
+    RK_S32 st_cfg_pos = cfg->st_cfg_cnt;
     RK_S32 cpb_st_used_size = 0;
     RK_S32 seq_idx = 0;
     RK_S32 st_idx;
-    RK_S32 walk_len = MPP_MAX(lt_cfg_cnt, st_cfg_cnt);
+    RK_S32 walk_len = MPP_MAX(lt_cfg_pos, st_cfg_pos);
 
     if (cfg->ready)
         goto DONE;
@@ -593,10 +588,15 @@ MPP_RET mpp_enc_refs_dryrun(MppEncRefs refs)
 
     cfg->max_tlayers = cpb->info.max_st_tid + 1;
     enc_refs_dbg_flow("dryrun start: lt_cfg %d st_cfg %d\n",
-                      lt_cfg_cnt, st_cfg_cnt);
+                      lt_cfg_pos, st_cfg_pos);
+
+    if (!st_cfg_pos) {
+        mpp_loge_f("st_cfg_cnt is 0, skip dryrun\n");
+        goto DONE;
+    }
 
     for (st_idx = 0; st_idx < walk_len; st_idx++) {
-        st_cfg = &cfg->st_cfg[st_idx % st_cfg_cnt];
+        st_cfg = &MPP_REF_ST_ARR(cfg)[st_idx % st_cfg_pos];
         EncFrmStatus frm;
         RK_S32 repeat = (st_cfg->repeat != 0) ? st_cfg->repeat : 1;
 
@@ -610,7 +610,7 @@ MPP_RET mpp_enc_refs_dryrun(MppEncRefs refs)
             RK_S32 set_to_lt = 0;
             RK_S32 i;
 
-            for (i = 0; i < lt_cfg_cnt; i++, lt_cfg++) {
+            for (i = 0; i < lt_cfg_pos; i++, lt_cfg++) {
                 if (lt_cfg->delay_cnt) {
                     lt_cfg->delay_cnt--;
                     continue;
@@ -825,7 +825,7 @@ MPP_RET mpp_enc_refs_get_cpb(MppEncRefs refs, EncCpbStatus *status)
 
     cpb->frm_idx++;
     cpb->st_cfg_pos = get_cpb_st_cfg_pos(cpb, cfg);
-    st_cfg = &cfg->st_cfg[cpb->st_cfg_pos];
+    st_cfg = &MPP_REF_ST_ARR(cfg)[cpb->st_cfg_pos];
     /* step 2. updated by st_cfg */
     set_st_cfg_to_frm(frm, cpb->seq_idx++, st_cfg);
     set_frm_refresh_flag(frm, p);

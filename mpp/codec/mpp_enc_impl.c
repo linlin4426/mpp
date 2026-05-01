@@ -1235,15 +1235,15 @@ static MPP_RET mpp_enc_control_set_ref_cfg(MppEncImpl *enc, void *param)
     MppEncRefCfg src = (MppEncRefCfg)param;
     MppEncRefCfg dst = enc->cfg->ref_cfg;
 
-    if (NULL == src)
-        src = mpp_enc_ref_default();
-
     if (NULL == dst) {
         mpp_enc_ref_cfg_init(&dst);
         enc->cfg->ref_cfg = dst;
     }
 
-    ret = mpp_enc_ref_cfg_copy(dst, src);
+    if (NULL == src)
+        ret = mpp_enc_ref_cfg_reset(dst);
+    else
+        ret = mpp_enc_ref_cfg_copy(dst, src);
     if (ret) {
         mpp_err_f("failed to copy ref cfg ret %d\n", ret);
     }
@@ -1547,7 +1547,7 @@ static void set_rc_cfg(RcCfg *cfg, MppEncCfgSet *cfg_set)
 {
     MppEncRcCfg *rc = &cfg_set->rc;
     MppEncPrepCfg *prep = &cfg_set->prep;
-    MppEncRefCfgImpl *ref = (MppEncRefCfgImpl *)cfg_set->ref_cfg;
+    MppEncRefCfgImpl *ref = (MppEncRefCfgImpl *)kmpp_obj_to_entry(cfg_set->ref_cfg);
     MppEncCpbInfo *info = &ref->cpb_info;
     MppCodingType coding = cfg_set->base.coding;
 

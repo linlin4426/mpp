@@ -547,7 +547,7 @@ static MPP_RET hal_h264e_vepu510_get_task(void *hal, HalEncTask *task)
 {
     HalH264eVepu510Ctx *ctx = (HalH264eVepu510Ctx *)hal;
     MppEncCfgSet *cfg_set = ctx->cfg;
-    MppEncRefCfgImpl *ref = (MppEncRefCfgImpl *)cfg_set->ref_cfg;
+    MppEncRefCfgImpl *ref = (MppEncRefCfgImpl *)kmpp_obj_to_entry(cfg_set->ref_cfg);
     MppEncH264HwCfg *hw_cfg = &cfg_set->h264.hw_cfg;
     RK_U32 updated = update_vepu510_syntax(ctx, &task->syntax);
     EncFrmStatus *frm_status = &task->rc_task->frm;

@@ -7,164 +7,309 @@
 
 #include <string.h>
 
-#include "mpp_env.h"
 #include "mpp_log.h"
-#include "mpp_mem.h"
-#include "mpp_time.h"
+#include "mpp_common.h"
+#include "mpp_cfg_io.h"
 
-#include "mpp_rc_defs.h"
 #include "mpp_enc_ref.h"
 #include "mpp_enc_refs.h"
 
-#define setup_mpp_enc_ref_cfg(ref) \
-    ((MppEncRefCfgImpl*)ref)->name = MODULE_TAG;
+/*
+ * kmpp_obj definition for MppEncRefCfgImpl
+ */
+#define MPP_ENC_REF_CFG_ENTRY_TABLE(prefix, ENTRY, STRCT, EHOOK, SHOOK, ALIAS) \
+    CFG_DEF_START() \
+    STRUCT_START(ref) \
+    ENTRY(prefix, s32,  rk_s32,     keep_cpb,       FLAG_INCR,                          keep_cpb) \
+    ENTRY(prefix, s32,  rk_s32,     lt_cfg_cap,     FLAG_INCR,                          new_lt_cfg_cap) \
+    ENTRY(prefix, s32,  rk_s32,     st_cfg_cap,     FLAG_INCR,                          new_st_cfg_cap) \
+    ENTRY(prefix, u32,  rk_u32,     lt_cfg_off,     FLAG_NONE,                          lt_cfg_off) \
+    ENTRY(prefix, u32,  rk_u32,     st_cfg_off,     FLAG_NONE,                          st_cfg_off) \
+    ENTRY(prefix, s32,  rk_s32,     lt_cfg_cnt,     FLAG_INCR,                          lt_cfg_cnt) \
+    ENTRY(prefix, s32,  rk_s32,     st_cfg_cnt,     FLAG_INCR,                          st_cfg_cnt) \
+    ENTRY(prefix, s32,  rk_s32,     max_tlayers,    FLAG_INCR,                          max_tlayers) \
+    ENTRY(prefix, s32,  rk_s32,     ready,          FLAG_INCR,                          ready) \
+    STRUCT_END(ref) \
+    CFG_DEF_END()
 
-MPP_RET _check_is_mpp_enc_ref_cfg(const char *func, void *ref)
+static rk_s32 mpp_enc_ref_cfg_impl_dump(void *entry)
 {
-    if (NULL == ref) {
-        mpp_err("%s input ref check NULL failed\n", func);
+    MppEncRefCfgImpl *cfg = (MppEncRefCfgImpl *)entry;
+
+    if (!cfg) {
+        mpp_loge_f("invalid param entry NULL\n");
+        return rk_nok;
+    }
+
+    mpp_logi("keep_cpb      %d\n", cfg->keep_cpb);
+    mpp_logi("lt_cfg_cap    %d\n", cfg->lt_cfg_cap);
+    mpp_logi("st_cfg_cap    %d\n", cfg->st_cfg_cap);
+    mpp_logi("lt_cfg_off    %u\n", cfg->lt_cfg_off);
+    mpp_logi("st_cfg_off    %u\n", cfg->st_cfg_off);
+    mpp_logi("lt_cfg_cnt    %d\n", cfg->lt_cfg_cnt);
+    mpp_logi("st_cfg_cnt    %d\n", cfg->st_cfg_cnt);
+    mpp_logi("max_tlayers   %d\n", cfg->max_tlayers);
+    mpp_logi("ready         %d\n", cfg->ready);
+
+    return rk_ok;
+}
+
+static rk_s32 mpp_enc_ref_cfg_impl_resize(void *entry, KmppObj obj,
+                                          const char *caller)
+{
+    MppEncRefCfgImpl *cfg = (MppEncRefCfgImpl *)entry;
+    KmppObjDef def = kmpp_obj_to_objdef(obj);
+    rk_u32 old_lt_off = cfg->lt_cfg_off;
+    rk_s32 data_off;
+
+    (void)caller;
+
+    data_off = kmpp_objdef_get_entry_size(def) + kmpp_obj_to_flags_size(obj);
+    cfg->st_cfg_off = data_off;
+    cfg->lt_cfg_off = data_off + cfg->new_st_cfg_cap * sizeof(MppEncRefStFrmCfg);
+
+    /* relocate lt cfg data when offset shifts */
+    {
+        rk_s32 move_cnt = MPP_MIN(cfg->lt_cfg_cnt, cfg->new_lt_cfg_cap);
+
+        if (old_lt_off && cfg->lt_cfg_off != old_lt_off && move_cnt > 0)
+            memmove((char *)cfg + cfg->lt_cfg_off, (char *)cfg + old_lt_off,
+                    move_cnt * sizeof(MppEncRefLtFrmCfg));
+    }
+
+    /* commit new caps to actual fields */
+    cfg->lt_cfg_cap = cfg->new_lt_cfg_cap;
+    cfg->st_cfg_cap = cfg->new_st_cfg_cap;
+
+    return rk_ok;
+}
+
+#define KMPP_OBJ_NAME               mpp_enc_ref_cfg
+#define KMPP_OBJ_INTF_TYPE          MppEncRefCfg
+#define KMPP_OBJ_IMPL_TYPE          MppEncRefCfgImpl
+#define KMPP_OBJ_SGLN_ID            MPP_SGLN_ENC_REF_CFG
+#define KMPP_OBJ_ENTRY_TABLE        MPP_ENC_REF_CFG_ENTRY_TABLE
+#define KMPP_OBJ_FUNC_DUMP          mpp_enc_ref_cfg_impl_dump
+#define KMPP_OBJ_FUNC_RESIZE        mpp_enc_ref_cfg_impl_resize
+#define KMPP_OBJ_ACCESS_DISABLE
+#define KMPP_OBJ_HIERARCHY_ENABLE
+#define KMPP_OBJ_FLEX_ENTRY_ENABLE
+#include "kmpp_obj_helper.h"
+
+/*
+ * ref_cfg_resize - set pending caps and resize VLA
+ *
+ * Stores requested caps in new_lt/st_cfg_cap, then calls kmpp_obj_resize.
+ * The resize callback commits new_* to actual cap fields.
+ * On failure, clears new_* (old state unchanged since callback not called).
+ */
+static rk_s32 ref_cfg_resize(MppEncRefCfgImpl *cfg, KmppObj obj,
+                             rk_s32 new_lt_cap, rk_s32 new_st_cap,
+                             const char *caller)
+{
+    rk_s32 vla_size;
+    rk_s32 ret;
+
+    cfg->new_lt_cfg_cap = new_lt_cap;
+    cfg->new_st_cfg_cap = new_st_cap;
+
+    vla_size = new_st_cap * sizeof(MppEncRefStFrmCfg) + new_lt_cap * sizeof(MppEncRefLtFrmCfg);
+
+    ret = kmpp_obj_resize(obj, vla_size, caller);
+    if (ret) {
+        mpp_loge("%s: resize to %d failed ret %d, revert to cap lt %d st %d\n",
+                 caller, vla_size, ret, cfg->lt_cfg_cap, cfg->st_cfg_cap);
+        cfg->new_lt_cfg_cap = cfg->lt_cfg_cap;
+        cfg->new_st_cfg_cap = cfg->st_cfg_cap;
+    }
+
+    return ret;
+}
+
+/*
+ * mpp_enc_ref_cfg object init / deinit
+ */
+MPP_RET mpp_enc_ref_cfg_setup(MppEncRefCfg *obj, RK_S32 lt_cnt, RK_S32 st_cnt)
+{
+    MppEncRefCfgImpl *cfg;
+    rk_s32 ret;
+
+    if (!obj || lt_cnt < 0 || st_cnt < 0) {
+        mpp_loge_f("invalid param obj %p lt_cnt %d st_cnt %d\n", obj, lt_cnt, st_cnt);
         return MPP_NOK;
     }
 
-    if (strcmp(((MppEncRefCfgImpl*)(ref))->name, MODULE_TAG) != 0) {
-        mpp_err("%s input ref check %p %p failed\n", func, ((MppEncRefCfgImpl*)(ref))->name);
-        return MPP_NOK;
+    ret = mpp_enc_ref_cfg_get(obj);
+    if (ret)
+        return ret;
+
+    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(*obj);
+    ret = ref_cfg_resize(cfg, *obj, lt_cnt, st_cnt, __FUNCTION__);
+    if (ret) {
+        kmpp_obj_put_f(*obj);
+        *obj = NULL;
+        return ret;
     }
+
+    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(*obj);
+    cfg->lt_cfg_cnt = 0;
+    cfg->st_cfg_cnt = 0;
 
     return MPP_OK;
 }
 
+/*
+ * mpp_enc_ref_cfg API implementation
+ */
 MPP_RET mpp_enc_ref_cfg_init(MppEncRefCfg *ref)
 {
+    MPP_RET ret;
+
     if (NULL == ref) {
-        mpp_err_f("invalid NULL input ref_cfg\n");
+        mpp_loge_f("invalid NULL input ref_cfg\n");
         return MPP_ERR_NULL_PTR;
     }
 
-    MppEncRefCfgImpl *p = mpp_calloc(MppEncRefCfgImpl, 1);
-    *ref = p;
-    if (NULL == p) {
-        mpp_err_f("malloc failed\n");
-        return MPP_ERR_NULL_PTR;
-    }
+    ret = mpp_enc_ref_cfg_get(ref);
+    if (ret)
+        return ret;
 
-    mpp_env_get_u32("enc_ref_cfg_debug", &p->debug, 0);
-
-    setup_mpp_enc_ref_cfg(p);
-
-    return MPP_OK;
+    return mpp_enc_ref_cfg_reset(*ref);
 }
 
 MPP_RET mpp_enc_ref_cfg_deinit(MppEncRefCfg *ref)
 {
-    if (!ref || check_is_mpp_enc_ref_cfg(*ref)) {
-        mpp_err_f("input %p check failed\n", ref);
+    if (!ref || !*ref)
         return MPP_ERR_VALUE;
-    }
 
-    MppEncRefCfgImpl *p = (MppEncRefCfgImpl *)(*ref);
-    MPP_FREE(p->lt_cfg);
-    MPP_FREE(p->st_cfg);
-    MPP_FREE(p);
+    MPP_RET ret = kmpp_obj_put_f(*ref);
+    *ref = NULL;
 
-    return MPP_OK;
+    return ret;
 }
 
 MPP_RET mpp_enc_ref_cfg_reset(MppEncRefCfg ref)
 {
-    if (check_is_mpp_enc_ref_cfg(ref))
+    if (!ref)
         return MPP_ERR_VALUE;
 
-    MppEncRefCfgImpl *p = (MppEncRefCfgImpl *)ref;
-    MPP_FREE(p->lt_cfg);
-    MPP_FREE(p->st_cfg);
-    memset(p, 0, sizeof(*p));
-    setup_mpp_enc_ref_cfg(p);
+    MppEncRefCfgImpl *cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref);
+    MppEncRefStFrmCfg *st;
+    rk_s32 vla_size = sizeof(MppEncRefStFrmCfg);
+    rk_s32 ret;
+
+    if (!cfg)
+        return MPP_ERR_VALUE;
+
+    /* restore default: st=1 simple forward reference */
+    cfg->keep_cpb       = 0;
+    cfg->new_st_cfg_cap = 1;
+    cfg->new_lt_cfg_cap = 0;
+    cfg->st_cfg_cap     = 1;
+    cfg->lt_cfg_cap     = 0;
+    cfg->st_cfg_cnt     = 0;
+    cfg->lt_cfg_cnt     = 0;
+
+    ret = kmpp_obj_resize_f(ref, vla_size);
+    if (ret) {
+        mpp_loge_f("resize to %d failed ret %d\n", vla_size, ret);
+        return ret;
+    }
+
+    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref);
+    st = MPP_REF_ST_ARR(cfg);
+
+    st[0].is_non_ref   = 0;
+    st[0].temporal_id  = 0;
+    st[0].ref_mode     = REF_TO_PREV_REF_FRM;
+    st[0].ref_arg      = 0;
+    st[0].repeat       = 0;
+
+    cfg->st_cfg_cnt    = 1;
+    cfg->max_tlayers   = 1;
+    cfg->ready         = 1;
+    memset(&cfg->cpb_info, 0, sizeof(cfg->cpb_info));
+    cfg->cpb_info.dpb_size    = 1;
+    cfg->cpb_info.max_st_cnt  = 1;
 
     return MPP_OK;
 }
 
 MPP_RET mpp_enc_ref_cfg_set_cfg_cnt(MppEncRefCfg ref, RK_S32 lt_cnt, RK_S32 st_cnt)
 {
-    if (check_is_mpp_enc_ref_cfg(ref))
+    MppEncRefCfgImpl *cfg;
+    rk_s32 ret;
+
+    if (!ref || lt_cnt < 0 || st_cnt < 0)
         return MPP_ERR_NULL_PTR;
 
-    MppEncRefCfgImpl *p = (MppEncRefCfgImpl *)ref;
-    MppEncRefLtFrmCfg *lt_cfg = p->lt_cfg;
-    MppEncRefStFrmCfg *st_cfg = p->st_cfg;;
+    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref);
+    if (!cfg)
+        return MPP_ERR_NULL_PTR;
 
-    if (lt_cfg || st_cfg) {
-        mpp_err_f("do call reset before setup new cnout\n");
-        MPP_FREE(lt_cfg);
-        MPP_FREE(st_cfg);
-    }
+    ret = ref_cfg_resize(cfg, ref, lt_cnt, st_cnt, __FUNCTION__);
+    if (ret)
+        return ret;
 
-    if (lt_cnt) {
-        lt_cfg = mpp_calloc(MppEncRefLtFrmCfg, lt_cnt);
-        if (NULL == lt_cfg)
-            mpp_log_f("failed to create %d lt ref cfg\n", lt_cnt);
-    }
-
-    if (st_cnt) {
-        st_cfg = mpp_calloc(MppEncRefStFrmCfg, st_cnt);
-        if (NULL == st_cfg)
-            mpp_log_f("failed to create %d st ref cfg\n", lt_cnt);
-    }
-
-    p->max_lt_cfg = lt_cnt;
-    p->max_st_cfg = st_cnt;
-    p->lt_cfg_cnt = 0;
-    p->st_cfg_cnt = 0;
-    p->lt_cfg = lt_cfg;
-    p->st_cfg = st_cfg;
+    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref);
+    cfg->lt_cfg_cnt = 0;
+    cfg->st_cfg_cnt = 0;
 
     return MPP_OK;
 }
 
 MPP_RET mpp_enc_ref_cfg_add_lt_cfg(MppEncRefCfg ref, RK_S32 cnt, MppEncRefLtFrmCfg *frm)
 {
-    if (check_is_mpp_enc_ref_cfg(ref))
+    MppEncRefCfgImpl *cfg;
+
+    if (!ref || !frm || cnt <= 0)
         return MPP_ERR_VALUE;
 
-    MppEncRefCfgImpl *p = (MppEncRefCfgImpl *)ref;
+    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref);
+    if (!cfg)
+        return MPP_ERR_VALUE;
 
-    if (p->debug)
-        mpp_log("ref %p add lt %d cfg idx %d tid %d gap %d delay %d ref mode %x\n",
-                ref, p->lt_cfg_cnt, frm->lt_idx, frm->temporal_id,
-                frm->lt_gap, frm->lt_delay, frm->ref_mode);
+    if (cfg->lt_cfg_cnt + cnt > cfg->lt_cfg_cap) {
+        mpp_loge_f("lt_cfg overflow cnt %d + add %d > cap %d\n",
+                   cfg->lt_cfg_cnt, cnt, cfg->lt_cfg_cap);
+        return MPP_ERR_VALUE;
+    }
 
-    memcpy(&p->lt_cfg[p->lt_cfg_cnt], frm, sizeof(*frm) * cnt);
-    p->lt_cfg_cnt += cnt;
+    memcpy(&MPP_REF_LT_ARR(cfg)[cfg->lt_cfg_cnt], frm, sizeof(*frm) * cnt);
+    cfg->lt_cfg_cnt += cnt;
 
     return MPP_OK;
 }
 
 MPP_RET mpp_enc_ref_cfg_add_st_cfg(MppEncRefCfg ref, RK_S32 cnt, MppEncRefStFrmCfg *frm)
 {
-    if (check_is_mpp_enc_ref_cfg(ref)) {
-        mpp_err_f("input %p check failed\n", ref);
+    MppEncRefCfgImpl *cfg;
+
+    if (!ref || !frm || cnt <= 0)
+        return MPP_ERR_VALUE;
+
+    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref);
+    if (!cfg)
+        return MPP_ERR_VALUE;
+
+    if (cfg->st_cfg_cnt + cnt > cfg->st_cfg_cap) {
+        mpp_loge_f("st_cfg overflow cnt %d + add %d > cap %d\n",
+                   cfg->st_cfg_cnt, cnt, cfg->st_cfg_cap);
         return MPP_ERR_VALUE;
     }
 
-    MppEncRefCfgImpl *p = (MppEncRefCfgImpl *)ref;
-
-    if (p->debug)
-        mpp_log("ref %p add lt %d cfg non %d tid %d gap repeat %d ref mode %x arg %d\n",
-                ref, p->st_cfg_cnt, frm->is_non_ref, frm->temporal_id,
-                frm->repeat, frm->ref_mode, frm->ref_arg);
-
-    memcpy(&p->st_cfg[p->st_cfg_cnt], frm, sizeof(*frm) * cnt);
-    p->st_cfg_cnt += cnt;
+    memcpy(&MPP_REF_ST_ARR(cfg)[cfg->st_cfg_cnt], frm, sizeof(*frm) * cnt);
+    cfg->st_cfg_cnt += cnt;
 
     return MPP_OK;
 }
 
 MPP_RET mpp_enc_ref_cfg_check(MppEncRefCfg ref)
 {
-    if (check_is_mpp_enc_ref_cfg(ref))
+    if (!ref)
         return MPP_ERR_VALUE;
 
-    MppEncRefCfgImpl *p = (MppEncRefCfgImpl *)ref;
+    MppEncRefCfgImpl *p = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref);
     RK_S32 lt_cfg_cnt = p->lt_cfg_cnt;
     RK_S32 st_cfg_cnt = p->st_cfg_cnt;
     RK_S32 max_lt_ref_cnt   = 0;
@@ -179,25 +324,26 @@ MPP_RET mpp_enc_ref_cfg_check(MppEncRefCfg ref)
 
     /* parse and check gop config for encoder */
     if (lt_cfg_cnt) {
-        RK_S32 pos = 0;
-        MppEncRefLtFrmCfg *cfg = p->lt_cfg;
+        RK_S32 pos;
+        MppEncRefLtFrmCfg *lt_cfg = MPP_REF_LT_ARR(p);
 
-        for (pos = 0; pos < lt_cfg_cnt; pos++, cfg++) {
-            MppEncRefMode ref_mode = cfg->ref_mode;
-            RK_S32 temporal_id = cfg->temporal_id;
-            RK_S32 lt_idx = cfg->lt_idx;
+        for (pos = 0; pos < lt_cfg_cnt; pos++) {
+            MppEncRefLtFrmCfg *c = &lt_cfg[pos];
+            MppEncRefMode ref_mode = c->ref_mode;
+            RK_S32 temporal_id = c->temporal_id;
+            RK_S32 lt_idx = c->lt_idx;
             RK_U32 lt_idx_mask = 1 << lt_idx;
 
             /* check lt idx */
             if (lt_idx >= MPP_ENC_MAX_LT_REF_NUM) {
-                mpp_err_f("ref cfg %p lt cfg %d with invalid lt_idx %d larger than MPP_ENC_MAX_LT_REF_NUM\n",
-                          ref, pos, lt_idx);
+                mpp_loge_f("ref cfg %p lt cfg %d with invalid lt_idx %d larger than MPP_ENC_MAX_LT_REF_NUM\n",
+                           ref, pos, lt_idx);
                 ready = 0;
             }
 
             if (lt_idx_used_mask & lt_idx_mask) {
-                mpp_err_f("ref cfg %p lt cfg %d with redefined lt_idx %d config\n",
-                          ref, pos, lt_idx);
+                mpp_loge_f("ref cfg %p lt cfg %d with redefined lt_idx %d config\n",
+                           ref, pos, lt_idx);
                 ready = 0;
             }
 
@@ -211,15 +357,15 @@ MPP_RET mpp_enc_ref_cfg_check(MppEncRefCfg ref)
 
             /* check temporal id */
             if (temporal_id != 0) {
-                mpp_err_f("ref cfg %p lt cfg %d with invalid temporal_id %d is non-zero\n",
-                          ref, pos, temporal_id);
+                mpp_loge_f("ref cfg %p lt cfg %d with invalid temporal_id %d is non-zero\n",
+                           ref, pos, temporal_id);
                 ready = 0;
             }
 
             /* check gop mode */
             if (!REF_MODE_IS_GLOBAL(ref_mode) && !REF_MODE_IS_LT_MODE(ref_mode)) {
-                mpp_err_f("ref cfg %p lt cfg %d with invalid ref mode %x\n",
-                          ref, pos, ref_mode);
+                mpp_loge_f("ref cfg %p lt cfg %d with invalid ref mode %x\n",
+                           ref, pos, ref_mode);
                 ready = 0;
             }
 
@@ -227,52 +373,53 @@ MPP_RET mpp_enc_ref_cfg_check(MppEncRefCfg ref)
             if (!ready)
                 break;
 
-            if (cfg->lt_gap && (cfg->lt_gap + cfg->lt_delay > lt_dryrun_length))
-                lt_dryrun_length = cfg->lt_gap + cfg->lt_delay;
+            if (c->lt_gap && (c->lt_gap + c->lt_delay > lt_dryrun_length))
+                lt_dryrun_length = c->lt_gap + c->lt_delay;
         }
     }
 
     /* check st-ref config */
     if (ready && st_cfg_cnt) {
-        RK_S32 pos = 0;
-        MppEncRefStFrmCfg *cfg = p->st_cfg;
+        RK_S32 pos;
+        MppEncRefStFrmCfg *st_cfg = MPP_REF_ST_ARR(p);
 
-        for (pos = 0; pos < st_cfg_cnt; pos++, cfg++) {
-            MppEncRefMode ref_mode = cfg->ref_mode;
-            RK_S32 temporal_id = cfg->temporal_id;
+        for (pos = 0; pos < st_cfg_cnt; pos++) {
+            MppEncRefStFrmCfg *c = &st_cfg[pos];
+            MppEncRefMode ref_mode = c->ref_mode;
+            RK_S32 temporal_id = c->temporal_id;
             RK_U32 tid_mask = 1 << temporal_id;
 
             /* check temporal_id */
             if (temporal_id > MPP_ENC_MAX_TEMPORAL_LAYER_NUM - 1) {
-                mpp_err_f("ref cfg %p st cfg %d with invalid temporal_id %d larger than MPP_ENC_MAX_TEMPORAL_LAYER_NUM\n",
-                          ref, pos, temporal_id);
+                mpp_loge_f("ref cfg %p st cfg %d with invalid temporal_id %d larger than MPP_ENC_MAX_TEMPORAL_LAYER_NUM\n",
+                           ref, pos, temporal_id);
                 ready = 0;
             }
 
             /* check gop mode */
             if (!REF_MODE_IS_GLOBAL(ref_mode) && !REF_MODE_IS_ST_MODE(ref_mode)) {
-                mpp_err_f("ref cfg %p st cfg %d with invalid ref mode %x\n",
-                          ref, pos, ref_mode);
+                mpp_loge_f("ref cfg %p st cfg %d with invalid ref mode %x\n",
+                           ref, pos, ref_mode);
                 ready = 0;
             }
 
-            if (cfg->repeat < 0) {
-                mpp_err_f("ref cfg %p st cfg %d with negative repeat %d set to zero\n",
-                          ref, pos, cfg->repeat);
-                cfg->repeat = 0;
+            if (c->repeat < 0) {
+                mpp_loge_f("ref cfg %p st cfg %d with negative repeat %d set to zero\n",
+                           ref, pos, c->repeat);
+                c->repeat = 0;
             }
 
             /* constrain on head and tail frame */
             if (pos == 0 || (pos == st_cfg_cnt - 1)) {
-                if (cfg->is_non_ref) {
-                    mpp_err_f("ref cfg %p st cfg %d with invalid non-ref frame on head/tail frame\n",
-                              ref, pos);
+                if (c->is_non_ref) {
+                    mpp_loge_f("ref cfg %p st cfg %d with invalid non-ref frame on head/tail frame\n",
+                               ref, pos);
                     ready = 0;
                 }
 
                 if (temporal_id > 0) {
-                    mpp_err_f("ref cfg %p st cfg %d with invalid non-zero temporal id %d on head/tail frame\n",
-                              ref, pos, temporal_id);
+                    mpp_loge_f("ref cfg %p st cfg %d with invalid non-zero temporal id %d on head/tail frame\n",
+                               ref, pos, temporal_id);
                     ready = 0;
                 }
             }
@@ -280,7 +427,7 @@ MPP_RET mpp_enc_ref_cfg_check(MppEncRefCfg ref)
             if (!ready)
                 break;
 
-            if (!cfg->is_non_ref && !(st_tid_used_mask & tid_mask)) {
+            if (!c->is_non_ref && !(st_tid_used_mask & tid_mask)) {
                 max_st_ref_cnt++;
                 st_tid_used_mask |= tid_mask;
             }
@@ -289,7 +436,7 @@ MPP_RET mpp_enc_ref_cfg_check(MppEncRefCfg ref)
                 max_st_tid = temporal_id;
 
             st_dryrun_length++;
-            st_dryrun_length += cfg->repeat;
+            st_dryrun_length += c->repeat;
         }
     }
 
@@ -320,8 +467,9 @@ MPP_RET mpp_enc_ref_cfg_check(MppEncRefCfg ref)
         ret = mpp_enc_refs_deinit(&refs);
         ready = (ret) ? 0 : (ready);
     } else {
-        mpp_err_f("check ref cfg %p failed\n", ref);
+        mpp_loge_f("check ref cfg %p failed\n", ref);
     }
+
     p->ready = ready;
 
     return ready ? MPP_OK : MPP_NOK;
@@ -329,105 +477,73 @@ MPP_RET mpp_enc_ref_cfg_check(MppEncRefCfg ref)
 
 MPP_RET mpp_enc_ref_cfg_set_keep_cpb(MppEncRefCfg ref, RK_S32 keep)
 {
-    if (check_is_mpp_enc_ref_cfg(ref))
+    if (!ref)
         return MPP_ERR_VALUE;
 
-    MppEncRefCfgImpl *p = (MppEncRefCfgImpl *)ref;
-    p->keep_cpb = keep;
+    MppEncRefCfgImpl *cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref);
+    if (!cfg)
+        return MPP_ERR_VALUE;
+
+    cfg->keep_cpb = keep;
 
     return MPP_OK;
 }
 
 MPP_RET mpp_enc_ref_cfg_show(MppEncRefCfg ref)
 {
-    if (check_is_mpp_enc_ref_cfg(ref))
+    if (!ref)
         return MPP_ERR_VALUE;
 
-    return MPP_OK;
+    return mpp_enc_ref_cfg_dump(ref, __FUNCTION__);
 }
 
 MPP_RET mpp_enc_ref_cfg_copy(MppEncRefCfg dst, MppEncRefCfg src)
 {
-    if (check_is_mpp_enc_ref_cfg(dst) || check_is_mpp_enc_ref_cfg(src))
+    if (!dst || !src)
         return MPP_ERR_VALUE;
 
-    MPP_RET ret = MPP_OK;
-    MppEncRefCfgImpl *d = (MppEncRefCfgImpl *)dst;
-    MppEncRefCfgImpl *s = (MppEncRefCfgImpl *)src;
-    RK_S32 max_lt_cfg = s->max_lt_cfg;
-    RK_S32 max_st_cfg = s->max_st_cfg;
+    MppEncRefCfgImpl *s = (MppEncRefCfgImpl *)kmpp_obj_to_entry(src);
+    MppEncRefCfgImpl *d;
+    rk_s32 ret;
 
-    /* step 1 - free cfg in dst */
-    MPP_FREE(d->lt_cfg);
-    MPP_FREE(d->st_cfg);
+    if (!s)
+        return MPP_ERR_VALUE;
 
-    /* step 2 - copy contex from src */
-    memcpy(d, s, sizeof(*d));
+    d = (MppEncRefCfgImpl *)kmpp_obj_to_entry(dst);
+    if (!d)
+        return MPP_ERR_VALUE;
 
-    /* step 3 - create new storage and copy lt/st cfg */
-    if (max_lt_cfg) {
-        MppEncRefLtFrmCfg *lt_cfg = mpp_calloc(MppEncRefLtFrmCfg, max_lt_cfg);
-
-        if (NULL == lt_cfg) {
-            mpp_log_f("failed to create %d lt ref cfg\n", max_lt_cfg);
-            ret = MPP_NOK;
-        } else
-            memcpy(lt_cfg, s->lt_cfg, sizeof(lt_cfg[0]) * s->max_lt_cfg);
-
-        d->lt_cfg = lt_cfg;
-    }
-
-    if (max_st_cfg) {
-        MppEncRefStFrmCfg *st_cfg = mpp_calloc(MppEncRefStFrmCfg, max_st_cfg);
-
-        if (NULL == st_cfg) {
-            mpp_log_f("failed to create %d st ref cfg\n", max_st_cfg);
-            ret = MPP_NOK;
-        } else
-            memcpy(st_cfg, s->st_cfg, sizeof(st_cfg[0]) * s->max_st_cfg);
-
-        d->st_cfg = st_cfg;
-    }
-
+    ret = ref_cfg_resize(d, dst, s->lt_cfg_cap, s->st_cfg_cap, __FUNCTION__);
     if (ret)
-        mpp_enc_ref_cfg_reset(dst);
+        return ret;
 
-    return ret;
+    d = (MppEncRefCfgImpl *)kmpp_obj_to_entry(dst);
+    if (!d)
+        return MPP_ERR_VALUE;
+
+    /* copy header (offsets will be the same, overwrite is harmless) */
+    *d = *s;
+
+    /* copy array data */
+    if (s->st_cfg_cnt)
+        memcpy(MPP_REF_ST_ARR(d), MPP_REF_ST_ARR(s),
+               s->st_cfg_cnt * sizeof(MppEncRefStFrmCfg));
+
+    if (s->lt_cfg_cnt)
+        memcpy(MPP_REF_LT_ARR(d), MPP_REF_LT_ARR(s),
+               s->lt_cfg_cnt * sizeof(MppEncRefLtFrmCfg));
+
+    return MPP_OK;
 }
 
 MppEncCpbInfo *mpp_enc_ref_cfg_get_cpb_info(MppEncRefCfg ref)
 {
-    if (check_is_mpp_enc_ref_cfg(ref))
+    if (!ref)
         return NULL;
 
-    MppEncRefCfgImpl *p = (MppEncRefCfgImpl *)ref;
-    return &p->cpb_info;
-}
+    MppEncRefCfgImpl *cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref);
+    if (!cfg)
+        return NULL;
 
-static MppEncRefStFrmCfg default_st_ref_cfg = {
-    .is_non_ref         = 0,
-    .temporal_id        = 0,
-    .ref_mode           = REF_TO_PREV_REF_FRM,
-    .ref_arg            = 0,
-    .repeat             = 0,
-};
-
-static const MppEncRefCfgImpl default_ref_cfg = {
-    .name               = MODULE_TAG,
-    .ready              = 1,
-    .debug              = 0,
-    .keep_cpb           = 0,
-    .max_lt_cfg         = 0,
-    .max_st_cfg         = 1,
-    .lt_cfg_cnt         = 0,
-    .st_cfg_cnt         = 1,
-    .max_tlayers        = 1,
-    .lt_cfg             = NULL,
-    .st_cfg             = &default_st_ref_cfg,
-    .cpb_info           = { 1, 0, 1, 0, 0, 0, 0 },
-};
-
-MppEncRefCfg mpp_enc_ref_default(void)
-{
-    return (MppEncRefCfg)&default_ref_cfg;
+    return &cfg->cpb_info;
 }

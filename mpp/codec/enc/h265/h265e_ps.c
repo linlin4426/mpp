@@ -120,7 +120,7 @@ MPP_RET h265e_set_vps(H265eCtx *ctx, H265eVps *vps)
     MppEncRefCfg ref_cfg = ctx->cfg->ref_cfg;
     RK_U32 maxlumas = prep->width * prep->height;
     RK_S32 level_idc = H265_LEVEL_NONE;
-    MppEncRefCfgImpl *refs = (MppEncRefCfgImpl *)ref_cfg;
+    MppEncRefCfgImpl *refs = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref_cfg);
 
     vps->m_VPSId = 0;
     vps->m_maxTLayers = refs->max_tlayers ? refs->max_tlayers : 1;
