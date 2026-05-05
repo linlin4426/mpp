@@ -1294,31 +1294,35 @@ static rk_s32 mpp_cfg_to_log(MppCfgIoImpl *impl, MppCfgStrBuf *str)
                 return -1;
             }
 
-            len += snprintf(buf + len, total - len, "[\n");
-            ret = write_byte_f(str, buf, &len);
-            if (ret)
-                return ret;
-
-            str->depth++;
-            for (i = 0; i < elem_count; i++) {
-                if ((i & 0xf) == 0)
-                    write_indent_f(str);
-
-                len = mpp_cfg_format_vla_elem(impl, i, buf, total);
-
-                /* new line for every 16 elems and last elems */
-                if (i == elem_count - 1 || (i & 0xf) == 0xf)
-                    len += snprintf(buf + len, total - len, "\n");
-                else
-                    len += snprintf(buf + len, total - len, " ");
-
+            if (elem_count == 0) {
+                len += snprintf(buf + len, total - len, "[]");
+            } else {
+                len += snprintf(buf + len, total - len, "[\n");
                 ret = write_byte_f(str, buf, &len);
                 if (ret)
                     return ret;
+
+                str->depth++;
+                for (i = 0; i < elem_count; i++) {
+                    if ((i & 0xf) == 0)
+                        write_indent_f(str);
+
+                    len = mpp_cfg_format_vla_elem(impl, i, buf, total);
+
+                    /* new line for every 16 elems and last elems */
+                    if (i == elem_count - 1 || (i & 0xf) == 0xf)
+                        len += snprintf(buf + len, total - len, "\n");
+                    else
+                        len += snprintf(buf + len, total - len, " ");
+
+                    ret = write_byte_f(str, buf, &len);
+                    if (ret)
+                        return ret;
+                }
+                str->depth--;
+                write_indent_f(str);
+                len = snprintf(buf, total, "]");
             }
-            str->depth--;
-            write_indent_f(str);
-            len = snprintf(buf, total, "]");
         } else {
             len += snprintf(buf + len, total - len, "%s",
                             impl->type == MPP_CFG_TYPE_OBJECT ? "{}" : "[]");
@@ -1462,23 +1466,37 @@ static rk_s32 mpp_cfg_to_json(MppCfgIoImpl *impl, MppCfgStrBuf *str)
 
             elem_count = impl->raw_count;
 
-            len += snprintf(buf + len, total - len, "[");
-            ret = write_byte_f(str, buf, &len);
-            if (ret)
-                return ret;
-
-            for (i = 0; i < elem_count; i++) {
-                len = mpp_cfg_format_vla_elem(impl, i, buf, total);
-
-                if (i < elem_count - 1)
-                    len += snprintf(buf + len, total - len, ", ");
-
+            if (elem_count == 0) {
+                len += snprintf(buf + len, total - len, "[]");
+            } else {
+                len += snprintf(buf + len, total - len, "[\n");
                 ret = write_byte_f(str, buf, &len);
                 if (ret)
                     return ret;
-            }
 
-            len = snprintf(buf, total, "]");
+                str->depth++;
+                for (i = 0; i < elem_count; i++) {
+                    if ((i & 0xf) == 0)
+                        write_indent_f(str);
+
+                    len = mpp_cfg_format_vla_elem(impl, i, buf, total);
+
+                    if (i == elem_count - 1)
+                        len += snprintf(buf + len, total - len, "\n");
+                    else if ((i & 0xf) == 0xf)
+                        len += snprintf(buf + len, total - len, ",\n");
+                    else
+                        len += snprintf(buf + len, total - len, ", ");
+
+                    ret = write_byte_f(str, buf, &len);
+                    if (ret)
+                        return ret;
+                }
+                str->depth--;
+
+                write_indent_f(str);
+                len = snprintf(buf, total, "]");
+            }
         } else {
             len += snprintf(buf + len, total - len, "%s",
                             impl->type == MPP_CFG_TYPE_OBJECT ? "{}" : "[]");
@@ -1710,23 +1728,37 @@ static rk_s32 mpp_cfg_to_toml(MppCfgIoImpl *impl, MppCfgStrBuf *str, rk_s32 firs
 
             elem_count = impl->raw_count;
 
-            len += snprintf(buf + len, total - len, "[");
-            ret = write_byte_f(str, buf, &len);
-            if (ret)
-                return ret;
-
-            for (i = 0; i < elem_count; i++) {
-                len = mpp_cfg_format_vla_elem(impl, i, buf, total);
-
-                if (i < elem_count - 1)
-                    len += snprintf(buf + len, total - len, ", ");
-
+            if (elem_count == 0) {
+                len += snprintf(buf + len, total - len, "[]");
+            } else {
+                len += snprintf(buf + len, total - len, "[\n");
                 ret = write_byte_f(str, buf, &len);
                 if (ret)
                     return ret;
-            }
 
-            len = snprintf(buf, total, "]");
+                str->depth++;
+                for (i = 0; i < elem_count; i++) {
+                    if ((i & 0xf) == 0)
+                        write_indent_f(str);
+
+                    len = mpp_cfg_format_vla_elem(impl, i, buf, total);
+
+                    if (i == elem_count - 1)
+                        len += snprintf(buf + len, total - len, "\n");
+                    else if ((i & 0xf) == 0xf)
+                        len += snprintf(buf + len, total - len, ",\n");
+                    else
+                        len += snprintf(buf + len, total - len, ", ");
+
+                    ret = write_byte_f(str, buf, &len);
+                    if (ret)
+                        return ret;
+                }
+                str->depth--;
+
+                write_indent_f(str);
+                len = snprintf(buf, total, "]");
+            }
         } else {
             len += snprintf(buf + len, total - len, "%s",
                             impl->type == MPP_CFG_TYPE_OBJECT ? "{}" : "[]");
