@@ -168,7 +168,7 @@ do { \
 do { \
     rk_s32 _r = (cases)[(idx)].func(ctx); \
     char _line[256]; \
-    snprintf(_line, sizeof(_line), "  %-*s %s", (max), \
+    snprintf(_line, sizeof(_line), "test %-*s %s", (max), \
              (cases)[(idx)].name, (_r < 0) ? "failed" : "success"); \
     mpp_logi("%s", _line); \
     if (_r < 0) _mpp_ret = rk_nok; \
@@ -198,12 +198,12 @@ do { \
 
 #define MPP_TEST_START(name) \
 do { \
-    mpp_logi("=== %s start ===\n", name); \
+    mpp_logi("start\n"); \
 } while (0)
 
 #define MPP_TEST_END(name) \
 do { \
-    mpp_logi("=== %s done %s ===\n", name, _mpp_ret ? "FAILED" : "success"); \
+    mpp_logi("done %s\n", _mpp_ret ? "failed" : "success"); \
 } while (0)
 
 /* ===========================================================================
