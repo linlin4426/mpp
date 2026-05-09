@@ -42,8 +42,10 @@
 #define OBJ_DBG_UPDATE                  (0x00000020)
 #define OBJ_DBG_SET                     (0x00000040)
 #define OBJ_DBG_GET                     (0x00000080)
+#define OBJ_DBG_RESOLVE                 (0x00000100)
 
 #define obj_dbg(flag, fmt, ...)         mpp_dbg(kmpp_obj_debug, flag, fmt, ## __VA_ARGS__)
+#define obj_dbg_f(flag, fmt, ...)       mpp_dbg_f(kmpp_obj_debug, flag, fmt, ## __VA_ARGS__)
 
 #define obj_dbg_flow(fmt, ...)          obj_dbg(OBJ_DBG_FLOW, fmt, ## __VA_ARGS__)
 #define obj_dbg_share(fmt, ...)         obj_dbg(OBJ_DBG_SHARE, fmt, ## __VA_ARGS__)
@@ -53,6 +55,7 @@
 #define obj_dbg_update(fmt, ...)        obj_dbg(OBJ_DBG_UPDATE, fmt, ## __VA_ARGS__)
 #define obj_dbg_set(fmt, ...)           obj_dbg(OBJ_DBG_SET, fmt, ## __VA_ARGS__)
 #define obj_dbg_get(fmt, ...)           obj_dbg(OBJ_DBG_GET, fmt, ## __VA_ARGS__)
+#define obj_dbg_resolve(fmt, ...)       obj_dbg_f(OBJ_DBG_RESOLVE, fmt, ## __VA_ARGS__)
 
 #define U64_TO_PTR(ptr)                 ((void *)(intptr_t)(ptr))
 
@@ -713,10 +716,16 @@ MppCfgObj kmpp_objdef_get_cfg_root(KmppObjDef def)
     return impl ? impl->cfg : NULL;
 }
 
-rk_s32 kmpp_objdef_add_entry(KmppObjDef def, const char *name, KmppEntry *tbl)
+rk_s32 kmpp_objdef_add_entry(KmppObjDef def, rk_s32 subroot,
+                             const char *name, KmppEntry *tbl)
 {
     KmppObjDefImpl *impl = (KmppObjDefImpl *)def;
     rk_s32 ret = rk_nok;
+
+    if (!impl) {
+        mpp_loge_f("invalid param def %p\n", def);
+        return rk_nok;
+    }
 
     if (!impl->trie) {
         if (!name) {
@@ -727,28 +736,34 @@ rk_s32 kmpp_objdef_add_entry(KmppObjDef def, const char *name, KmppEntry *tbl)
         mpp_trie_init(&impl->trie, impl->name);
     }
 
-    if (impl->trie) {
-        MppTrie trie = impl->trie;
+    if (!impl->trie)
+        return rk_nok;
 
-        if (name) {
-            ret = mpp_trie_add_info(trie, name, tbl, tbl ? sizeof(*tbl) : 0);
+    if (name) {
+        MppTrieStatus st = { .root_idx = subroot };
 
+        ret = mpp_trie_add_entry(impl->trie, &st, name, tbl);
+        if (ret < 0) {
+            mpp_loge("objdef %s add entry %s failed ret %d\n", impl->name, name, ret);
+            return ret;
+        }
+
+        if (tbl && tbl->type != ENTRY_TYPE_VLA_INFO) {
             if (tbl->tbl.flag_offset > impl->flag_max_pos)
                 impl->flag_max_pos = tbl->tbl.flag_offset;
-
-            obj_dbg_entry("objdef %-16s add entry %-16s flag offset %4d\n",
-                          impl->name, name, tbl->tbl.flag_offset);
-        } else {
-            /* record object impl size */
-            ret = mpp_trie_add_info(trie, "__index", &impl->index, sizeof(rk_s32));
-            ret = mpp_trie_add_info(trie, "__size", &impl->entry_size, sizeof(rk_s32));
-            ret |= mpp_trie_add_info(trie, NULL, NULL, 0);
-            ret |= create_objdef_mem_pool(impl);
         }
+
+        obj_dbg_entry("objdef %-16s add entry %-16s type %d\n",
+                      impl->name, name, tbl ? tbl->type : -1);
+
+        return st.node_idx;
     }
 
-    if (ret)
-        mpp_loge("objdef %s add entry %s failed ret %d\n", impl ? impl->name : NULL, name, ret);
+    /* NULL name: record object impl size */
+    ret = mpp_trie_add_info(impl->trie, "__index", &impl->index, sizeof(rk_s32));
+    ret |= mpp_trie_add_info(impl->trie, "__size", &impl->entry_size, sizeof(rk_s32));
+    ret |= mpp_trie_add_info(impl->trie, NULL, NULL, 0);
+    ret |= create_objdef_mem_pool(impl);
 
     return ret;
 }
@@ -906,8 +921,15 @@ rk_s32 kmpp_objdef_dump(KmppObjDef def)
                 KmppEntry *tbl = (KmppEntry *)mpp_trie_info_ctx(info);
                 rk_s32 idx = i++;
 
-                mpp_logi("%-2d - %-16s offset %4d size %d\n", idx,
-                         name, tbl->tbl.elem_offset, tbl->tbl.elem_size);
+                if (tbl->type == ENTRY_TYPE_LOC_TBL)
+                    mpp_logi("%-2d - %-16s offset %4d size %2d\n", idx,
+                             name, tbl->tbl.elem_offset, tbl->tbl.elem_size);
+                else if (tbl->type == ENTRY_TYPE_VLA_INFO) {
+                    mpp_logi("%-2d - %-16s base%c  %4d size %2d cnt%c %4d\n", idx, name,
+                             tbl->vla.flex_base ? '@' : ' ', tbl->vla.base_off, tbl->vla.elem_size,
+                             tbl->vla.flex_count ? '@' : ' ',
+                             tbl->vla.flex_count ? tbl->vla.count_off : tbl->vla.elem_count);
+                }
             }
             info = mpp_trie_get_info_next(trie, info);
         }
@@ -1007,6 +1029,7 @@ static KmppObjImpl *_get_obj_from_def(KmppObjs *p, KmppObjDefImpl *def, KmppShmP
         /* normal: entry contiguous with impl */
         impl->shm = NULL;
         impl->entry = base;
+        impl->entry_buf_size = def->buf_size;
 
         obj_dbg_flow("%s get uobj %-16s - %p entry %p at %s\n", func,
                      def->name, impl, base, caller);
@@ -2405,3 +2428,222 @@ void *kmpp_shm_to_entry(KmppShm shm, const char *caller)
 
     return sptr->uptr + p->entry_offset;
 }
+
+/* check if a + b would overflow rk_u32 */
+static rk_s32 off_add_overflow(rk_u32 a, rk_u32 b)
+{
+    return a + b < a;
+}
+
+/* check if idx * elem_size exceeds 32KB */
+static rk_s32 idx_mul_overflow(rk_s32 idx, rk_u16 elem_size)
+{
+    return (rk_u32)idx * elem_size > 0x7FFF;
+}
+
+static void *entry_resolve(KmppObj obj, KmppEntry *entry)
+{
+    KmppObjImpl *impl = (KmppObjImpl *)obj;
+    KmppEntry vla = { .val = 0 };
+    char *base;
+    rk_s32 vla_cnt = 0;
+    rk_s32 offset = 0;
+    rk_s32 off = 0;
+    rk_s32 old = 0;
+    rk_s32 i;
+
+    if (!impl || !entry || !impl->entry)
+        return NULL;
+
+    base = (char *)impl->entry;
+
+    obj_dbg_resolve(" - %6s\n", impl->name);
+
+    for (i = 0; i < KMPP_VLA_MAX_DEPTH; i++) {
+        KmppEntry *e = &entry[i];
+
+        switch (e->type) {
+        case ENTRY_TYPE_LOC_TBL : {
+            offset = e->tbl.elem_offset;
+            off += offset;
+
+            obj_dbg_resolve("[%d] %4d + %4d -> %4d LOC_TBL  offset %4d size %4d\n",
+                            i, old, offset, off, offset, e->tbl.elem_size);
+        } break;
+        case ENTRY_TYPE_VLA_INFO : {
+            rk_s32 buf_size = impl->entry_buf_size;
+
+            vla = *e;
+
+            /* validate flex offsets before dereferencing */
+            if (buf_size > 0) {
+                if (vla.vla.flex_base &&
+                    (rk_u32)(off + vla.vla.base_off) + sizeof(rk_u32) > (rk_u32)buf_size) {
+                    obj_dbg_resolve("[%d] VLA_INFO base_off out of bounds\n", i);
+                    return NULL;
+                }
+                if (vla.vla.flex_count &&
+                    (rk_u32)(off + vla.vla.count_off) + sizeof(rk_s32) > (rk_u32)buf_size) {
+                    obj_dbg_resolve("[%d] VLA_INFO count_off out of bounds\n", i);
+                    return NULL;
+                }
+            }
+
+            offset = !vla.vla.flex_base ? vla.vla.base_off :
+                     *(rk_u32 *)(base + off + vla.vla.base_off);
+            vla_cnt = !vla.vla.flex_count ? vla.vla.elem_count :
+                      *(rk_s32 *)(base + off + vla.vla.count_off);
+
+            /* check offset accumulation overflow */
+            if (off_add_overflow(off, offset)) {
+                obj_dbg_resolve("[%d] VLA_INFO offset overflow\n", i);
+                return NULL;
+            }
+            off += offset;
+
+            /* limit vla_cnt to prevent overflow in index calculation */
+            if (vla_cnt < 0 || vla_cnt > 16384) {
+                obj_dbg_resolve("[%d] VLA_INFO count %d out of range\n", i, vla_cnt);
+                return NULL;
+            }
+
+            obj_dbg_resolve("[%d] %4d + %4d -> %4d VLA_INFO offset %4d%s count %4d%s\n",
+                            i, old, offset, off,
+                            offset, vla.vla.flex_base ? " (flex)" : "",
+                            vla_cnt, vla.vla.flex_count ? " (flex)" : "");
+        } break;
+        case ENTRY_TYPE_VAL : {
+            rk_s32 idx = e->v.val;
+
+            if (idx < 0 || idx >= vla_cnt) {
+                obj_dbg_resolve("[%d] VAL idx %d out of range cnt %d\n", i, idx, vla_cnt);
+                return NULL;
+            }
+
+            /* check idx * elem_size overflow */
+            if (idx_mul_overflow(idx, vla.vla.elem_size)) {
+                obj_dbg_resolve("[%d] VAL idx offset overflow\n", i);
+                return NULL;
+            }
+            offset = idx * vla.vla.elem_size;
+
+            /* check off accumulation overflow */
+            if (off_add_overflow(off, offset)) {
+                obj_dbg_resolve("[%d] VAL off overflow\n", i);
+                return NULL;
+            }
+            off += offset;
+
+            obj_dbg_resolve("[%d] %4d + %4d -> %4d VLA IDX  offset %4d size %4d idx %d:%d\n",
+                            i, old, offset, off,
+                            offset, vla.vla.elem_size, idx, vla_cnt);
+        } break;
+        case ENTRY_TYPE_NONE :
+            break;
+        default : {
+            obj_dbg_resolve("[%d] unknown type %d\n", i, e->type);
+            return NULL;
+        } break;
+        }
+
+        old = off;
+
+        if (!(e->flag & ENTRY_CHAIN)) {
+            if (impl->entry_buf_size && off >= impl->entry_buf_size) {
+                obj_dbg_resolve("[%d] final offset %d exceeds buf size %d\n",
+                                i, off, impl->entry_buf_size);
+                return NULL;
+            }
+
+            obj_dbg_resolve("[%d] final offset %4d\n", i, off);
+            return base + off;
+        }
+    }
+
+    return NULL;
+}
+
+rk_s32 kmpp_objdef_resolve(KmppObjDef def, const char *name, KmppEntry *entry)
+{
+    KmppObjDefImpl *impl = (KmppObjDefImpl *)def;
+    MppTrie trie = impl ? impl->trie : NULL;
+    MppTrieStatus st = {0};
+    rk_s32 step = 0;
+    const char *p = name;
+
+    if (!trie || !name || !entry) {
+        mpp_loge_f("invalid param def %p name %s entry %p\n", def, name, entry);
+        return rk_nok;
+    }
+
+    memset(entry, 0, sizeof(KmppEntry) * KMPP_VLA_MAX_DEPTH);
+
+    while (1) {
+        KmppEntry e = {0};
+        rk_s32 ret = mpp_trie_get_entry(trie, &st, p, &e);
+
+        if (ret == MPP_TRIE_SUBROOT) {
+            if (step + 2 >= KMPP_VLA_MAX_DEPTH) {
+                mpp_loge_f("too many steps in '%s'\n", name);
+                return rk_nok;
+            }
+
+            entry[step].val = e.val;
+            entry[step].vla.flag |= ENTRY_CHAIN;
+            step++;
+
+            entry[step].val = 0;
+            entry[step].v.type = ENTRY_TYPE_VAL;
+            entry[step].v.flag = ENTRY_CHAIN;
+            entry[step].v.val = st.array_idx;
+            step++;
+
+            st.root_idx = st.node_idx;
+            p += st.name_pos;
+        } else if (ret == MPP_TRIE_LEAF && e.type != ENTRY_TYPE_NONE) {
+            if (step >= KMPP_VLA_MAX_DEPTH) {
+                mpp_loge_f("too many steps in '%s'\n", name);
+                return rk_nok;
+            }
+
+            entry[step].val = e.val;
+            return rk_ok;
+        } else {
+            mpp_loge_f("path '%s' not found at '%s'\n", name, p);
+            return rk_nok;
+        }
+    }
+}
+
+rk_s32 kmpp_obj_vla_resolve(KmppObj obj, const char *name, KmppEntry *entry)
+{
+    if (!obj) {
+        mpp_loge_f("invalid param obj %p\n", obj);
+        return rk_nok;
+    }
+
+    return kmpp_objdef_resolve(kmpp_obj_to_objdef(obj), name, entry);
+}
+
+#define MPP_OBJ_VLA_ACCESS(type, base_type) \
+    rk_s32 kmpp_obj_vla_tbl_get_##type(KmppObj obj, KmppEntry *entry, base_type *val) \
+    { \
+        base_type *ptr = (base_type *)entry_resolve(obj, entry); \
+        if (!ptr) \
+            return rk_nok; \
+        *val = *ptr; \
+        return rk_ok; \
+    } \
+    rk_s32 kmpp_obj_vla_tbl_set_##type(KmppObj obj, KmppEntry *entry, base_type val) \
+    { \
+        base_type *ptr = (base_type *)entry_resolve(obj, entry); \
+        if (!ptr) \
+            return rk_nok; \
+        *ptr = val; \
+        return rk_ok; \
+    }
+
+MPP_OBJ_VLA_ACCESS(s32, rk_s32)
+MPP_OBJ_VLA_ACCESS(u32, rk_u32)
+MPP_OBJ_VLA_ACCESS(s64, rk_s64)
+MPP_OBJ_VLA_ACCESS(u64, rk_u64)

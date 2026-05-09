@@ -66,7 +66,8 @@ rk_s32 kmpp_objdef_add_cfg_root(KmppObjDef def, MppCfgObj root);
 /* userspace objdef get MppCfgObj root */
 MppCfgObj kmpp_objdef_get_cfg_root(KmppObjDef def);
 /* userspace objdef add KmppEntry table */
-rk_s32 kmpp_objdef_add_entry(KmppObjDef def, const char *name, KmppEntry *tbl);
+rk_s32 kmpp_objdef_add_entry(KmppObjDef def, rk_s32 subroot,
+                             const char *name, KmppEntry *tbl);
 /* userspace object init function register default object is all zero */
 rk_s32 kmpp_objdef_add_init(KmppObjDef def, KmppObjInit init);
 /* userspace object deinit function register */
@@ -89,6 +90,9 @@ rk_s32 kmpp_objdef_dump(KmppObjDef def);
 const char *kmpp_objdef_get_name(KmppObjDef def);
 rk_s32 kmpp_objdef_get_entry_size(KmppObjDef def);
 MppTrie kmpp_objdef_get_trie(KmppObjDef def);
+
+/* objdef level resolve: build KmppEntry chain without needing an obj instance */
+rk_s32 kmpp_objdef_resolve(KmppObjDef def, const char *name, KmppEntry *entry);
 
 /* import kernel object ref */
 rk_s32 kmpp_obj_get(KmppObj *obj, KmppObjDef def, const char *caller);
@@ -203,6 +207,34 @@ rk_s32 kmpp_obj_tbl_get_shm(KmppObj obj, KmppEntry *tbl, KmppShmPtr *val);
 /* helper for get share object from a share memory element */
 rk_s32 kmpp_obj_set_shm_obj(KmppObj obj, const char *name, KmppObj val);
 rk_s32 kmpp_obj_get_shm_obj(KmppObj obj, const char *name, KmppObj *val);
+
+/* VLA path access — flat KmppEntry chain
+ *
+ * Chain layout:
+ *   [VLA_INFO | VAL(idx) | VLA_INFO | VAL(idx) | LOC_TBL(field)]
+ *
+ * Each entry is a copy from objdef trie. VLA_INFO followed by VAL(index).
+ * LOC_TBL for struct member or final field. ENTRY_CHAIN flag bit
+ * marks non-terminal entries in the chain.
+ *
+ * Example: "mid:0:inner:1:value"
+ *   entry[0] = VLA_INFO  | ENTRY_CHAIN
+ *   entry[1] = VAL(0)    | ENTRY_CHAIN
+ *   entry[2] = VLA_INFO  | ENTRY_CHAIN
+ *   entry[3] = VAL(1)    | ENTRY_CHAIN
+ *   entry[4] = LOC_TBL    (terminal)
+ */
+#define KMPP_VLA_MAX_DEPTH  8
+
+rk_s32 kmpp_obj_vla_resolve(KmppObj obj, const char *name, KmppEntry *entry);
+rk_s32 kmpp_obj_vla_tbl_get_s32(KmppObj obj, KmppEntry *entry, rk_s32 *val);
+rk_s32 kmpp_obj_vla_tbl_set_s32(KmppObj obj, KmppEntry *entry, rk_s32 val);
+rk_s32 kmpp_obj_vla_tbl_get_u32(KmppObj obj, KmppEntry *entry, rk_u32 *val);
+rk_s32 kmpp_obj_vla_tbl_set_u32(KmppObj obj, KmppEntry *entry, rk_u32 val);
+rk_s32 kmpp_obj_vla_tbl_get_s64(KmppObj obj, KmppEntry *entry, rk_s64 *val);
+rk_s32 kmpp_obj_vla_tbl_set_s64(KmppObj obj, KmppEntry *entry, rk_s64 val);
+rk_s32 kmpp_obj_vla_tbl_get_u64(KmppObj obj, KmppEntry *entry, rk_u64 *val);
+rk_s32 kmpp_obj_vla_tbl_set_u64(KmppObj obj, KmppEntry *entry, rk_u64 val);
 
 /* update flag check function */
 rk_s32 kmpp_obj_test(KmppObj obj, const char *name);

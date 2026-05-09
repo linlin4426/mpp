@@ -484,7 +484,7 @@ static rk_s32 test_flex_raw_array(MppCfgObj root)
 
     vla.val = 0;
     vla.vla.type = ENTRY_TYPE_VLA_INFO;
-    vla.vla.vla_flag = VLAINFO_FLEX_COUNT;
+    vla.vla.flex_count = 1;
     vla.vla.elem_size = sizeof(rk_s32);
     vla.vla.elem_count = elem_count;
 
@@ -591,7 +591,7 @@ static rk_s32 test_flex_elem_array(MppCfgObj root)
 
     vla.val = 0;
     vla.vla.type = ENTRY_TYPE_VLA_INFO;
-    vla.vla.vla_flag   = VLAINFO_FLEX_COUNT;
+    vla.vla.flex_count  = 1;
     vla.vla.elem_count = elem_count;
 
     RUN_AND_CHECK(set_vla,   mpp_cfg_set_vla(array, &vla, MPP_CFG_TYPE_OBJECT));

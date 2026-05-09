@@ -309,7 +309,7 @@ static rk_s32 kmpp_obj_resize_test(const char *name, rk_u32 flag)
     kmpp_objdef_add_resize(def, resize_test_impl_resize);
 
     /* finalize objdef: create pool */
-    kmpp_objdef_add_entry(def, NULL, NULL);
+    kmpp_objdef_add_entry(def, 0, NULL, NULL);
 
     /* allocate object */
     ret = kmpp_obj_get_f(&obj, def);
@@ -537,6 +537,304 @@ static rk_s32 kmpp_shm_test(const char *name, rk_u32 flag)
     return ret;
 }
 
+/*
+ * VLA multi-level test
+ *
+ * Two-level VLA nesting:
+ *   VlaTop -> VLA(VlaMid) -> VLA(VlaInner) -> fields
+ *
+ * Paths:
+ *   "mid:0:id"              - vla + tbl
+ *   "mid:0:inner:1:value"   - vla + vla + tbl
+ *   "mid:1:inner:0:tag"     - vla + vla + tbl
+ */
+typedef struct VlaTestInner_t {
+    rk_s32 value;
+    rk_s32 tag;
+} VlaTestInner;
+
+typedef struct VlaTestMid_t {
+    rk_s32 id;
+    rk_s32 inner_cnt;
+    rk_s32 inner_off;
+} VlaTestMid;
+
+typedef struct VlaTestTop_t {
+    rk_s32 mid_cnt;
+    rk_s32 mid_off;
+} VlaTestTop;
+
+#define VLA_MID0_INNER  3
+#define VLA_MID1_INNER  2
+
+static rk_s32 vla_test_resize(void *entry, KmppObj obj, const char *caller)
+{
+    VlaTestTop *top = (VlaTestTop *)entry;
+    KmppObjDef def = kmpp_obj_to_objdef(obj);
+    (void)caller;
+
+    top->mid_off = kmpp_objdef_get_entry_size(def) + kmpp_obj_to_flags_size(obj);
+    return rk_ok;
+}
+
+static rk_s32 kmpp_obj_vla_test(const char *name, rk_u32 flag)
+{
+    KmppObjDef def = NULL;
+    KmppObj obj = NULL;
+    VlaTestTop *top;
+    VlaTestMid *mid0, *mid1;
+    VlaTestInner *inner0, *inner1;
+    KmppEntry path[KMPP_VLA_MAX_DEPTH];
+    rk_s32 val;
+    rk_s32 ret = rk_ok;
+    (void)name;
+    (void)flag;
+
+    /* 1. register objdef */
+    ret = kmpp_objdef_register(&def, 0, sizeof(VlaTestTop), "vla_test");
+    if (ret || !def) {
+        mpp_log("vla_test register failed ret %d\n", ret);
+        goto done;
+    }
+
+    kmpp_objdef_set_prop(def, "flex_entry", 1);
+    kmpp_objdef_add_resize(def, vla_test_resize);
+
+    /* 2. add trie entries */
+    KmppEntry e = { .val = 0 };
+    rk_s32 subroot = 0;
+
+    /* "mid" - outer VLA */
+    e.vla.type       = ENTRY_TYPE_VLA_INFO;
+    e.vla.elem_size  = sizeof(VlaTestMid);
+    e.vla.elem_count = 0;
+    e.vla.flex_count = 1;
+    e.vla.flex_base  = 1;
+    e.vla.count_off  = (rk_u16)((size_t) & ((VlaTestTop *)0)->mid_cnt);
+    e.vla.base_off   = (rk_u16)((size_t) & ((VlaTestTop *)0)->mid_off);
+    subroot = kmpp_objdef_add_entry(def, subroot, "mid", &e);
+
+    /* "mid:id" - LOC_TBL field under mid subroot */
+    e.val = 0;
+    e.tbl.type        = ENTRY_TYPE_LOC_TBL;
+    e.tbl.elem_type   = ELEM_TYPE_s32;
+    e.tbl.elem_size   = sizeof(VlaTestMid);
+    e.tbl.elem_offset = (rk_u16)((size_t) & ((VlaTestMid *)0)->id);
+    e.tbl.flag_offset = 0;
+    kmpp_objdef_add_entry(def, subroot, "id", &e);
+
+    /* "mid:inner" - inner VLA under mid subroot */
+    {
+        rk_s32 mid_subroot = subroot;
+
+        e.val = 0;
+        e.vla.type       = ENTRY_TYPE_VLA_INFO;
+        e.vla.elem_size  = sizeof(VlaTestInner);
+        e.vla.elem_count = 0;
+        e.vla.flex_count = 1;
+        e.vla.flex_base  = 1;
+        e.vla.count_off  = (rk_u16)((size_t) & ((VlaTestMid *)0)->inner_cnt);
+        e.vla.base_off   = (rk_u16)((size_t) & ((VlaTestMid *)0)->inner_off);
+        subroot = kmpp_objdef_add_entry(def, subroot, "inner", &e);
+
+        /* "mid:inner:value" - LOC_TBL field under inner subroot */
+        e.val = 0;
+        e.tbl.type        = ENTRY_TYPE_LOC_TBL;
+        e.tbl.elem_type   = ELEM_TYPE_s32;
+        e.tbl.elem_size   = sizeof(VlaTestInner);
+        e.tbl.elem_offset = (rk_u16)((size_t) & ((VlaTestInner *)0)->value);
+        e.tbl.flag_offset = 0;
+        kmpp_objdef_add_entry(def, subroot, "value", &e);
+
+        /* "mid:inner:tag" - LOC_TBL field under inner subroot */
+        e.val = 0;
+        e.tbl.type        = ENTRY_TYPE_LOC_TBL;
+        e.tbl.elem_type   = ELEM_TYPE_s32;
+        e.tbl.elem_size   = sizeof(VlaTestInner);
+        e.tbl.elem_offset = (rk_u16)((size_t) & ((VlaTestInner *)0)->tag);
+        e.tbl.flag_offset = 0;
+        kmpp_objdef_add_entry(def, subroot, "tag", &e);
+
+        subroot = mid_subroot;
+    }
+
+    /* finalize */
+    kmpp_objdef_add_entry(def, 0, NULL, NULL);
+
+    if (flag & TEST_DEF_DUMP)
+        kmpp_objdef_dump(def);
+
+    /* 3. get obj and resize */
+    ret = kmpp_obj_get_f(&obj, def);
+    if (ret) {
+        mpp_log("vla_test obj get failed ret %d\n", ret);
+        goto done;
+    }
+
+    rk_s32 mid_cnt = 2;
+    rk_s32 vla_size = mid_cnt * sizeof(VlaTestMid) +
+                      VLA_MID0_INNER * sizeof(VlaTestInner) +
+                      VLA_MID1_INNER * sizeof(VlaTestInner);
+    ret = kmpp_obj_resize_f(obj, vla_size);
+    if (ret) {
+        mpp_log("vla_test resize failed ret %d\n", ret);
+        goto done;
+    }
+
+    /* 4. set up data */
+    top = (VlaTestTop *)kmpp_obj_to_entry(obj);
+    top->mid_cnt = mid_cnt;
+
+    mid0 = (VlaTestMid *)((char *)top + top->mid_off);
+    mid0->id = 100;
+    mid0->inner_cnt = VLA_MID0_INNER;
+    mid0->inner_off = mid_cnt * sizeof(VlaTestMid);
+
+    inner0 = (VlaTestInner *)((char *)mid0 + mid0->inner_off);
+    inner0[0].value = 10;
+    inner0[0].tag = 1;
+    inner0[1].value = 20;
+    inner0[1].tag = 2;
+    inner0[2].value = 30;
+    inner0[2].tag = 3;
+
+    mid1 = mid0 + 1;
+    mid1->id = 200;
+    mid1->inner_cnt = VLA_MID1_INNER;
+    mid1->inner_off = sizeof(VlaTestMid) + VLA_MID0_INNER * sizeof(VlaTestInner);
+
+    inner1 = (VlaTestInner *)((char *)mid1 + mid1->inner_off);
+    inner1[0].value = 40;
+    inner1[0].tag = 4;
+    inner1[1].value = 50;
+    inner1[1].tag = 5;
+
+    /* 5. test: single VLA + tbl */
+    ret = kmpp_obj_vla_resolve(obj, "mid:0:id", path);
+    if (ret) {
+        mpp_log("vla_resolve mid:0:id failed\n");
+        goto fail;
+    }
+    ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    if (ret || val != 100) {
+        mpp_log("mid:0:id = %d expected 100\n", val);
+        goto fail;
+    }
+    test_detail("  mid:0:id           = %d  ok\n", val);
+
+    ret = kmpp_obj_vla_resolve(obj, "mid:1:id", path);
+    if (ret) {
+        mpp_log("vla_resolve mid:1:id failed\n");
+        goto fail;
+    }
+    ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    if (ret || val != 200) {
+        mpp_log("mid:1:id = %d expected 200\n", val);
+        goto fail;
+    }
+    test_detail("  mid:1:id           = %d  ok\n", val);
+
+    /* 6. test: double VLA + tbl */
+    ret = kmpp_obj_vla_resolve(obj, "mid:0:inner:0:value", path);
+    if (ret) {
+        mpp_log("vla_resolve mid:0:inner:0:value failed\n");
+        goto fail;
+    }
+    ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    if (ret || val != 10) {
+        mpp_log("mid:0:inner:0:value = %d expected 10\n", val);
+        goto fail;
+    }
+    test_detail("  mid:0:inner:0:value = %d  ok\n", val);
+
+    ret = kmpp_obj_vla_resolve(obj, "mid:0:inner:1:tag", path);
+    if (ret) {
+        mpp_log("vla_resolve mid:0:inner:1:tag failed\n");
+        goto fail;
+    }
+    ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    if (ret || val != 2) {
+        mpp_log("mid:0:inner:1:tag = %d expected 2\n", val);
+        goto fail;
+    }
+    test_detail("  mid:0:inner:1:tag   = %d  ok\n", val);
+
+    ret = kmpp_obj_vla_resolve(obj, "mid:1:inner:0:value", path);
+    if (ret) {
+        mpp_log("vla_resolve mid:1:inner:0:value failed\n");
+        goto fail;
+    }
+    ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    if (ret || val != 40) {
+        mpp_log("mid:1:inner:0:value = %d expected 40\n", val);
+        goto fail;
+    }
+    test_detail("  mid:1:inner:0:value = %d  ok\n", val);
+
+    ret = kmpp_obj_vla_resolve(obj, "mid:1:inner:1:tag", path);
+    if (ret) {
+        mpp_log("vla_resolve mid:1:inner:1:tag failed\n");
+        goto fail;
+    }
+    ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    if (ret || val != 5) {
+        mpp_log("mid:1:inner:1:tag = %d expected 5\n", val);
+        goto fail;
+    }
+    test_detail("  mid:1:inner:1:tag   = %d  ok\n", val);
+
+    /* 7. set and readback */
+    ret = kmpp_obj_vla_resolve(obj, "mid:0:inner:2:value", path);
+    if (ret)
+        goto fail;
+    ret = kmpp_obj_vla_tbl_set_s32(obj, path, 99);
+    if (ret) {
+        mpp_log("set mid:0:inner:2:value failed\n");
+        goto fail;
+    }
+    ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    if (ret || val != 99) {
+        mpp_log("readback = %d expected 99\n", val);
+        goto fail;
+    }
+    test_detail("  mid:0:inner:2:value set/get = %d  ok\n", val);
+
+    /* 8. out of range */
+    ret = kmpp_obj_vla_resolve(obj, "mid:2:id", path);
+    if (ret)
+        goto fail;
+    ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    if (!ret) {
+        mpp_log("mid:2:id should fail (out of range)\n");
+        goto fail;
+    }
+    test_detail("  mid:2:id           out of range (expected)\n");
+
+    ret = kmpp_obj_vla_resolve(obj, "mid:0:inner:3:value", path);
+    if (ret)
+        goto fail;
+    ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    if (!ret) {
+        mpp_log("mid:0:inner:3:value should fail\n");
+        goto fail;
+    }
+    test_detail("  mid:0:inner:3:value out of range (expected)\n");
+
+    ret = kmpp_obj_put_f(obj);
+    obj = NULL;
+
+    goto done;
+
+fail:
+    ret = rk_nok;
+done:
+    if (obj)
+        kmpp_obj_put_f(obj);
+    if (def)
+        kmpp_objdef_put(def);
+    return ret;
+}
+
 static KmppObjTest obj_tests[] = {
     {
         "KmppFrame",
@@ -562,6 +860,11 @@ static KmppObjTest obj_tests[] = {
         "resize_test",
         0,
         kmpp_obj_resize_test,
+    },
+    {
+        "vla_test",
+        0,
+        kmpp_obj_vla_test,
     },
 };
 

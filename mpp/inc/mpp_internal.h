@@ -50,19 +50,9 @@ typedef enum EntryType_e {
     ENTRY_TYPE_BUTT,
 } EntryType;
 
-/*
- * 4-bit extention flag for different entry property
- * EntryValFlag     - for ENTRY_TYPE_VAL
- * EntryValFlag     - for ENTRY_TYPE_STR
- * EntryLocTblFlag  - for ENTRY_TYPE_LOC_TBL
- */
-typedef enum EntryValFlag_e {
-    /*
-     * 0 - value is unsigned value
-     * 1 - value is signed value
-     */
-    VALUE_SIGNED        = 0x1,
-} EntryValFlag;
+typedef enum EntryFlag_e {
+    ENTRY_CHAIN         = 0x1,
+} EntryFlag;
 
 typedef enum EntryValUsage_e {
     VALUE_NORMAL        = 0x0,
@@ -76,19 +66,6 @@ typedef enum EntryValUsage_e {
     /* ioctl cmd */
     VALUE_IOCTL_CMD     = 0x20,
 } EntryValUsage;
-
-typedef enum EntryStrFlag_e {
-    STRING_NORMAL       = 0x0,
-    /* string is trie self info */
-    STRING_TRIE         = 0x1,
-} EntryStrFlag;
-
-typedef enum EntryLocTblFlag_e {
-    /*
-     * bit 1    - array sub-root node (array pattern :N:)
-     */
-    LOCTBL_ARRAY_SUBROOT = 0x1,
-} EntryLocTblFlag;
 
 typedef enum ElemType_e {
     /* commaon fix size value */
@@ -137,48 +114,50 @@ typedef enum ElemType_e {
     ELEM_TYPE_BUTT      = 0x16,
 } ElemType;
 
-typedef enum EntryVLAFlag_e {
-    VLAINFO_FLEX_BASE   = 0x1,
-    VLAINFO_FLEX_COUNT  = 0x2,
-} EntryVLAFlag;
-
 typedef union KmppEntry_u {
     rk_u64                  val;
     union {
-        EntryType           type            : 4;
+        struct {
+            EntryType       type            : 4;
+            EntryFlag       flag            : 4;
+        };
         struct KmppEntryVal {
-            EntryType       prop            : 4;
-            EntryValFlag    flag            : 4;
+            EntryType       type            : 4;
+            EntryFlag       flag            : 4;
             EntryValUsage   usage           : 8;
             rk_u32          reserve         : 16;
             rk_u32          val;
         } v;
         struct KmppEntryStr {
-            EntryType       prop            : 4;
-            EntryValFlag    flag            : 4;
+            EntryType       type            : 4;
+            EntryFlag       flag            : 4;
             rk_u32          len             : 24;
             rk_u32          offset;
         } str;
         struct KmppEntryLocTbl {
             EntryType       type            : 4;    /* ENTRY_TYPE_LOC_TBL */
-            EntryLocTblFlag tbl_flag        : 4;
+            EntryFlag       flag            : 4;
             ElemType        elem_type       : 8;
             rk_u16          elem_size;
             rk_u16          elem_offset;
             rk_u16          flag_offset;
         } tbl;
         /*
-         * helper struct for location table for Variable Length Array (VLA)
-         * which its base offset and count offset is not fixed
-         * used only on in subroot trie root node's info
+         * VLA info: variable-length array metadata
+         * elem_count bits: [13:0] = count, [14] = flex_count, [15] = flex_base
+         * When flex_count=1, count_off holds struct offset to dynamic count
+         * When flex_base=1, base_off holds struct offset to dynamic base
+         * When flex=0, the value is fixed (elem_count for count, tbl for base)
          */
         struct KmppEntryVLAInfo {
-            EntryType       type            : 4;    /* ENTRY_TYPE_LOC_TBL */
-            EntryVLAFlag    vla_flag        : 4;    /* vla flag */
-            rk_u16          elem_size       : 8;    /* size of each array element */
-            rk_u16          elem_count;             /* count of array element (0 for dynamic) */
-            rk_u16          count_off;              /* offset of real array count in struct */
-            rk_u16          base_off;               /* offset of real array base offset in struct */
+            EntryType       type            : 4;
+            EntryFlag       flag            : 4;
+            rk_u16          elem_size       : 8;
+            rk_u16          elem_count      : 14;
+            rk_u16          flex_count      : 1;
+            rk_u16          flex_base       : 1;
+            rk_u16          count_off;
+            rk_u16          base_off;
         } vla;
     };
 } KmppEntry;
