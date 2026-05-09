@@ -149,6 +149,8 @@ void *thread_output(void *arg)
                 mpp_frame_init(&frm);
                 mpp_frame_set_width(frm, width);
                 mpp_frame_set_height(frm, height);
+                mpp_frame_set_hor_stride(frm, hor_stride);
+                mpp_frame_set_ver_stride(frm, ver_stride);
                 mpp_frame_set_fmt(frm, cmd->format);
 
                 ret = mpi->control(ctx, MPP_DEC_SET_FRAME_INFO, frm);
