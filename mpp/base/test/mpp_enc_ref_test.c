@@ -19,11 +19,326 @@
 #include <string.h>
 
 #include "mpp_log.h"
-#include "mpp_common.h"
+#include "mpp_mem.h"
+#include "mpp_test.h"
 
 #include "rk_venc_ref.h"
 #include "kmpp_obj.h"
+#include "mpp_cfg_io.h"
 #include "mpp_enc_ref.h"
+#include "mpp_internal.h"
+
+extern KmppObjDef mpp_enc_ref_cfg_objdef(void);
+
+/*
+ * test_objdef_access - verify objdef trie entries (metadata only)
+ *
+ * Scalar entries and array subroots are queried directly.
+ * VLA field access requires index: use st_cfg:0:field via kmpp_obj_vla_resolve.
+ */
+static rk_s32 test_objdef_access(void)
+{
+    KmppObjDef def = mpp_enc_ref_cfg_objdef();
+    KmppEntry *entry = NULL;
+    rk_s32 ret;
+    rk_s32 i;
+
+    mpp_logi("test_objdef_access start\n");
+
+    if (!def) {
+        mpp_loge("objdef is NULL\n");
+        return rk_nok;
+    }
+
+    /* 1. scalar entries */
+    struct { const char *name; ElemType type; } scalars[] = {
+        { "keep_cpb",    ELEM_TYPE_s32 },
+        { "lt_cfg_cnt",  ELEM_TYPE_s32 },
+        { "st_cfg_off",  ELEM_TYPE_u32 },
+        { "nonexistent", ELEM_TYPE_BUTT },
+    };
+
+    for (i = 0; i < (rk_s32)MPP_ARRAY_ELEMS(scalars); i++) {
+        ret = kmpp_objdef_get_entry(def, scalars[i].name, &entry);
+        if (scalars[i].type != ELEM_TYPE_BUTT) {
+            if (ret || !entry || entry->tbl.elem_type != scalars[i].type) {
+                mpp_loge("scalar '%s' failed\n", scalars[i].name);
+                return rk_nok;
+            }
+        } else {
+            if (!ret && entry) {
+                mpp_loge("'%s' should not exist\n", scalars[i].name);
+                return rk_nok;
+            }
+        }
+    }
+
+    /* 2. array subroots */
+    struct { const char *name; rk_u32 expect_size; } arrays[] = {
+        { "st_cfg", (rk_u32)sizeof(MppEncRefStFrmCfg) },
+        { "lt_cfg", (rk_u32)sizeof(MppEncRefLtFrmCfg) },
+    };
+
+    for (i = 0; i < (rk_s32)MPP_ARRAY_ELEMS(arrays); i++) {
+        ret = kmpp_objdef_get_entry(def, arrays[i].name, &entry);
+        if (ret || !entry || entry->vla.type != ENTRY_TYPE_VLA_INFO ||
+            entry->vla.elem_size != arrays[i].expect_size) {
+            mpp_loge("array '%s' failed\n", arrays[i].name);
+            return rk_nok;
+        }
+    }
+
+    /* 3. negative test: paths without index are invalid */
+    const char *bad_paths[] = {
+        "st_cfg:is_non_ref", "lt_cfg:lt_idx",
+    };
+
+    for (i = 0; i < (rk_s32)MPP_ARRAY_ELEMS(bad_paths); i++) {
+        ret = kmpp_objdef_get_entry(def, bad_paths[i], &entry);
+        if (!ret) {
+            mpp_loge("'%s' should fail (no index)\n", bad_paths[i]);
+            return rk_nok;
+        }
+    }
+
+    mpp_logi("test_objdef_access success\n");
+    return rk_ok;
+}
+
+/*
+ * helper: resolve field entry from indexed VLA path
+ *
+ * Resolves "st_cfg:0:is_non_ref" and returns pointer to terminal LOC_TBL entry.
+ */
+static KmppEntry *vla_resolve_field(KmppObj obj, const char *path,
+                                    KmppEntry *chain)
+{
+    rk_s32 i;
+    rk_s32 ret = kmpp_obj_vla_resolve(obj, path, chain);
+
+    if (ret)
+        return NULL;
+
+    for (i = KMPP_VLA_MAX_DEPTH - 1; i >= 0; i--) {
+        if (chain[i].val)
+            return &chain[i];
+    }
+
+    return NULL;
+}
+
+/*
+ * helper: read s32 from VLA element via array base + stride + field offset
+ */
+static rk_s32 vla_read_s32(void *base, rk_u32 stride, rk_s32 cnt,
+                           KmppEntry *field, rk_s32 idx, rk_s32 *val)
+{
+    if (idx < 0 || idx >= cnt)
+        return rk_nok;
+
+    *val = *(rk_s32 *)((char *)base + idx * stride + field->tbl.elem_offset);
+    return rk_ok;
+}
+
+/*
+ * test_obj_access - verify VLA data access on obj instance
+ *
+ * Uses kmpp_obj_vla_resolve for field metadata,
+ * uses MPP_REF_ST_ARR/LT_ARR for array base address.
+ */
+static rk_s32 test_obj_access(void)
+{
+    MPP_RET_VARS;
+    KmppObjDef def = mpp_enc_ref_cfg_objdef();
+    KmppEntry *st_cfg_arr = NULL;
+    KmppEntry *lt_cfg_arr = NULL;
+    MppEncRefCfg obj = NULL;
+    MppEncRefCfgImpl *cfg;
+    KmppEntry chain[KMPP_VLA_MAX_DEPTH];
+    KmppEntry *fld;
+    rk_s32 val;
+
+    mpp_logi("test_obj_access start\n");
+
+    /* get array entries from objdef for stride */
+    kmpp_objdef_get_entry(def, "st_cfg", &st_cfg_arr);
+    kmpp_objdef_get_entry(def, "lt_cfg", &lt_cfg_arr);
+    MPP_ASSERT_NOT_NULL(st_cfg_arr);
+    MPP_ASSERT_NOT_NULL(lt_cfg_arr);
+
+    /* create obj with known data */
+    _mpp_ret = mpp_enc_ref_cfg_setup(&obj, 1, 4);
+    MPP_ASSERT_FALSEm("setup failed", _mpp_ret);
+
+    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(obj);
+    MppEncRefStFrmCfg *st_arr = MPP_REF_ST_ARR(cfg);
+
+    st_arr[0].is_non_ref   = 0;
+    st_arr[0].temporal_id  = 0;
+    st_arr[0].ref_arg      = 10;
+    st_arr[1].is_non_ref   = 1;
+    st_arr[1].temporal_id  = 3;
+    st_arr[1].ref_arg      = 20;
+    st_arr[2].is_non_ref   = 0;
+    st_arr[2].temporal_id  = 1;
+    st_arr[2].ref_arg      = 30;
+    st_arr[3].is_non_ref   = 1;
+    st_arr[3].temporal_id  = 2;
+    st_arr[3].ref_arg      = 40;
+    cfg->st_cfg_cnt = 4;
+
+    MppEncRefLtFrmCfg *lt_arr = MPP_REF_LT_ARR(cfg);
+    lt_arr[0].lt_idx = 2;
+    lt_arr[0].lt_gap = 100;
+    cfg->lt_cfg_cnt = 1;
+
+    /* st_cfg:0:is_non_ref -> 0 */
+    fld = vla_resolve_field(obj, "st_cfg:0:is_non_ref", chain);
+    MPP_ASSERT_NOT_NULLm("resolve st_cfg:0:is_non_ref", fld);
+    _mpp_ret = vla_read_s32(st_arr, st_cfg_arr->vla.elem_size, cfg->st_cfg_cnt,
+                            fld, 0, &val);
+    MPP_ASSERT_FALSEm("read st_cfg:0:is_non_ref", _mpp_ret);
+    MPP_ASSERT_EQm("st_cfg:0:is_non_ref", 0, val);
+
+    /* st_cfg:1:is_non_ref -> 1 */
+    fld = vla_resolve_field(obj, "st_cfg:1:is_non_ref", chain);
+    MPP_ASSERT_NOT_NULLm("resolve st_cfg:1:is_non_ref", fld);
+    _mpp_ret = vla_read_s32(st_arr, st_cfg_arr->vla.elem_size, cfg->st_cfg_cnt,
+                            fld, 1, &val);
+    MPP_ASSERT_FALSEm("read st_cfg:1:is_non_ref", _mpp_ret);
+    MPP_ASSERT_EQm("st_cfg:1:is_non_ref", 1, val);
+
+    /* st_cfg:2:temporal_id -> 1 */
+    fld = vla_resolve_field(obj, "st_cfg:2:temporal_id", chain);
+    MPP_ASSERT_NOT_NULLm("resolve st_cfg:2:temporal_id", fld);
+    _mpp_ret = vla_read_s32(st_arr, st_cfg_arr->vla.elem_size, cfg->st_cfg_cnt,
+                            fld, 2, &val);
+    MPP_ASSERT_FALSEm("read st_cfg:2:temporal_id", _mpp_ret);
+    MPP_ASSERT_EQm("st_cfg:2:temporal_id", 1, val);
+
+    /* st_cfg:3:ref_arg -> 40 */
+    fld = vla_resolve_field(obj, "st_cfg:3:ref_arg", chain);
+    MPP_ASSERT_NOT_NULLm("resolve st_cfg:3:ref_arg", fld);
+    _mpp_ret = vla_read_s32(st_arr, st_cfg_arr->vla.elem_size, cfg->st_cfg_cnt,
+                            fld, 3, &val);
+    MPP_ASSERT_FALSEm("read st_cfg:3:ref_arg", _mpp_ret);
+    MPP_ASSERT_EQm("st_cfg:3:ref_arg", 40, val);
+
+    /* lt_cfg:0:lt_idx -> 2 */
+    fld = vla_resolve_field(obj, "lt_cfg:0:lt_idx", chain);
+    MPP_ASSERT_NOT_NULLm("resolve lt_cfg:0:lt_idx", fld);
+    _mpp_ret = vla_read_s32(lt_arr, lt_cfg_arr->vla.elem_size, cfg->lt_cfg_cnt,
+                            fld, 0, &val);
+    MPP_ASSERT_FALSEm("read lt_cfg:0:lt_idx", _mpp_ret);
+    MPP_ASSERT_EQm("lt_cfg:0:lt_idx", 2, val);
+
+    /* lt_cfg:0:lt_gap -> 100 */
+    fld = vla_resolve_field(obj, "lt_cfg:0:lt_gap", chain);
+    MPP_ASSERT_NOT_NULLm("resolve lt_cfg:0:lt_gap", fld);
+    _mpp_ret = vla_read_s32(lt_arr, lt_cfg_arr->vla.elem_size, cfg->lt_cfg_cnt,
+                            fld, 0, &val);
+    MPP_ASSERT_FALSEm("read lt_cfg:0:lt_gap", _mpp_ret);
+    MPP_ASSERT_EQm("lt_cfg:0:lt_gap", 100, val);
+
+    /* st_cfg:4:is_non_ref -> out of range (should fail) */
+    {
+        rk_s32 ret = vla_read_s32(st_arr, st_cfg_arr->vla.elem_size, cfg->st_cfg_cnt,
+                                  fld, 4, &val);
+        MPP_ASSERTm("st_cfg:4:is_non_ref should fail", ret);
+    }
+
+    mpp_logi("test_obj_access success\n");
+    MPP_PASS();
+
+done:
+    if (obj)
+        mpp_enc_ref_cfg_deinit(&obj);
+    return _mpp_ret;
+}
+
+static rk_s32 test_vla_api(void)
+{
+    MPP_RET_VARS;
+    MppEncRefCfg obj = NULL;
+    MppEncRefCfgImpl *cfg;
+    MppEncRefStFrmCfg *st_arr;
+    MppEncRefLtFrmCfg *lt_arr;
+    KmppEntry path[KMPP_VLA_MAX_DEPTH];
+    rk_s32 val;
+
+    mpp_logi("test_vla_api start\n");
+
+    /* create obj with known data */
+    _mpp_ret = mpp_enc_ref_cfg_setup(&obj, 1, 4);
+    MPP_ASSERT_FALSEm("setup failed", _mpp_ret);
+
+    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(obj);
+    st_arr = MPP_REF_ST_ARR(cfg);
+    st_arr[0].is_non_ref   = 0;
+    st_arr[0].temporal_id  = 0;
+    st_arr[0].ref_arg      = 10;
+    st_arr[1].is_non_ref   = 1;
+    st_arr[1].temporal_id  = 3;
+    st_arr[1].ref_arg      = 20;
+    st_arr[2].is_non_ref   = 0;
+    st_arr[2].temporal_id  = 1;
+    st_arr[2].ref_arg      = 30;
+    cfg->st_cfg_cnt = 3;
+
+    lt_arr = MPP_REF_LT_ARR(cfg);
+    lt_arr[0].lt_idx = 5;
+    lt_arr[0].lt_gap = 200;
+    cfg->lt_cfg_cnt = 1;
+
+    /* 1. get st_cfg:0:is_non_ref -> 0 */
+    _mpp_ret = kmpp_obj_vla_resolve(obj, "st_cfg:0:is_non_ref", path);
+    MPP_ASSERT_FALSEm("vla_resolve st_cfg:0:is_non_ref", _mpp_ret);
+    _mpp_ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    MPP_ASSERT_FALSEm("vla_get st_cfg:0:is_non_ref", _mpp_ret);
+    MPP_ASSERT_EQm("st_cfg:0:is_non_ref", 0, val);
+
+    /* 2. get + set + readback st_cfg:1:is_non_ref */
+    _mpp_ret = kmpp_obj_vla_resolve(obj, "st_cfg:1:is_non_ref", path);
+    MPP_ASSERT_FALSEm("vla_resolve st_cfg:1:is_non_ref", _mpp_ret);
+    _mpp_ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    MPP_ASSERT_FALSEm("vla_get st_cfg:1:is_non_ref", _mpp_ret);
+    MPP_ASSERT_EQm("st_cfg:1:is_non_ref", 1, val);
+    _mpp_ret = kmpp_obj_vla_tbl_set_s32(obj, path, 42);
+    MPP_ASSERT_FALSEm("vla_set st_cfg:1:is_non_ref", _mpp_ret);
+    _mpp_ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    MPP_ASSERT_FALSEm("vla_get after set", _mpp_ret);
+    MPP_ASSERT_EQm("st_cfg:1:is_non_ref after set", 42, val);
+
+    /* 3. st_cfg:2:temporal_id -> 1 */
+    _mpp_ret = kmpp_obj_vla_resolve(obj, "st_cfg:2:temporal_id", path);
+    MPP_ASSERT_FALSEm("vla_resolve st_cfg:2:temporal_id", _mpp_ret);
+    _mpp_ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    MPP_ASSERT_FALSEm("vla_get st_cfg:2:temporal_id", _mpp_ret);
+    MPP_ASSERT_EQm("st_cfg:2:temporal_id", 1, val);
+
+    /* 4. lt_cfg:0:lt_idx -> 5 */
+    _mpp_ret = kmpp_obj_vla_resolve(obj, "lt_cfg:0:lt_idx", path);
+    MPP_ASSERT_FALSEm("vla_resolve lt_cfg:0:lt_idx", _mpp_ret);
+    _mpp_ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    MPP_ASSERT_FALSEm("vla_get lt_cfg:0:lt_idx", _mpp_ret);
+    MPP_ASSERT_EQm("lt_cfg:0:lt_idx", 5, val);
+
+    /* 5. out of range: st_cfg:3:is_non_ref, cnt=3 (should fail) */
+    {
+        rk_s32 ret = kmpp_obj_vla_resolve(obj, "st_cfg:3:is_non_ref", path);
+        MPP_ASSERT_FALSEm("vla_resolve st_cfg:3:is_non_ref", ret);
+        ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+        MPP_ASSERTm("vla_get st_cfg:3 should fail (out of range)", ret);
+    }
+
+    mpp_logi("test_vla_api success\n");
+    MPP_PASS();
+
+done:
+    if (obj)
+        mpp_enc_ref_cfg_deinit(&obj);
+    return _mpp_ret;
+}
 
 /*
  * test_copy_shrink: verify copy from small src to large dst does not overflow.
@@ -204,7 +519,7 @@ static rk_s32 test_mpp_enc_ref_cfg_tsvc4(void)
     ret = mpp_enc_ref_cfg_check(ref);
     mpp_logi("test_mpp_enc_ref_cfg_tsvc4 check ret %d\n", ret);
 
-    ret = mpp_enc_ref_cfg_show(ref);
+    ret = mpp_enc_ref_cfg_dump(ref, __FUNCTION__);
 
     mpp_enc_ref_cfg_deinit(&ref);
 
@@ -233,8 +548,6 @@ static rk_s32 test_mpp_enc_ref_cfg_obj(void)
     }
 
     cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(obj);
-    mpp_logi("ref_cfg_obj: lt_cfg_cap %d st_cfg_cap %d st_cfg_off %u lt_cfg_off %u\n",
-             cfg->lt_cfg_cap, cfg->st_cfg_cap, cfg->st_cfg_off, cfg->lt_cfg_off);
 
     /* verify offsets */
     if (cfg->st_cfg_cap != st_cnt || cfg->lt_cfg_cap != lt_cnt) {
@@ -331,17 +644,206 @@ done:
     return ret;
 }
 
+/*
+ * test_cfg_roundtrip - verify extract + apply roundtrip
+ *
+ * 1. Create obj with known scalar and VLA data
+ * 2. Extract: struct -> cfg tree -> JSON string
+ * 3. Apply: JSON string -> cfg tree -> new struct
+ * 4. Verify scalar values match
+ */
+static rk_s32 test_cfg_roundtrip(void)
+{
+    MPP_RET_VARS;
+    MppEncRefCfg obj = NULL;
+    MppEncRefCfg obj2 = NULL;
+    MppEncRefCfg obj3 = NULL;
+    KmppObjDef def = mpp_enc_ref_cfg_objdef();
+    MppCfgObj cfg_root = kmpp_objdef_get_cfg_root(def);
+    MppCfgObj obj_from = NULL;
+    MppCfgObj obj_from_json = NULL;
+    MppEncRefCfgImpl *cfg;
+    MppEncRefCfgImpl *cfg2;
+    MppEncRefCfgImpl *cfg3;
+    char *json = NULL;
+
+    mpp_logi("test_cfg_roundtrip start\n");
+
+    /* 1. create obj with known data */
+    _mpp_ret = mpp_enc_ref_cfg_setup(&obj, 1, 4);
+    MPP_ASSERT_FALSEm("setup failed", _mpp_ret);
+
+    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(obj);
+    cfg->keep_cpb = 1;
+
+    MppEncRefStFrmCfg *st_arr = MPP_REF_ST_ARR(cfg);
+    st_arr[0].is_non_ref   = 0;
+    st_arr[0].temporal_id  = 0;
+    st_arr[0].ref_arg      = 10;
+    st_arr[1].is_non_ref   = 1;
+    st_arr[1].temporal_id  = 3;
+    st_arr[1].ref_arg      = 20;
+    st_arr[2].is_non_ref   = 0;
+    st_arr[2].temporal_id  = 1;
+    st_arr[2].ref_arg      = 30;
+    st_arr[3].is_non_ref   = 1;
+    st_arr[3].temporal_id  = 2;
+    st_arr[3].ref_arg      = 40;
+    cfg->st_cfg_cnt = 4;
+
+    MppEncRefLtFrmCfg *lt_arr = MPP_REF_LT_ARR(cfg);
+    lt_arr[0].lt_idx = 2;
+    lt_arr[0].lt_gap = 100;
+    cfg->lt_cfg_cnt = 1;
+
+    /* 2. extract: struct -> cfg tree -> JSON */
+    _mpp_ret = mpp_cfg_from_struct(&obj_from, cfg_root, cfg);
+    MPP_ASSERT_FALSEm("from_struct failed", _mpp_ret);
+
+    _mpp_ret = mpp_cfg_to_string(obj_from, MPP_CFG_STR_FMT_JSON, &json);
+    MPP_ASSERT_FALSEm("to_string failed", _mpp_ret);
+    mpp_logi("extracted JSON:\n%s\n", json);
+
+    /* 3. apply: extracted cfg -> new struct */
+    {
+        MppEncRefStFrmCfg *st_arr2;
+        MppEncRefLtFrmCfg *lt_arr2;
+
+        _mpp_ret = mpp_enc_ref_cfg_setup(&obj2, 1, 4);
+        MPP_ASSERT_FALSEm("setup obj2 failed", _mpp_ret);
+
+        cfg2 = (MppEncRefCfgImpl *)kmpp_obj_to_entry(obj2);
+
+        _mpp_ret = mpp_cfg_to_struct(obj_from, cfg_root, cfg2);
+        MPP_ASSERT_FALSEm("to_struct failed", _mpp_ret);
+
+        /* verify scalars */
+        MPP_ASSERT_EQ(1, cfg2->keep_cpb);
+        MPP_ASSERT_EQ(4, cfg2->st_cfg_cnt);
+        MPP_ASSERT_EQ(1, cfg2->lt_cfg_cnt);
+
+        /* verify VLA fields */
+        st_arr2 = MPP_REF_ST_ARR(cfg2);
+        MPP_ASSERT_EQ(0, st_arr2[0].is_non_ref);
+        MPP_ASSERT_EQ(10, st_arr2[0].ref_arg);
+        MPP_ASSERT_EQ(1, st_arr2[1].is_non_ref);
+        MPP_ASSERT_EQ(3, st_arr2[1].temporal_id);
+        MPP_ASSERT_EQ(20, st_arr2[1].ref_arg);
+        MPP_ASSERT_EQ(0, st_arr2[2].is_non_ref);
+        MPP_ASSERT_EQ(1, st_arr2[2].temporal_id);
+        MPP_ASSERT_EQ(30, st_arr2[2].ref_arg);
+        MPP_ASSERT_EQ(1, st_arr2[3].is_non_ref);
+        MPP_ASSERT_EQ(2, st_arr2[3].temporal_id);
+        MPP_ASSERT_EQ(40, st_arr2[3].ref_arg);
+
+        lt_arr2 = MPP_REF_LT_ARR(cfg2);
+        MPP_ASSERT_EQ(2, lt_arr2[0].lt_idx);
+        MPP_ASSERT_EQ(100, lt_arr2[0].lt_gap);
+    }
+
+    /* 4. JSON roundtrip: JSON -> cfg tree -> new struct -> compare */
+    {
+        MppEncRefStFrmCfg *st_arr3;
+        MppEncRefLtFrmCfg *lt_arr3;
+
+        _mpp_ret = mpp_cfg_from_string(&obj_from_json, MPP_CFG_STR_FMT_JSON, json);
+        MPP_ASSERT_FALSEm("from_string failed", _mpp_ret);
+
+        _mpp_ret = mpp_enc_ref_cfg_setup(&obj3, 1, 4);
+        MPP_ASSERT_FALSEm("setup obj3 failed", _mpp_ret);
+
+        cfg3 = (MppEncRefCfgImpl *)kmpp_obj_to_entry(obj3);
+
+        _mpp_ret = mpp_cfg_to_struct(obj_from_json, cfg_root, cfg3);
+        MPP_ASSERT_FALSEm("to_struct from json failed", _mpp_ret);
+
+        /* verify scalars */
+        MPP_ASSERT_EQ(1, cfg3->keep_cpb);
+        MPP_ASSERT_EQ(4, cfg3->st_cfg_cnt);
+        MPP_ASSERT_EQ(1, cfg3->lt_cfg_cnt);
+
+        /* verify VLA fields */
+        st_arr3 = MPP_REF_ST_ARR(cfg3);
+        MPP_ASSERT_EQ(0, st_arr3[0].is_non_ref);
+        MPP_ASSERT_EQ(10, st_arr3[0].ref_arg);
+        MPP_ASSERT_EQ(1, st_arr3[1].is_non_ref);
+        MPP_ASSERT_EQ(3, st_arr3[1].temporal_id);
+        MPP_ASSERT_EQ(20, st_arr3[1].ref_arg);
+        MPP_ASSERT_EQ(0, st_arr3[2].is_non_ref);
+        MPP_ASSERT_EQ(1, st_arr3[2].temporal_id);
+        MPP_ASSERT_EQ(30, st_arr3[2].ref_arg);
+        MPP_ASSERT_EQ(1, st_arr3[3].is_non_ref);
+        MPP_ASSERT_EQ(2, st_arr3[3].temporal_id);
+        MPP_ASSERT_EQ(40, st_arr3[3].ref_arg);
+
+        lt_arr3 = MPP_REF_LT_ARR(cfg3);
+        MPP_ASSERT_EQ(2, lt_arr3[0].lt_idx);
+        MPP_ASSERT_EQ(100, lt_arr3[0].lt_gap);
+    }
+
+    mpp_logi("test_cfg_roundtrip success\n");
+    MPP_PASS();
+
+done:
+    MPP_FREE(json);
+    if (obj_from)
+        mpp_cfg_put_all(obj_from);
+    if (obj_from_json)
+        mpp_cfg_put_all(obj_from_json);
+    if (obj)
+        mpp_enc_ref_cfg_deinit(&obj);
+    if (obj2)
+        mpp_enc_ref_cfg_deinit(&obj2);
+    if (obj3)
+        mpp_enc_ref_cfg_deinit(&obj3);
+    return _mpp_ret;
+}
+
 int main(void)
 {
     MPP_RET ret = MPP_OK;
 
     mpp_logi("mpp_enc_ref_test start\n");
 
+    /* show objdef entries first (like mpp_enc_cfg_test) */
+    mpp_enc_ref_cfg_show();
+
+    /* verify cfg tree includes VLA arrays with their fields */
+    {
+        KmppObjDef def = mpp_enc_ref_cfg_objdef();
+        MppCfgObj cfg_root = kmpp_objdef_get_cfg_root(def);
+
+        if (cfg_root) {
+            mpp_logi("cfg tree dump:\n");
+            mpp_cfg_dump(cfg_root, "ref_cfg");
+        } else {
+            mpp_loge("cfg root is NULL\n");
+            ret = MPP_NOK;
+            goto done;
+        }
+    }
+
+    ret = test_objdef_access();
+    if (ret)
+        goto done;
+
+    ret = test_obj_access();
+    if (ret)
+        goto done;
+
+    ret = test_vla_api();
+    if (ret)
+        goto done;
+
     ret = test_mpp_enc_ref_cfg_obj();
     if (ret)
         goto done;
 
     ret = test_mpp_enc_ref_cfg_copy_shrink();
+    if (ret)
+        goto done;
+
+    ret = test_cfg_roundtrip();
     if (ret)
         goto done;
 

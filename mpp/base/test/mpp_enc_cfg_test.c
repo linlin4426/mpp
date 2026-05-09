@@ -424,6 +424,23 @@ int main(int argc, char *argv[])
 
     mpp_enc_cfg_show();
 
+    /* show cfg tree detail */
+    {
+        KmppObjDef def = mpp_enc_cfg_objdef();
+
+        if (def) {
+            MppCfgObj cfg_root = kmpp_objdef_get_cfg_root(def);
+
+            mpp_logi("cfg tree dump:\n");
+            if (cfg_root)
+                mpp_cfg_dump(cfg_root, "enc_cfg");
+            else
+                mpp_loge("cfg root is NULL\n");
+        } else {
+            mpp_loge("objdef is NULL\n");
+        }
+    }
+
     MPP_TEST_START("mpp_enc_cfg_test");
 
     _mpp_ret = mpp_enc_cfg_init(&cfg);

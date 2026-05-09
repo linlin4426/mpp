@@ -256,7 +256,7 @@ MPP_RET mpp_enc_ref_cfg_check(MppEncRefCfg ref);
  */
 MPP_RET mpp_enc_ref_cfg_set_keep_cpb(MppEncRefCfg ref, RK_S32 keep);
 MPP_RET mpp_enc_ref_cfg_get_preset(MppEncRefPreset *preset);
-MPP_RET mpp_enc_ref_cfg_show(MppEncRefCfg ref);
+void mpp_enc_ref_cfg_show(void);
 
 #ifdef __cplusplus
 }

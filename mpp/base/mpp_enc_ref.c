@@ -8,8 +8,8 @@
 #include <string.h>
 
 #include "mpp_log.h"
+#include "mpp_trie.h"
 #include "mpp_common.h"
-#include "mpp_cfg_io.h"
 
 #include "mpp_enc_ref.h"
 #include "mpp_enc_refs.h"
@@ -19,22 +19,36 @@
  */
 #define MPP_ENC_REF_CFG_ENTRY_TABLE(prefix, ENTRY, STRCT, EHOOK, SHOOK, ALIAS) \
     CFG_DEF_START() \
-    STRUCT_START(ref) \
-    ENTRY(prefix, s32,  rk_s32,     keep_cpb,       FLAG_INCR,                          keep_cpb) \
-    ENTRY(prefix, s32,  rk_s32,     lt_cfg_cap,     FLAG_INCR,                          new_lt_cfg_cap) \
-    ENTRY(prefix, s32,  rk_s32,     st_cfg_cap,     FLAG_INCR,                          new_st_cfg_cap) \
-    ENTRY(prefix, u32,  rk_u32,     lt_cfg_off,     FLAG_NONE,                          lt_cfg_off) \
-    ENTRY(prefix, u32,  rk_u32,     st_cfg_off,     FLAG_NONE,                          st_cfg_off) \
-    ENTRY(prefix, s32,  rk_s32,     lt_cfg_cnt,     FLAG_INCR,                          lt_cfg_cnt) \
-    ENTRY(prefix, s32,  rk_s32,     st_cfg_cnt,     FLAG_INCR,                          st_cfg_cnt) \
-    ENTRY(prefix, s32,  rk_s32,     max_tlayers,    FLAG_INCR,                          max_tlayers) \
-    ENTRY(prefix, s32,  rk_s32,     ready,          FLAG_INCR,                          ready) \
-    STRUCT_END(ref) \
+    ENTRY(prefix, s32,  rk_s32,     keep_cpb,       FLAG_INCR,      keep_cpb) \
+    ENTRY(prefix, s32,  rk_s32,     lt_cfg_cap,     FLAG_INCR,      new_lt_cfg_cap) \
+    ENTRY(prefix, s32,  rk_s32,     st_cfg_cap,     FLAG_INCR,      new_st_cfg_cap) \
+    ENTRY(prefix, u32,  rk_u32,     lt_cfg_off,     FLAG_NONE,      lt_cfg_off) \
+    ENTRY(prefix, u32,  rk_u32,     st_cfg_off,     FLAG_NONE,      st_cfg_off) \
+    ENTRY(prefix, s32,  rk_s32,     lt_cfg_cnt,     FLAG_INCR,      lt_cfg_cnt) \
+    ENTRY(prefix, s32,  rk_s32,     st_cfg_cnt,     FLAG_INCR,      st_cfg_cnt) \
+    ENTRY(prefix, s32,  rk_s32,     max_tlayers,    FLAG_INCR,      max_tlayers) \
+    ENTRY(prefix, s32,  rk_s32,     ready,          FLAG_INCR,      ready) \
+    ARRAY_START_FLEX_CNT_OFF(st_cfg, MppEncRefStFrmCfg, FLAG_INCR,  st_cfg_cnt, st_cfg_off) \
+    ARRAY_ENTRY(s32,                is_non_ref,     FLAG_PREV,      is_non_ref) \
+    ARRAY_ENTRY(s32,                temporal_id,    FLAG_PREV,      temporal_id) \
+    ARRAY_ENTRY(s32,                ref_mode,       FLAG_PREV,      ref_mode) \
+    ARRAY_ENTRY(s32,                ref_arg,        FLAG_PREV,      ref_arg) \
+    ARRAY_ENTRY(s32,                repeat,         FLAG_PREV,      repeat) \
+    ARRAY_END(st_cfg) \
+    ARRAY_START_FLEX_CNT_OFF(lt_cfg, MppEncRefLtFrmCfg, FLAG_INCR,  lt_cfg_cnt, lt_cfg_off) \
+    ARRAY_ENTRY(s32,                lt_idx,         FLAG_PREV,      lt_idx) \
+    ARRAY_ENTRY(s32,                temporal_id,    FLAG_PREV,      temporal_id) \
+    ARRAY_ENTRY(s32,                ref_mode,       FLAG_PREV,      ref_mode) \
+    ARRAY_ENTRY(s32,                ref_arg,        FLAG_PREV,      ref_arg) \
+    ARRAY_ENTRY(s32,                lt_gap,         FLAG_PREV,      lt_gap) \
+    ARRAY_ENTRY(s32,                lt_delay,       FLAG_PREV,      lt_delay) \
+    ARRAY_END(lt_cfg) \
     CFG_DEF_END()
 
 static rk_s32 mpp_enc_ref_cfg_impl_dump(void *entry)
 {
     MppEncRefCfgImpl *cfg = (MppEncRefCfgImpl *)entry;
+    rk_s32 i;
 
     if (!cfg) {
         mpp_loge_f("invalid param entry NULL\n");
@@ -42,14 +56,26 @@ static rk_s32 mpp_enc_ref_cfg_impl_dump(void *entry)
     }
 
     mpp_logi("keep_cpb      %d\n", cfg->keep_cpb);
-    mpp_logi("lt_cfg_cap    %d\n", cfg->lt_cfg_cap);
-    mpp_logi("st_cfg_cap    %d\n", cfg->st_cfg_cap);
-    mpp_logi("lt_cfg_off    %u\n", cfg->lt_cfg_off);
-    mpp_logi("st_cfg_off    %u\n", cfg->st_cfg_off);
-    mpp_logi("lt_cfg_cnt    %d\n", cfg->lt_cfg_cnt);
-    mpp_logi("st_cfg_cnt    %d\n", cfg->st_cfg_cnt);
+    mpp_logi("st_cfg_cnt    %d / %d  off %u\n",
+             cfg->st_cfg_cnt, cfg->st_cfg_cap, cfg->st_cfg_off);
+    mpp_logi("lt_cfg_cnt    %d / %d  off %u\n",
+             cfg->lt_cfg_cnt, cfg->lt_cfg_cap, cfg->lt_cfg_off);
     mpp_logi("max_tlayers   %d\n", cfg->max_tlayers);
     mpp_logi("ready         %d\n", cfg->ready);
+
+    for (i = 0; i < cfg->st_cfg_cnt; i++) {
+        MppEncRefStFrmCfg *st = &MPP_REF_ST_ARR(cfg)[i];
+        mpp_logi("  st[%d] non_ref %d tid %d mode %x arg %d repeat %d\n",
+                 i, st->is_non_ref, st->temporal_id,
+                 st->ref_mode, st->ref_arg, st->repeat);
+    }
+
+    for (i = 0; i < cfg->lt_cfg_cnt; i++) {
+        MppEncRefLtFrmCfg *lt = &MPP_REF_LT_ARR(cfg)[i];
+        mpp_logi("  lt[%d] idx %d tid %d mode %x arg %d gap %d delay %d\n",
+                 i, lt->lt_idx, lt->temporal_id,
+                 lt->ref_mode, lt->ref_arg, lt->lt_gap, lt->lt_delay);
+    }
 
     return rk_ok;
 }
@@ -489,12 +515,45 @@ MPP_RET mpp_enc_ref_cfg_set_keep_cpb(MppEncRefCfg ref, RK_S32 keep)
     return MPP_OK;
 }
 
-MPP_RET mpp_enc_ref_cfg_show(MppEncRefCfg ref)
+void mpp_enc_ref_cfg_show(void)
 {
-    if (!ref)
-        return MPP_ERR_VALUE;
+    KmppObjDef def = mpp_enc_ref_cfg_objdef();
+    MppTrie trie = kmpp_objdef_get_trie(def);
+    MppTrieInfo *node;
+    rk_s32 len;
 
-    return mpp_enc_ref_cfg_dump(ref, __FUNCTION__);
+    if (!trie)
+        return;
+
+    len = mpp_trie_get_name_max(trie);
+
+    mpp_logi("dumping ref_cfg entries start\n");
+
+    node = mpp_trie_get_info_first(trie);
+    while (node) {
+        if (!mpp_trie_info_is_self(node) && node->ctx_len == sizeof(KmppEntry)) {
+            KmppEntry *e = (KmppEntry *)mpp_trie_info_ctx(node);
+            const char *name = mpp_trie_info_name(node);
+
+            if (e->type == ENTRY_TYPE_VLA_INFO)
+                mpp_logi("%-*s | vla    | base%c  %4d | size %4d | cnt%c %4d\n",
+                         len, name,
+                         e->vla.flex_base ? '@' : ' ',
+                         e->vla.base_off,
+                         e->vla.elem_size,
+                         e->vla.flex_count ? '@' : ' ',
+                         e->vla.flex_count ? e->vla.count_off : e->vla.elem_count);
+            else
+                mpp_logi("%-*s | %-6s | offset %4d | size %4d | flag %4x\n",
+                         len, name, strof_elem_type(e->tbl.elem_type),
+                         e->tbl.elem_offset, e->tbl.elem_size,
+                         e->tbl.flag_offset);
+        }
+
+        node = mpp_trie_get_info_next(trie, node);
+    }
+
+    mpp_logi("dumping ref_cfg entries done\n");
 }
 
 MPP_RET mpp_enc_ref_cfg_copy(MppEncRefCfg dst, MppEncRefCfg src)
