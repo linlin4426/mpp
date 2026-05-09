@@ -168,7 +168,7 @@ static rk_s32 trie_prepare_buf(MppTrieImpl *p, rk_s32 info_size)
         p->info_buf_size = new_size;
     }
 
-    return MPP_TRIE_LEAF;
+    return rk_ok;
 }
 
 static rk_s32 trie_pave_node(MppTrieImpl *p, const char *name, rk_s32 str_len)
@@ -529,11 +529,11 @@ static rk_s32 trie_pave_segment(MppTrieImpl *p, const char *seg, rk_s32 seg_len,
  *   - Array digits are NOT included in segment text (stored in arr_cnt[])
  *   - Normal variables never start with a digit, so this is unambiguous
  *
- *   "rc:mode"          -> ["rc:",   "mode"]       arr[-1,  -1 ] (2 segs)
- *   "st_cfg:16:idx"     -> ["st_cfg:", "idx"]      arr[16,  -1 ] (2 segs)
- *   "ref:st:16"         -> ["ref:",   "st:"]       arr[-1,  16 ] (2 segs)
- *   "ref:st:5:idx"      -> ["ref:",   "st:", "idx"]arr[-1,  5, -1] (3 segs)
- *   "width"             -> ["width"]               arr[-1       ] (1 seg)
+ *   "rc:mode"       -> ["rc:",     "mode"]         arr[-1, -1   ] (2 segs)
+ *   "st_cfg:16:idx" -> ["st_cfg:", "idx"]          arr[16, -1   ] (2 segs)
+ *   "ref:st:16"     -> ["ref:",    "st:"]          arr[-1, 16   ] (2 segs)
+ *   "ref:st:5:idx"  -> ["ref:",    "st:", "idx"]   arr[-1, 5, -1] (3 segs)
+ *   "width"         -> ["width"]                   arr[-1       ] (1 seg)
  *
  * Returns number of segments written to segs[]/lens[]/arr_cnt[].
  */
