@@ -23,6 +23,7 @@
 #include "mpp_common.h"
 
 #include "mpp_trie.h"
+#include "mpp_internal.h"
 
 typedef struct TestAction_t {
     const char          *name;
@@ -79,6 +80,7 @@ typedef struct TrieTestStep_t {
     rk_s32      set_root;   /* 1=set root_idx=node_idx on success */
     rk_s32      reset;      /* 1=memset st to zero before this step */
     rk_u32      val;        /* entry.val for add, 0 for get */
+    rk_s32      is_vla;     /* 1=set entry type to VLA_INFO for add */
 } TrieTestStep;
 
 static rk_s32 trie_test_run_steps(MppTrie trie, TrieTestStep *steps, rk_s32 count)
@@ -95,11 +97,18 @@ static rk_s32 trie_test_run_steps(MppTrie trie, TrieTestStep *steps, rk_s32 coun
         if (s->reset)
             memset(&st, 0, sizeof(st));
 
-        entry.val = s->val;
+        entry.val = 0;
+        if (s->is_vla) {
+            entry.vla.type = ENTRY_TYPE_VLA_INFO;
+            entry.vla.elem_count = s->val;
+        } else {
+            entry.val = s->val;
+        }
+
         if (s->is_add)
             ret = mpp_trie_add_entry(trie, &st, s->path, &entry);
         else
-            ret = mpp_trie_get_entry(trie, &st, s->path);
+            ret = mpp_trie_get_entry(trie, &st, s->path, &entry);
 
         switch (s->expect) {
         case -2:
@@ -120,7 +129,7 @@ static rk_s32 trie_test_run_steps(MppTrie trie, TrieTestStep *steps, rk_s32 coun
             st.root_idx = st.node_idx;
 
         if (ret == MPP_TRIE_SUBROOT && st.array_idx >= 0)
-            mpp_logi("  %-4s %-16s -> subroot (idx %d)\n", op, s->path, st.array_idx);
+            mpp_logi("  %-4s %-16s -> subroot idx %d\n", op, s->path, st.array_idx);
         else
             mpp_logi("  %-4s %-16s -> ok\n", op, s->path);
         continue;
@@ -249,33 +258,32 @@ static rk_s32 mpp_trie_colon_test(MppTrie trie)
 }
 
 /*
- * mpp_trie_progressive_test - progressive entry API
+ * mpp_trie_progressive_test - segment-based add_entry + full-path get_entry
  *
- * Register full path "ref:st:16:idx", then query at
- * different segmentation levels:
- *   ref:st          -> subroot
- *   ref:st:16       -> subroot (set as root for next)
- *   ref:st:16:idx   -> leaf
- * Also test another branch: ref:st:1, ref:st:1:idx
+ * Register "ref:st" as VLA subroot, then "idx" as leaf under it.
+ * Query with full path via trie_split_path:
+ *   ref:st          -> ok (reaches subroot node without index)
+ *   ref:st:16       -> subroot (array index 16)
+ *   idx             -> leaf (relative to subroot)
  */
 static rk_s32 mpp_trie_progressive_test(MppTrie trie)
 {
     TrieTestStep steps[] = {
-        /* register full path with relative segments */
-        /* path              add  expect  set_root  reset  val    */
-        {"ref:st:16",       1,   1,      1,        1,     0x1000},
-        {"idx",             1,   0,      0,        0,     0x1001},
+        /* register subroot + leaf using segment-based add_entry */
+        /* path             add  expect  set_root  reset  val     is_vla */
+        {"ref:st",          1,   1,      1,        1,     16,     1},
+        {"idx",             1,   0,      0,        0,     0x1001, 0},
 
         /* reset and query at different levels */
-        {"ref:st",          0,   -2,     0,        1,     0     },
-        {"ref:st:16",       0,   1,      1,        0,     0     },
-        /* root now at ref:st:16, use relative path */
-        {"idx",             0,   0,      0,        0,     0     },
+        {"ref:st",          0,   0,      0,        1,     0,      0},
+        {"ref:st:16",       0,   1,      1,        0,     0,      0},
+        /* root now at ref:st subroot, use relative path */
+        {"idx",             0,   0,      0,        0,     0,      0},
 
         /* query a different branch */
-        {"ref:st:1",        0,   1,      1,        1,     0     },
-        /* root now at ref:st:1, idx may resolve via shared path */
-        {"idx",             0,   -2,     0,        0,     0     },
+        {"ref:st:1",        0,   1,      1,        1,     0,      0},
+        /* root now at ref:st subroot, idx resolves via shared subroot */
+        {"idx",             0,   0,      0,        0,     0,      0},
     };
 
     return trie_test_run_steps(trie, steps, MPP_ARRAY_ELEMS(steps));
@@ -287,21 +295,21 @@ static rk_s32 mpp_trie_progressive_test(MppTrie trie)
 static rk_s32 mpp_trie_boundary_test(MppTrie trie)
 {
     TrieTestStep steps[] = {
-        /* path              add  expect  set_root  reset  val    */
-        {"ref:st:8",        1,   1,      1,        1,     0x2000},
-        {"field",           1,   -2,     0,        0,     0x2001},
-        /* empty trailing segment -> subroot (matches ref:st:8) */
-        {"ref:st:",         0,   -2,     0,        1,     0     },
+        /* path             add  expect  set_root  reset  val     is_vla */
+        {"ref:st",          1,   1,      1,        1,     8,      1},
+        {"field",           1,   0,      0,        0,     0x2001, 0},
+        /* trailing colon -> walk returns root (pre-existing walk behavior) */
+        {"ref:st:",         0,   -2,     0,        1,     0,      0},
         /* consecutive colons -> invalid */
-        {"ref::st",         0,   -1,     0,        1,     0     },
-        /* valid subroot */
-        {"ref:st:3",        0,   1,      0,        1,     0     },
-        /* empty trailing segment on existing node -> still subroot */
-        {"ref:st:3:",       0,   1,      0,        1,     0     },
+        {"ref::st",         0,   -1,     0,        1,     0,      0},
+        /* valid subroot query */
+        {"ref:st:3",        0,   1,      0,        1,     0,      0},
+        /* trailing colon after index -> parsed as ("ref:st", 3) -> subroot */
+        {"ref:st:3:",       0,   1,      0,        1,     0,      0},
         /* re-query same subroot */
-        {"ref:st:3",        0,   1,      1,        1,     0     },
-        /* leaf under ref:st:3 */
-        {"field",           0,   -2,     0,        0,     0     },
+        {"ref:st:3",        0,   1,      1,        1,     0,      0},
+        /* leaf under subroot */
+        {"field",           0,   0,      0,        0,     0,      0},
     };
 
     return trie_test_run_steps(trie, steps, MPP_ARRAY_ELEMS(steps));

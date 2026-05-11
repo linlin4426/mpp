@@ -113,7 +113,7 @@ static rk_s32 trie_get_node(MppTrieImpl *trie, rk_s32 prev, rk_u64 key)
         MppTrieNode *new_nodes = mpp_realloc(trie->nodes, MppTrieNode, new_count);
 
         if (!new_nodes) {
-            mpp_err_f("failed to realloc new nodes %d\n", new_count);
+            mpp_loge_f("failed to realloc new nodes %d\n", new_count);
             return -1;
         }
 
@@ -169,69 +169,6 @@ static rk_s32 trie_prepare_buf(MppTrieImpl *p, rk_s32 info_size)
     }
 
     return rk_ok;
-}
-
-static rk_s32 trie_pave_node(MppTrieImpl *p, const char *name, rk_s32 str_len)
-{
-    MppTrieNode *node = NULL;
-    const char *s = name;
-    rk_s32 next = 0;
-    rk_s32 idx = 0;
-    rk_s32 i;
-
-    trie_dbg_pave("trie %p add info %s len %d\n", p, s, str_len);
-
-    for (i = 0; i < str_len && s[i]; i++) {
-        rk_u32 key = s[i];
-        rk_s32 key0 = (key >> 4) & 0xf;
-        rk_s32 key1 = (key >> 0) & 0xf;
-
-        node = p->nodes + idx;
-        next = node->next[key0];
-
-        trie_dbg_pave("trie %p add %s at %2d char %c:%3d:%x:%x node %d -> %d\n",
-                      p, name, i, key, key, key0, key1, idx, next);
-
-        if (!next) {
-            next = trie_get_node(p, idx, key0);
-            if (next < 0)
-                return next;
-
-            /* realloc may cause memory address change */
-            node = p->nodes + idx;
-            node->next[key0] = next;
-
-            trie_dbg_pave("trie %p add %s at %2d char %c:%3d node %d -> %d as new key0\n",
-                          p, name, i, key, key, node->idx, next);
-        }
-
-        idx = next;
-        node = p->nodes + idx;
-        next = node->next[key1];
-
-        trie_dbg_pave("trie %p add %s at %2d char %c:%3d:%x:%x node %d -> %d as key0\n",
-                      p, s, i, key, key, key0, key1, idx, next);
-
-        if (!next) {
-            next = trie_get_node(p, idx, key1);
-            if (next < 0)
-                return next;
-
-            /* realloc may cause memory address change */
-            node = p->nodes + idx;
-            node->next[key1] = next;
-
-            trie_dbg_pave("trie %p add %s at %2d char %c:%3d node %d -> %d as new child\n",
-                          p, name, i, key, key, node->idx, next);
-        }
-
-        idx = next;
-
-        trie_dbg_pave("trie %p add %s at %2d char %c:%3d:%x:%x node %d -> %d as key1\n",
-                      p, name, i, key, key, key0, key1, idx, next);
-    }
-
-    return idx;
 }
 
 rk_s32 mpp_trie_init(MppTrie *trie, const char *name)
@@ -440,49 +377,11 @@ static rk_s32 mpp_trie_walk(MppTrieWalk *p, rk_s32 idx, rk_u32 key, rk_u32 keyx,
 }
 
 /*
- * trie_walk_segment - walk one segment's characters through trie from start_idx
- *
- * Read-only walk (no node creation). Returns end node index on success,
- * INVALID_NODE_ID if path not found.
- */
-static rk_s32 trie_walk_segment(MppTrieImpl *p, const char *seg, rk_s32 seg_len,
-                                rk_s32 start_idx)
-{
-    MppTrieWalk walk;
-    rk_s32 idx = start_idx;
-    rk_s32 i;
-
-    walk.root = p->nodes;
-    walk.tag = 0;
-    walk.len = 0;
-    walk.match = 0;
-
-    for (i = 0; i < seg_len && seg[i]; i++) {
-        rk_u32 key = seg[i];
-        rk_s32 key0 = (key >> 4) & 0xf;
-        rk_s32 key1 = key & 0xf;
-        rk_s32 end = (i == seg_len - 1);
-
-        idx = mpp_trie_walk(&walk, idx, key, key0, 0);
-        if (idx < 0 && !(walk.match >= 0))
-            return INVALID_NODE_ID;
-
-        idx = mpp_trie_walk(&walk, idx, key, key1, end);
-        if ((idx < 0 || (idx <= 0 && !end)) && !(walk.match >= 0))
-            return INVALID_NODE_ID;
-    }
-
-    return idx;
-}
-
-/*
  * trie_pave_segment - pave one segment's characters into trie from start_idx
  *
  * Returns end node index on success, negative on error.
- * Similar to trie_pave_node but starts from arbitrary idx (not always root).
  */
-static rk_s32 trie_pave_segment(MppTrieImpl *p, const char *seg, rk_s32 seg_len,
-                                rk_s32 start_idx)
+static rk_s32 trie_pave_segment(MppTrieImpl *p, const char *seg, rk_s32 seg_len, rk_s32 start_idx)
 {
     rk_s32 idx = start_idx;
     rk_s32 i;
@@ -520,91 +419,18 @@ static rk_s32 trie_pave_segment(MppTrieImpl *p, const char *seg, rk_s32 seg_len,
     return idx;
 }
 
-/*
- * trie_split_path - split path by ':', detecting array idx segments
- *
- * Split rule:
- *   - ':' belongs to preceding segment (segment text includes trailing ':')
- *   - If the field AFTER ':' starts with a digit, it is an array idx segment
- *   - Array digits are NOT included in segment text (stored in arr_cnt[])
- *   - Normal variables never start with a digit, so this is unambiguous
- *
- *   "rc:mode"       -> ["rc:",     "mode"]         arr[-1, -1   ] (2 segs)
- *   "st_cfg:16:idx" -> ["st_cfg:", "idx"]          arr[16, -1   ] (2 segs)
- *   "ref:st:16"     -> ["ref:",    "st:"]          arr[-1, 16   ] (2 segs)
- *   "ref:st:5:idx"  -> ["ref:",    "st:", "idx"]   arr[-1, 5, -1] (3 segs)
- *   "width"         -> ["width"]                   arr[-1       ] (1 seg)
- *
- * Returns number of segments written to segs[]/lens[]/arr_cnt[].
- */
-static rk_s32 trie_split_path(const char *path, rk_s32 max_segs,
-                              const char *segs[], rk_s32 lens[],
-                              rk_s32 arr_cnt[])
+static MppTrieNode *mpp_trie_get_node_at(MppTrieNode *root, rk_s32 start, const char *name)
 {
-    const char *s = path;
-    const char *seg_start = s;
-    rk_s32 cnt = 0;
-
-    while (*s && cnt < max_segs) {
-        if (*s == ':') {
-            /* End current segment including the ':' */
-            if (seg_start < s && cnt < max_segs) {
-                segs[cnt] = seg_start;
-                lens[cnt] = s - seg_start + 1;  /* include ':' */
-
-                /* Check if next field starts with digit -> array idx */
-                if (*(s + 1) >= '0' && *(s + 1) <= '9') {
-                    const char *num = s + 1;
-                    rk_s32 val = 0;
-
-                    while (*num >= '0' && *num <= '9') {
-                        val = val * 10 + (*num - '0');
-                        num++;
-                    }
-
-                    arr_cnt[cnt] = val;
-                    s = num;
-                    if (*s == ':')
-                        s++;  /* skip trailing ':' after digits */
-                } else {
-                    arr_cnt[cnt] = -1;
-                    s++;  /* skip ':' */
-                }
-
-                cnt++;
-                seg_start = s;
-            } else {
-                s++;
-            }
-        } else {
-            s++;
-        }
-    }
-
-    /* Last segment (no trailing ':') */
-    if (seg_start < s && cnt < max_segs) {
-        segs[cnt] = seg_start;
-        lens[cnt] = s - seg_start;
-        arr_cnt[cnt] = -1;
-        cnt++;
-    }
-
-    return cnt;
-}
-
-static MppTrieNode *mpp_trie_get_node(MppTrieNode *root, const char *name)
-{
-    MppTrieNode *ret = NULL;
     const char *s = name;
     MppTrieWalk walk;
-    rk_s32 idx = 0;
+    rk_s32 idx = start;
 
     if (!root || !name || !*name) {
-        mpp_err_f("invalid root %p name %p\n", root, name);
+        mpp_loge_f("invalid root %p name %p\n", root, name);
         return NULL;
     }
 
-    trie_dbg_get("root %p search %s start\n", root, name);
+    trie_dbg_get("root %p search %s from %d\n", root, name, start);
 
     walk.root = root;
     walk.tag = 0;
@@ -626,34 +452,84 @@ static MppTrieNode *mpp_trie_get_node(MppTrieNode *root, const char *name)
             break;
     } while (1);
 
-    ret = (idx >= 0) ? &root[idx] : NULL;
+    trie_dbg_get("get %s ret node %d:%d\n", name, idx, (idx >= 0) ? root[idx].id : INVALID_NODE_ID);
 
-    trie_dbg_get("get %s ret node %d:%d\n", name, idx, ret ? ret->id : INVALID_NODE_ID);
-
-    return ret;
+    return (idx >= 0) ? &root[idx] : NULL;
 }
 
-static rk_s32 mpp_trie_check(MppTrie trie, const char *log)
+static MppTrieNode *mpp_trie_get_node(MppTrieNode *root, const char *name)
+{
+    return mpp_trie_get_node_at(root, 0, name);
+}
+
+static rk_s32 mpp_trie_check(MppTrie trie, char *base, const char *log)
 {
     MppTrieImpl *p = (MppTrieImpl *)trie;
-    char *base = p->info_buf;
-    rk_s32 info_size = 0;
-    rk_s32 pos = 0;
+    rk_s32 found = 0;
     rk_s32 i;
 
-    for (i = 0; i < p->info_count; i++, pos += info_size) {
-        MppTrieInfo *info = (MppTrieInfo *)(base + pos);
-        const char *name = (const char *)(info + 1);
-        MppTrieNode *node = mpp_trie_get_node(p->nodes, name);
+    for (i = 0; i < p->node_used; i++) {
+        MppTrieNode *n = &p->nodes[i];
+        MppTrieNode *node;
+        const char *name;
 
-        info_size = sizeof(*info) + info->str_len + info->ctx_len;
-
-        if (node && node->id >= 0 && node->id == pos)
+        if (i && !n->idx)
             continue;
 
-        mpp_loge("trie check on %s found mismatch info %s %d - %d\n",
-                 log, name, i, node ? node->id : -1);
+        if (n->id < 0)
+            continue;
+
+        name = (const char *)((MppTrieInfo *)(base + n->id) + 1);
+
+        /*
+         * Verify entry is accessible via trie walk.
+         * Try full-path from root first; if not found, try from subroot ancestor.
+         */
+        node = mpp_trie_get_node_at(p->nodes, 0, name);
+        if (!node || node != n) {
+            rk_s32 walk = n->idx;
+
+            while (walk > 0 && !p->nodes[walk].sub_root)
+                walk = p->nodes[walk].prev;
+
+            node = (walk > 0) ? mpp_trie_get_node_at(p->nodes, walk, name) : NULL;
+            if (!node || node != n) {
+                mpp_loge("trie check on %s: node %d '%s' mismatch\n",
+                         log, i, name);
+                return rk_nok;
+            }
+        }
+
+        found++;
+    }
+
+    if (found != p->info_count) {
+        mpp_loge("trie check on %s: %d nodes with info, expected %d\n",
+                 log, found, p->info_count);
         return rk_nok;
+    }
+
+    /* Check subroot nodes have valid info and children */
+    for (i = 0; i < p->node_used; i++) {
+        MppTrieNode *n = &p->nodes[i];
+        rk_s32 child_cnt = 0;
+        rk_s32 j;
+
+        if (!n->sub_root)
+            continue;
+
+        if (n->id < 0) {
+            mpp_loge("trie check on %s: subroot node %d has no info entry\n", log, i);
+            continue;
+        }
+
+        for (j = 0; j < MPP_TRIE_KEY_MAX; j++) {
+            if (n->next[j] > 0)
+                child_cnt++;
+        }
+
+        if (!child_cnt)
+            mpp_loge("trie check on %s: subroot node %d has no children\n", log, i);
     }
 
     return rk_ok;
@@ -668,7 +544,6 @@ rk_s32 mpp_trie_last_info(MppTrie trie)
     rk_s32 node_count;
     rk_s32 node_valid;
     rk_s32 nodes_size;
-    rk_s32 len = 0;
     rk_s32 pos = 0;
     rk_s32 i;
     rk_s32 j;
@@ -754,7 +629,7 @@ rk_s32 mpp_trie_last_info(MppTrie trie)
         mpp_trie_dump_f(trie);
 
     if (mpp_trie_debug & MPP_TRIE_DBG_LAST_CHECK)
-        mpp_trie_check(trie, "shrink merge tag stage");
+        mpp_trie_check(trie, p->info_buf, "shrink merge tag stage");
 
     trie_dbg_last("move trie node start to reduce memory %d -> %d\n", node_count, node_valid);
 
@@ -811,7 +686,7 @@ rk_s32 mpp_trie_last_info(MppTrie trie)
         mpp_trie_dump_f(trie);
 
     if (mpp_trie_debug & MPP_TRIE_DBG_LAST_CHECK)
-        mpp_trie_check(trie, "shrink move node stage");
+        mpp_trie_check(trie, p->info_buf, "shrink move node stage");
 
     trie_dbg_last("create user buffer start\n");
 
@@ -827,22 +702,17 @@ rk_s32 mpp_trie_last_info(MppTrie trie)
 
     p->nodes = (MppTrieNode *)buf;
     memcpy(p->nodes, root, nodes_size);
-    pos = nodes_size;
-    len = 0;
 
-    for (i = 0; i < p->info_count; i++) {
-        MppTrieInfo *src = (MppTrieInfo *)(p->info_buf + len);
-        MppTrieInfo *dst = (MppTrieInfo *)(buf + pos);
-        rk_s32 info_size = sizeof(MppTrieInfo) + src->str_len + src->ctx_len;
-        const char *name = (char *)(src + 1);
+    /* Block copy all info entries, then adjust node->id offsets */
+    memcpy(buf + nodes_size, p->info_buf, p->info_buf_pos);
 
-        node = mpp_trie_get_node(p->nodes, name);
-        node->id = pos;
-
-        memcpy(dst, src, info_size);
-        pos += info_size;
-        len += info_size;
+    for (i = 0; i < p->node_used; i++) {
+        if (p->nodes[i].id >= 0)
+            p->nodes[i].id += nodes_size;
     }
+
+    if (mpp_trie_debug & MPP_TRIE_DBG_LAST_CHECK)
+        mpp_trie_check(trie, (char *)p->nodes, "final buffer");
 
     MPP_FREE(root);
     MPP_FREE(p->info_buf);
@@ -891,7 +761,7 @@ rk_s32 mpp_trie_add_info(MppTrie trie, const char *name, void *ctx, rk_u32 ctx_l
     if (trie_prepare_buf(p, info_size))
         return rk_nok;
 
-    idx = trie_pave_node(p, name, str_real);
+    idx = trie_pave_segment(p, name, str_real, 0);
     if (idx < 0) {
         mpp_loge_f("trie %p pave node %s failed\n", p, name);
         return rk_nok;
@@ -939,12 +809,8 @@ rk_s32 mpp_trie_add_entry(MppTrie trie, MppTrieStatus *st,
                           const char *name, KmppEntry *entry)
 {
     MppTrieImpl *p = (MppTrieImpl *)trie;
-    const char *segs[8];
-    rk_s32 lens[8];
-    rk_s32 arr_cnt[8];
-    rk_s32 nseg;
+    rk_s32 name_len;
     rk_s32 idx;
-    rk_s32 s;
 
     if (!p || !st) {
         mpp_loge_f("invalid param trie %p st %p\n", p, st);
@@ -957,160 +823,158 @@ rk_s32 mpp_trie_add_entry(MppTrie trie, MppTrieStatus *st,
     st->node_idx = -1;
     st->array_idx = -1;
 
-    nseg = trie_split_path(name, 8, segs, lens, arr_cnt);
-    idx = st->root_idx;
-
-    for (s = 0; s < nseg; s++) {
-        rk_s32 is_last = (s == nseg - 1);
-        MppTrieNode *node;
-
-        idx = trie_pave_segment(p, segs[s], lens[s], idx);
-        if (idx < 0) {
-            return rk_nok;
-        }
-
-        node = &p->nodes[idx];
-
-        if (is_last) {
-            /* Use arr_cnt from split to determine segment type */
-            rk_s32 is_sub_root = (arr_cnt[s] > 0);
-
-            if (is_sub_root) {
-                node->sub_root = 1;
-                node->count = arr_cnt[s];
-                st->array_idx = arr_cnt[s];
-
-                trie_dbg_set("last segment \"%.*s\" -> sub_root count %d\n",
-                             lens[s], segs[s], arr_cnt[s]);
-            }
-
-            /*
-             * Progressive pave: stop at sub_root without payload,
-             * let caller continue registration from node_idx.
-             */
-            if (is_sub_root) {
-                st->node_idx = idx;
-                return MPP_TRIE_SUBROOT;
-            }
-
-            /* Attach payload as leaf */
-            if (node->id < 0) {
-                rk_s32 info_size;
-                rk_s32 str_real = strnlen(name, MPP_TRIE_NAME_MAX) + 1;
-                rk_s32 str_len = MPP_ALIGN(str_real, 4);
-
-                info_size = sizeof(MppTrieInfo) + str_len + sizeof(*entry);
-
-                if (trie_prepare_buf(p, info_size)) {
-                    return rk_nok;
-                }
-
-                node->id = p->info_buf_pos;
-
-                {
-                    MppTrieInfo *info = (MppTrieInfo *)(p->info_buf + p->info_buf_pos);
-                    char *buf = (char *)(info + 1);
-
-                    info->index = p->info_count;
-                    info->ctx_len = sizeof(*entry);
-                    info->str_len = str_len;
-
-                    memcpy(buf, name, str_real);
-                    buf += str_len;
-                    ((KmppEntry *)buf)->val = entry->val;
-                }
-
-                p->info_buf_pos += info_size;
-                p->info_count++;
-            }
-
-            st->node_idx = idx;
-            return MPP_TRIE_LEAF;
-        } else {
-            /* Intermediate segment: mark as branch or sub_root using arr_cnt */
-            if (arr_cnt[s] > 0) {
-                node->sub_root = 1;
-                node->count = arr_cnt[s];
-                st->array_idx = arr_cnt[s];
-
-                trie_dbg_set("segment %d \"%.*s\" -> sub_root count %d\n",
-                             s, lens[s], segs[s], arr_cnt[s]);
-            } else {
-                node->is_branch = 1;
-
-                trie_dbg_set("segment %d \"%.*s\" -> branch\n",
-                             s, lens[s], segs[s]);
-            }
-        }
+    name_len = strnlen(name, MPP_TRIE_NAME_MAX);
+    if (!name_len) {
+        mpp_loge_f("invalid empty path\n");
+        return rk_nok;
     }
 
-    return rk_ok;
+    idx = trie_pave_segment(p, name, name_len, st->root_idx);
+    if (idx < 0)
+        return rk_nok;
+
+    MppTrieNode *node = &p->nodes[idx];
+    rk_s32 is_vla = entry && entry->type == ENTRY_TYPE_VLA_INFO;
+
+    if (is_vla) {
+        node->sub_root = 1;
+        node->count = entry->vla.elem_count;
+    }
+
+    /* Attach info payload to node */
+    if (node->id < 0 && entry) {
+        rk_s32 str_real = name_len + 1;
+        rk_s32 str_len = MPP_ALIGN(str_real, 4);
+        rk_s32 info_size = sizeof(MppTrieInfo) + str_len + sizeof(*entry);
+
+        if (trie_prepare_buf(p, info_size))
+            return rk_nok;
+
+        node->id = p->info_buf_pos;
+        {
+            MppTrieInfo *info = (MppTrieInfo *)(p->info_buf + p->info_buf_pos);
+            char *buf = (char *)(info + 1);
+
+            info->index = p->info_count;
+            info->ctx_len = sizeof(*entry);
+            info->str_len = str_len;
+
+            memcpy(buf, name, name_len);
+            buf[name_len] = '\0';
+            buf += str_len;
+            ((KmppEntry *)buf)->val = entry->val;
+
+            trie_dbg_set("trie %p add_entry %s %d - %s at node %d pos %d\n",
+                         p, is_vla ? "subroot" : "leaf",
+                         p->info_count, name, idx, node->id);
+        }
+
+        p->info_buf_pos += info_size;
+        p->info_count++;
+    }
+
+    st->array_idx = is_vla ? entry->vla.elem_count : -1;
+    st->node_idx = idx;
+
+    return is_vla ? MPP_TRIE_SUBROOT : MPP_TRIE_LEAF;
 }
 
-/*
- * mpp_trie_get_entry - search with array path support
- *
- * Usage example:
- *   MppTrieStatus st = {0};
- *
- *   // 1. search "ref:st:5"
- *   mpp_trie_get_entry(trie, &st, "ref:st:5");
- *   // st.node_idx = subtree root node, st.array_idx = 5
- *
- *   // 2. continue search "idx"
- *   st.root_idx = st.node_idx;
- *   mpp_trie_get_entry(trie, &st, "idx");
- */
 rk_s32 mpp_trie_get_entry(MppTrie trie, MppTrieStatus *st,
-                          const char *name)
+                          const char *name, KmppEntry *entry)
 {
     MppTrieImpl *p = (MppTrieImpl *)trie;
-    const char *segs[8];
-    rk_s32 lens[8];
-    rk_s32 arr_cnt[8];
-    rk_s32 nseg;
+    rk_s32 text_len;
+    rk_s32 index = -1;
+    const char *s;
     rk_s32 idx;
-    rk_s32 s;
 
     if (!p || !st || !name) {
         mpp_loge_f("invalid param trie %p st %p name %p\n", p, st, name);
         return rk_nok;
     }
 
+    if (!*name) {
+        mpp_loge_f("invalid empty path\n");
+        return rk_nok;
+    }
+
     st->node_idx = -1;
     st->array_idx = -1;
+    st->name_pos = 0;
 
-    nseg = trie_split_path(name, 8, segs, lens, arr_cnt);
-    idx = st->root_idx;
+    if (entry)
+        entry->val = 0;
 
-    for (s = 0; s < nseg; s++) {
-        rk_s32 is_last = (s == nseg - 1);
-        MppTrieNode *node;
+    /* Find first ':digits' boundary */
+    for (s = name; *s; s++) {
+        if (*s == ':' && s[1] >= '0' && s[1] <= '9' && s > name) {
+            text_len = s - name;
+            s++;
 
-        idx = trie_walk_segment(p, segs[s], lens[s], idx);
-        if (idx == INVALID_NODE_ID) {
-            return rk_nok;
-        }
-
-        node = &p->nodes[idx];
-
-        if (is_last) {
-            /* Final segment reached */
-            if (node->sub_root || arr_cnt[s] > 0) {
-                st->array_idx = (arr_cnt[s] > 0) ? arr_cnt[s] : node->count;
-                st->node_idx = idx;
-                return MPP_TRIE_SUBROOT;
+            index = 0;
+            while (*s >= '0' && *s <= '9') {
+                index = index * 10 + (*s - '0');
+                s++;
             }
-            st->node_idx = idx;
-            return MPP_TRIE_LEAF;
-        } else {
-            /* Intermediate segment: continue to next */
-            if (arr_cnt[s] > 0)
-                st->array_idx = arr_cnt[s];
+
+            if (*s == ':')
+                s++;
+
+            break;
         }
     }
 
-    return MPP_TRIE_LEAF;
+    /* No ':digits' found - entire name is text */
+    if (index < 0)
+        text_len = s - name;
+
+    idx = st->root_idx;
+
+    {
+        MppTrieWalk walk;
+        rk_s32 i;
+
+        walk.root = p->nodes;
+        walk.tag = 0;
+        walk.len = 0;
+        walk.match = 0;
+
+        for (i = 0; i < text_len && name[i]; i++) {
+            rk_u32 key = name[i];
+            rk_s32 key0 = (key >> 4) & 0xf;
+            rk_s32 key1 = key & 0xf;
+            rk_s32 end = (i == text_len - 1);
+
+            idx = mpp_trie_walk(&walk, idx, key, key0, 0);
+            if (idx < 0)
+                return rk_nok;
+
+            idx = mpp_trie_walk(&walk, idx, key, key1, end);
+            if (idx < 0 || (idx <= 0 && !end))
+                return rk_nok;
+        }
+    }
+
+    /* Read entry payload */
+    if (entry) {
+        MppTrieNode *node = &p->nodes[idx];
+
+        if (node->id >= 0) {
+            char *base = p->info_buf ? (char *)p->info_buf : (char *)p->nodes;
+            MppTrieInfo *info = (MppTrieInfo *)(base + node->id);
+
+            entry->val = ((KmppEntry *)mpp_trie_info_ctx(info))->val;
+        }
+
+        trie_dbg_get("trie %p get_entry node %d %s idx -%d\n",
+                     p, idx, index >= 0 ? "subroot" : "leaf", index);
+    }
+
+    st->node_idx = idx;
+    st->array_idx = index;
+    st->name_pos = s - name;
+
+    return index >= 0 ? MPP_TRIE_SUBROOT : MPP_TRIE_LEAF;
 }
 
 rk_s32 mpp_trie_get_node_count(MppTrie trie)
@@ -1154,7 +1018,7 @@ MppTrieInfo *mpp_trie_get_info(MppTrie trie, const char *name)
     MppTrieNode *node;
 
     if (!trie || !name) {
-        mpp_err_f("invalid trie %p name %p\n", trie, name);
+        mpp_loge_f("invalid trie %p name %p\n", trie, name);
         return NULL;
     }
 
