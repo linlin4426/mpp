@@ -72,19 +72,19 @@
 #define ENTRY_TO_shm_PTR(tbl, entry)    ((void *)ENTRY_TO_PTR(tbl, entry))
 #define ENTRY_TO_arr_PTR(tbl, entry)    ((void *)ENTRY_TO_PTR(tbl, entry))
 
-/* 32bit unsigned long pointer */
+/* 32bit flag word pointer */
 #define ELEM_FLAG_U32_POS(offset)       (((offset) & (~31)) / 8)
 #define ELEM_FLAG_BIT_POS(offset)       ((offset) & 31)
-#define ENTRY_TO_FLAG_PTR(e, entry)     ((rk_ul *)((rk_u8 *)entry + ELEM_FLAG_U32_POS(e->tbl.flag_offset)))
+#define ENTRY_TO_FLAG_PTR(e, entry)     ((rk_u32 *)((rk_u8 *)entry + ELEM_FLAG_U32_POS(e->tbl.flag_offset)))
 
 #define ENTRY_SET_FLAG(e, entry) \
-    *ENTRY_TO_FLAG_PTR(e, entry) |= 1ul << (ELEM_FLAG_BIT_POS(e->tbl.flag_offset))
+    *ENTRY_TO_FLAG_PTR(e, entry) |= 1u << (ELEM_FLAG_BIT_POS(e->tbl.flag_offset))
 
 #define ENTRY_CLR_FLAG(e, entry) \
-    *ENTRY_TO_FLAG_PTR(e, entry) &= ~(1ul << (ELEM_FLAG_BIT_POS(e->tbl.flag_offset)))
+    *ENTRY_TO_FLAG_PTR(e, entry) &= ~(1u << (ELEM_FLAG_BIT_POS(e->tbl.flag_offset)))
 
 #define ENTRY_TEST_FLAG(e, entry) \
-    ((*ENTRY_TO_FLAG_PTR(e, entry) & 1ul << (ELEM_FLAG_BIT_POS(e->tbl.flag_offset))) != 0) ? 1 : 0
+    ((*ENTRY_TO_FLAG_PTR(e, entry) & 1u << (ELEM_FLAG_BIT_POS(e->tbl.flag_offset))) != 0) ? 1 : 0
 
 typedef struct KmppShmReq_t {
     /* shm_name     - NULL name addresss for shm direct allocation */
