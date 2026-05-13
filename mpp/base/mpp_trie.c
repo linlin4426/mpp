@@ -851,6 +851,9 @@ rk_s32 mpp_trie_add_entry(MppTrie trie, MppTrieStatus *st,
             return rk_nok;
 
         node->id = p->info_buf_pos;
+        if (p->info_name_max < name_len)
+            p->info_name_max = name_len;
+
         {
             MppTrieInfo *info = (MppTrieInfo *)(p->info_buf + p->info_buf_pos);
             char *buf = (char *)(info + 1);
