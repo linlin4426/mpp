@@ -242,6 +242,8 @@ static rk_s32 test_obj_access(void)
 
     /* st_cfg:4:is_non_ref -> out of range (should fail) */
     {
+        fld = vla_resolve_field(obj, "st_cfg:4:is_non_ref", chain);
+        MPP_ASSERT_NOT_NULLm("resolve st_cfg:4:is_non_ref", fld);
         rk_s32 ret = vla_read_s32(st_arr, st_cfg_arr->vla.elem_size, cfg->st_cfg_cnt,
                                   fld, 4, &val);
         MPP_ASSERTm("st_cfg:4:is_non_ref should fail", ret);
