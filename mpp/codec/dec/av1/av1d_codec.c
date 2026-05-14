@@ -25,6 +25,34 @@
 
 #define BUFFER_PADDING_SIZE 64
 
+/*
+ * AV1 su(N) signed value: reads N bits total, MSB is sign bit.
+ * This is different from mpp_read_signbits() which reads N+1 bits
+ * (N value bits + 1 separate sign bit).
+ */
+static MPP_RET read_su(BitReadCtx_t *gb, RK_S32 num_bits, RK_S32 *out)
+{
+    RK_U32 raw;
+    MPP_RET ret;
+
+    ret = mpp_read_bits(gb, num_bits, (RK_S32 *)&raw);
+    if (!ret) {
+        /* sign-extend from MSB of the N-bit value */
+        if (raw & (1U << (num_bits - 1)))
+            raw |= ~((1U << num_bits) - 1);
+        *out = (RK_S32)raw;
+    }
+    return ret;
+}
+
+#define READ_SU(bitctx, num_bits, out)\
+    do {\
+        RK_S32 _out;\
+        bitctx->ret = read_su(bitctx, num_bits, &_out);\
+        if (!bitctx->ret) { *out = _out; }\
+        else { goto __BITREAD_ERR; }\
+    } while (0)
+
 static MPP_RET read_ns(BitReadCtx_t *gb, RK_U32 n, RK_U32 *out_val)
 {
     RK_U32 w = mpp_log2(n) + 1;
@@ -1070,7 +1098,7 @@ static MPP_RET read_loop_filter_params(Av1Codec *ctx, BitReadCtx_t *gb,
             else
                 f->update_ref_delta[i] = 0;
             if (f->update_ref_delta[i])
-                READ_SIGNBITS(gb, 7, &f->loop_filter_ref_deltas[i]);
+                READ_SU(gb, 7, &f->loop_filter_ref_deltas[i]);
             else
                 f->loop_filter_ref_deltas[i] = ref_loop_filter_ref_deltas[i];
         }
@@ -1080,7 +1108,7 @@ static MPP_RET read_loop_filter_params(Av1Codec *ctx, BitReadCtx_t *gb,
             else
                 f->update_mode_delta[i] = 0;
             if (f->update_mode_delta[i])
-                READ_SIGNBITS(gb, 7, &f->loop_filter_mode_deltas[i]);
+                READ_SU(gb, 7, &f->loop_filter_mode_deltas[i]);
             else
                 f->loop_filter_mode_deltas[i] = ref_loop_filter_mode_deltas[i];
         }
