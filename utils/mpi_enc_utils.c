@@ -31,6 +31,8 @@
 #include "mpp_opt.h"
 #include "mpi_enc_utils.h"
 
+#include "mpp_enc_ref.h"
+
 #define MAX_FILE_NAME_LENGTH        256
 
 static RK_S32 qbias_arr_hevc[18] = {
@@ -169,8 +171,9 @@ static RK_S32 mpi_enc_utils_load_file(MppEncTestObjSet *obj_set)
     mpp_logi("load cfg file %s size %d\n", name, size);
 
     buf = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
-    if (!buf) {
+    if (buf == MAP_FAILED) {
         mpp_err_f("mmap fd %d size %d failed\n", fd, size);
+        buf = NULL;
         goto error;
     }
 
@@ -189,6 +192,51 @@ static RK_S32 mpi_enc_utils_load_file(MppEncTestObjSet *obj_set)
     }
 
 error:
+    if (buf) {
+        munmap(buf, size);
+        buf = NULL;
+    }
+    if (fd >= 0) {
+        close(fd);
+        fd = -1;
+    }
+
+    return ret;
+}
+
+static MPP_RET mpi_enc_load_ref_cfg(MppEncRefCfg *ref, const char *path)
+{
+    MPP_RET ret = MPP_NOK;
+    RK_S32 fd = -1;
+    RK_S32 size = 0;
+    char *buf = NULL;
+
+    fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        mpp_err_f("ref_cfg file %s open failed: %s\n", path, strerror(errno));
+        return MPP_NOK;
+    }
+
+    size = lseek(fd, 0, SEEK_END);
+    if (size <= 0)
+        goto done;
+
+    buf = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (buf == MAP_FAILED) {
+        mpp_err_f("mmap fd %d size %d failed\n", fd, size);
+        buf = NULL;
+        goto done;
+    }
+
+    ret = mpp_enc_ref_cfg_setup(ref, 0, 0);
+    if (ret)
+        goto done;
+
+    ret = mpp_enc_ref_cfg_apply(*ref, MPP_CFG_STR_FMT_JSON, buf);
+    if (ret)
+        mpp_enc_ref_cfg_deinit(ref);
+
+done:
     if (buf) {
         munmap(buf, size);
         buf = NULL;
@@ -706,6 +754,32 @@ RK_S32 mpi_enc_opt_cfg(void *ctx, const char *next)
     return 0;
 }
 
+RK_S32 mpi_enc_opt_ref_cfg(void *ctx, const char *next)
+{
+    MppEncTestObjSet *obj_set = (MppEncTestObjSet *)ctx;
+    MpiEncTestArgs *cmd = (MpiEncTestArgs *)obj_set->cmd;
+
+    if (next) {
+        size_t len = strnlen(next, MAX_FILE_NAME_LENGTH);
+        if (len) {
+            if (cmd->file_ref_cfg) {
+                mpp_free(cmd->file_ref_cfg);
+                cmd->file_ref_cfg = NULL;
+            }
+
+            cmd->file_ref_cfg = mpp_calloc(char, len + 1);
+            if (!cmd->file_ref_cfg)
+                return 0;
+            strncpy(cmd->file_ref_cfg, next, len);
+
+            return 1;
+        }
+    }
+
+    mpp_err("invalid ref_cfg json file\n");
+    return 0;
+}
+
 RK_S32 mpi_enc_opt_slt(void *ctx, const char *next)
 {
     MppEncTestObjSet* obj_set = (MppEncTestObjSet *)ctx;
@@ -1076,6 +1150,7 @@ static MppOptInfo enc_opts[] = {
     {"v",       "trace option",         "q - quiet f - show fps",                   mpi_enc_opt_v},
     {"l",       "loop count",           "loop encoding times for each frame",       mpi_enc_opt_l},
     {"cfg",     "cfg_file",             "enc cfg file",                             mpi_enc_opt_cfg},
+    {"ref_cfg", "ref_cfg json file",    "ref_cfg json file",                        mpi_enc_opt_ref_cfg},
     {"slt",     "slt file",             "slt verify data file",                     mpi_enc_opt_slt},
     {"step",    "frame step",           "frame step, only for NV12 in slt test",    mpi_enc_opt_step},
     {"sm",      "scene mode",           "scene_mode, 0:default 1:ipc",              mpi_enc_opt_sm},
@@ -1964,15 +2039,25 @@ MPP_RET mpi_enc_cfg_setup(MpiEncTestData *p, MpiEncTestArgs *cmd, MppEncCfg cfg_
     // config gop_len and ref cfg
     mpp_enc_cfg_set_s32(cfg, "rc:gop", (cmd->gop_len != 0) ? cmd->gop_len : cmd->fps_out_num * 2);
 
-    if (cmd->gop_mode) {
-        mpp_enc_ref_cfg_init(&ref);
+    {
+        void *existing_ref = NULL;
+        mpp_enc_cfg_get_ptr(cfg, "rc:ref_cfg", &existing_ref);
 
-        if (cmd->gop_mode < 4)
-            mpi_enc_gen_ref_cfg(ref, cmd->gop_mode);
-        else
-            mpi_enc_gen_smart_gop_ref_cfg(ref, cmd->gop_len, cmd->vi_len);
+        if (!existing_ref) {
+            if (cmd->file_ref_cfg) {
+                if (MPP_OK == mpi_enc_load_ref_cfg(&ref, cmd->file_ref_cfg))
+                    mpp_enc_cfg_set_ptr(cfg, "rc:ref_cfg", ref);
+            } else if (cmd->gop_mode) {
+                mpp_enc_ref_cfg_init(&ref);
 
-        mpp_enc_cfg_set_ptr(cfg, "rc:ref_cfg", ref);
+                if (cmd->gop_mode < 4)
+                    mpi_enc_gen_ref_cfg(ref, cmd->gop_mode);
+                else
+                    mpi_enc_gen_smart_gop_ref_cfg(ref, cmd->gop_len, cmd->vi_len);
+
+                mpp_enc_cfg_set_ptr(cfg, "rc:ref_cfg", ref);
+            }
+        }
     }
 
     /* setup hardware specified parameters */

@@ -34,6 +34,7 @@ typedef struct MpiEncTestArgs_t {
     char                *file_input;
     char                *file_output;
     char                *file_cfg;
+    char                *file_ref_cfg;
     dictionary          *cfg_ini;
 
     MppCodingType       type;
