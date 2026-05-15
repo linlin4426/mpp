@@ -11,6 +11,7 @@
 #include "mpp_trie.h"
 #include "mpp_common.h"
 
+#include "mpp_cfg_io.h"
 #include "mpp_enc_ref.h"
 #include "mpp_enc_refs.h"
 
@@ -605,4 +606,123 @@ MppEncCpbInfo *mpp_enc_ref_cfg_get_cpb_info(MppEncRefCfg ref)
         return NULL;
 
     return &cfg->cpb_info;
+}
+
+/*
+ * JSON config apply / extract — symmetric with mpp_enc_cfg_apply/extract
+ */
+MPP_RET mpp_enc_ref_cfg_apply(MppEncRefCfg ref, MppCfgStrFmt fmt, char *buf)
+{
+    MppCfgObj root = NULL;
+    MppEncRefCfgImpl *impl;
+    MppCfgObj obj = NULL;
+    RK_S32 st_cnt = 0;
+    RK_S32 lt_cnt = 0;
+    MPP_RET ret = MPP_NOK;
+
+    if (!ref || !buf)
+        return MPP_NOK;
+
+    root = kmpp_objdef_get_cfg_root(mpp_enc_ref_cfg_def);
+    impl = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref);
+
+    if (mpp_cfg_from_string(&obj, fmt, buf) || !obj) {
+        mpp_loge_f("failed to parse config string\n");
+        mpp_cfg_put_all(obj);
+        return MPP_NOK;
+    }
+
+    /* read VLA capacity from parsed tree before to_struct */
+    {
+        MppCfgObj node = NULL;
+        char st_cnt_name[] = "st_cfg_cnt";
+        char lt_cnt_name[] = "lt_cfg_cnt";
+        MppCfgVal val = { 0 };
+
+        if (mpp_cfg_find(&node, obj, st_cnt_name, fmt) || !node) {
+            mpp_loge_f("failed to find st_cfg_cnt\n");
+            goto done;
+        }
+        if (mpp_cfg_get_val(node, MPP_CFG_TYPE_s32, &val)) {
+            mpp_loge_f("failed to read st_cfg_cnt\n");
+            goto done;
+        }
+        st_cnt = val.s32;
+
+        node = NULL;
+        if (mpp_cfg_find(&node, obj, lt_cnt_name, fmt) || !node) {
+            mpp_loge_f("failed to find lt_cfg_cnt\n");
+            goto done;
+        }
+        if (mpp_cfg_get_val(node, MPP_CFG_TYPE_s32, &val)) {
+            mpp_loge_f("failed to read lt_cfg_cnt\n");
+            goto done;
+        }
+        lt_cnt = val.s32;
+    }
+
+    if (st_cnt < 0 || lt_cnt < 0 ||
+        st_cnt > MPP_ENC_MAX_REF_CFG_NUM ||
+        lt_cnt > MPP_ENC_MAX_REF_CFG_NUM) {
+        mpp_loge_f("invalid count st %d lt %d (max %d)\n",
+                   st_cnt, lt_cnt, MPP_ENC_MAX_REF_CFG_NUM);
+        goto done;
+    }
+
+    /* resize VLA to count from config */
+    if (st_cnt > impl->st_cfg_cap || lt_cnt > impl->lt_cfg_cap) {
+        if (ref_cfg_resize(impl, ref, lt_cnt, st_cnt, __FUNCTION__))
+            goto done;
+
+        impl = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref);
+    }
+
+    if (mpp_cfg_to_struct(obj, root, impl)) {
+        mpp_loge_f("failed to convert config to struct\n");
+        goto done;
+    }
+    ret = mpp_enc_ref_cfg_check(ref);
+    if (ret) {
+        mpp_loge_f("ref cfg check failed\n");
+        if (impl->st_cfg_cap > 0)
+            memset(MPP_REF_ST_ARR(impl), 0, impl->st_cfg_cap * sizeof(MppEncRefStFrmCfg));
+        if (impl->lt_cfg_cap > 0)
+            memset(MPP_REF_LT_ARR(impl), 0, impl->lt_cfg_cap * sizeof(MppEncRefLtFrmCfg));
+        impl->st_cfg_cnt = 0;
+        impl->lt_cfg_cnt = 0;
+    }
+
+done:
+    mpp_cfg_put_all(obj);
+    return ret;
+}
+
+MPP_RET mpp_enc_ref_cfg_extract(MppEncRefCfg ref, MppCfgStrFmt fmt, char **buf)
+{
+    MppEncRefCfgImpl *impl;
+    MppCfgObj root;
+    MppCfgObj obj = NULL;
+    rk_s32 ret;
+
+    if (!ref || !buf)
+        return MPP_NOK;
+
+    *buf = NULL;
+
+    impl = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref);
+    root = kmpp_objdef_get_cfg_root(mpp_enc_ref_cfg_def);
+
+    ret = mpp_cfg_from_struct(&obj, root, impl);
+    if (ret || !obj) {
+        mpp_loge_f("failed to convert struct to config\n");
+        return MPP_NOK;
+    }
+
+    ret = mpp_cfg_to_string(obj, fmt, buf);
+    if (ret)
+        mpp_loge_f("failed to convert config to string\n");
+
+    mpp_cfg_put_all(obj);
+
+    return *buf ? MPP_OK : MPP_NOK;
 }

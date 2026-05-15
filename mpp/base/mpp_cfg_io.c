@@ -4018,6 +4018,26 @@ static void write_struct(MppCfgIoImpl *obj, MppTrie trie, MppCfgStrBuf *str,
     }
 }
 
+rk_s32 mpp_cfg_get_val(MppCfgObj obj, MppCfgType type, MppCfgVal *val)
+{
+    MppCfgIoImpl *impl = (MppCfgIoImpl *)obj;
+
+    if (!obj || !val || type >= MPP_CFG_TYPE_OBJECT) {
+        mpp_loge_f("invalid param obj %p val %p\n", obj, val);
+        return rk_nok;
+    }
+
+    if (impl->type != type) {
+        mpp_loge_f("obj %-16s type mismatch: expected %d, got %d\n",
+                   impl->name, type, impl->type);
+        return rk_nok;
+    }
+
+    *val = impl->val;
+
+    return rk_ok;
+}
+
 rk_s32 mpp_cfg_to_struct(MppCfgObj obj, MppCfgObj type, void *st)
 {
     MppCfgIoImpl *orig;

@@ -81,6 +81,8 @@ rk_s32 mpp_cfg_add_detail(MppCfgObj root, MppCfgObj detail);
 
 /* find by name string */
 rk_s32 mpp_cfg_find(MppCfgObj *obj, MppCfgObj root, char *name, rk_s32 type);
+/* get object value from the found cfg node */
+rk_s32 mpp_cfg_get_val(MppCfgObj obj, MppCfgType type, MppCfgVal *val);
 
 void mpp_cfg_dump(MppCfgObj obj, const char *func);
 #define mpp_cfg_dump_f(obj) mpp_cfg_dump(obj, __FUNCTION__)
