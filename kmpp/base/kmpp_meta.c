@@ -367,8 +367,12 @@ rk_s32 kmpp_meta_get_obj(KmppMeta meta, KmppMetaKey key, KmppObj *val)
 
     META_UNMASK_PROP(&meta_obj->state);
     if (MPP_BOOL_CAS(&meta_obj->state, META_READY_MASK, META_VAL_INVALID)) {
-        if (val)
-            *val = meta_obj->val_shm.kptr;
+        if (val) {
+            KmppShmPtr sptr = meta_obj->val_shm;
+
+            kmpp_obj_get_by_sptr_f(val, &sptr);
+        }
+
         meta_dec_size(meta, 1, __FUNCTION__);
         return rk_ok;
     }
