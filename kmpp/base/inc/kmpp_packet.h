@@ -18,6 +18,7 @@
     STRCT(prefix, shm, KmppShmPtr,  data,           FLAG_NONE, data) \
     STRCT(prefix, shm, KmppShmPtr,  buffer,         FLAG_NONE, buffer) \
     STRCT(prefix, shm, KmppShmPtr,  pos,            FLAG_NONE, pos) \
+    STRCT(prefix, shm, KmppShmPtr,  meta,           FLAG_NONE, meta) \
     ENTRY(prefix, u32, rk_u32,      flag,           FLAG_NONE, flag)
 
 #ifdef __cplusplus
@@ -28,8 +29,6 @@ extern "C" {
 #define KMPP_OBJ_INTF_TYPE      KmppPacket
 #define KMPP_OBJ_ENTRY_TABLE    KMPP_PACKET_ENTRY_TABLE
 #include "kmpp_obj_func.h"
-
-rk_s32 kmpp_packet_get_meta(KmppPacket packet, KmppMeta *meta);
 
 #ifdef __cplusplus
 }

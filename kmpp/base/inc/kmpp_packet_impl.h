@@ -53,11 +53,8 @@ typedef struct KmppPacketImpl_t {
     KmppShmPtr data;
     KmppShmPtr pos;
     KmppShmPtr buffer;
+    KmppShmPtr meta;
     RingBuf buf;
 } KmppPacketImpl;
-
-typedef struct KmppPacketPriv_t {
-    KmppMeta    meta;
-} KmppPacketPriv;
 
 #endif /* KMPP_PACKET_IMPL_H */
