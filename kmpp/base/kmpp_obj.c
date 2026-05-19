@@ -1116,8 +1116,8 @@ rk_s32 kmpp_obj_get(KmppObj *obj, KmppObjDef def, const char *caller)
 
     ret = ioctl(p->obj.fd, KMPP_SHM_IOC_GET_SHM, ioc);
     if (ret) {
-        mpp_err("%s fd %d ioctl KMPP_SHM_IOC_GET_SHM failed at %s\n",
-                def_impl->name, p->obj.fd, caller);
+        mpp_loge("%s fd %d ioctl KMPP_SHM_IOC_GET_SHM failed at %s\n",
+                 def_impl->name, p->obj.fd, caller);
         return ret;
     }
 
@@ -1233,7 +1233,7 @@ rk_s32 kmpp_obj_put(KmppObj obj, const char *caller)
 
                 ret = ioctl(p->obj.fd, KMPP_SHM_IOC_PUT_SHM, ioc);
                 if (ret)
-                    mpp_err("ioctl KMPP_SHM_IOC_PUT_SHM failed ret %d at %s\n", ret, caller);
+                    mpp_loge("ioctl KMPP_SHM_IOC_PUT_SHM failed ret %d at %s\n", ret, caller);
             }
             impl->shm = NULL;
         }
@@ -1450,8 +1450,8 @@ rk_s32 kmpp_obj_ioctl(KmppObj ctx, rk_s32 cmd, KmppObj in, KmppObj *out, const c
     }
 
     if (!impl || !impl->def) {
-        mpp_err("invalid ioctl ctx %p def %p failed at %s\n",
-                impl, impl ? impl->def : NULL, caller);
+        mpp_loge("invalid ioctl ctx %p def %p failed at %s\n",
+                 impl, impl ? impl->def : NULL, caller);
         return rk_nok;
     }
 
@@ -2410,7 +2410,7 @@ rk_s32 kmpp_obj_kdump_f(KmppObj obj, const char *caller)
 
     ret = ioctl(p->obj.fd, KMPP_SHM_IOC_DUMP, impl->shm);
     if (ret)
-        mpp_err("ioctl KMPP_SHM_IOC_DUMP failed ret %d\n", ret);
+        mpp_loge("ioctl KMPP_SHM_IOC_DUMP failed ret %d\n", ret);
 
     return (ret != rk_ok) ? rk_nok : rk_ok;
 }
@@ -2443,8 +2443,8 @@ rk_s32 kmpp_shm_get(KmppShm *shm, rk_s32 size, const char *caller)
 
     ret = ioctl(p->obj.fd, KMPP_SHM_IOC_GET_SHM, ioc);
     if (ret) {
-        mpp_err("shm fd %d ioctl KMPP_SHM_IOC_GET_SHM failed at %s\n",
-                p->obj.fd, caller);
+        mpp_loge("shm fd %d ioctl KMPP_SHM_IOC_GET_SHM failed at %s\n",
+                 p->obj.fd, caller);
         return ret;
     }
 
@@ -2483,7 +2483,7 @@ rk_s32 kmpp_shm_put(KmppShm shm, const char *caller)
 
         ret = ioctl(p->obj.fd, KMPP_SHM_IOC_PUT_SHM, ioc);
         if (ret)
-            mpp_err("ioctl KMPP_SHM_IOC_PUT_SHM failed ret %d at %s\n", ret, caller);
+            mpp_loge("ioctl KMPP_SHM_IOC_PUT_SHM failed ret %d at %s\n", ret, caller);
     }
 
     return ret;
