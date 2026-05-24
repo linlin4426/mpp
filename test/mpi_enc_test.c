@@ -37,6 +37,7 @@ typedef struct {
     RK_S32          frame_count;
     RK_S64          stream_size;
     RK_S64          delay;
+    RK_S32          ret;
 } MpiEncMultiCtxRet;
 
 typedef struct MpiEncTestPriv_t {
@@ -682,6 +683,8 @@ MPP_TEST_OUT:
 
     mpi_enc_ctx_deinit(p);
 
+    enc_ret->ret = ret;
+
     return NULL;
 }
 
@@ -690,7 +693,7 @@ int enc_test_multi(MppEncTestObjSet* obj_set, const char *name)
     MpiEncMultiCtxInfo *ctxs = NULL;
     MpiEncTestArgs *cmd = obj_set->cmd;
     float total_rate = 0.0;
-    RK_S32 ret = MPP_NOK;
+    RK_S32 ret = MPP_OK;
     RK_S32 i = 0;
 
     ctxs = mpp_calloc(MpiEncMultiCtxInfo, cmd->nthreads);
@@ -731,6 +734,9 @@ int enc_test_multi(MppEncTestObjSet* obj_set, const char *name)
         mpp_log("chn %d encode %d frames time %lld ms delay %3d ms fps %3.2f bps %lld\n",
                 i, enc_ret->frame_count, (RK_S64)(enc_ret->elapsed_time / 1000),
                 (RK_S32)(enc_ret->delay / 1000), enc_ret->frame_rate, enc_ret->bit_rate);
+
+        if (enc_ret->ret)
+            ret = enc_ret->ret;
 
         total_rate += enc_ret->frame_rate;
     }
