@@ -23,6 +23,35 @@
 #define VEPU511A_MAX_ROI_NUM          8
 #define VEPU511A_SLICE_FIFO_LEN       8
 
+#define vepu511a_get_dbg_regs(dev, regs, ret_acc) do {   \
+    MppDevRegRdCfg _rd_cfg; \
+    VEPU_REG_RD(dev, regs, reg_ctl,   VEPU511A_CTL_OFFSET,     ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_frm,   VEPU511A_FRAME_OFFSET,   ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_rc_roi,VEPU511A_RC_ROI_OFFSET,  ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_param, VEPU511A_PARAM_OFFSET,   ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_sqi,   VEPU511A_SQI_OFFSET,     ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_scl,   VEPU511A_SCL_OFFSET,     ret_acc); \
+} while (0)
+
+#define vepu511a_dump_sw_regs(dbg_ctx, regs) do { \
+    vepu_sw_regs(dbg_ctx, (regs)->reg_ctl, VEPU511A_CTL_OFFSET, "w+"); \
+    vepu_sw_regs(dbg_ctx, (regs)->reg_frm, VEPU511A_FRAME_OFFSET, "a+"); \
+    vepu_sw_regs(dbg_ctx, (regs)->reg_rc_roi, VEPU511A_RC_ROI_OFFSET, "a+"); \
+    vepu_sw_regs(dbg_ctx, (regs)->reg_param, VEPU511A_PARAM_OFFSET, "a+"); \
+    vepu_sw_regs(dbg_ctx, (regs)->reg_sqi, VEPU511A_SQI_OFFSET, "a+"); \
+    vepu_sw_regs(dbg_ctx, (regs)->reg_scl, VEPU511A_SCL_OFFSET, "a+"); \
+} while (0)
+
+#define vepu511a_dump_hw_regs(dbg_ctx, regs, st_reg) do { \
+    vepu_hw_regs(dbg_ctx, (regs)->reg_ctl, VEPU511A_CTL_OFFSET, "w+"); \
+    vepu_hw_regs(dbg_ctx, (regs)->reg_frm, VEPU511A_FRAME_OFFSET, "a+"); \
+    vepu_hw_regs(dbg_ctx, (regs)->reg_rc_roi, VEPU511A_RC_ROI_OFFSET, "a+"); \
+    vepu_hw_regs(dbg_ctx, (regs)->reg_param, VEPU511A_PARAM_OFFSET, "a+"); \
+    vepu_hw_regs(dbg_ctx, (regs)->reg_sqi, VEPU511A_SQI_OFFSET, "a+"); \
+    vepu_hw_regs(dbg_ctx, (regs)->reg_scl, VEPU511A_SCL_OFFSET, "a+"); \
+    vepu_hw_regs(dbg_ctx, st_reg, VEPU511A_STATUS_OFFSET, "a+"); \
+} while (0)
+
 typedef enum qbias_ofst_e {
     IFRAME_THD0 = 0,
     IFRAME_THD1,

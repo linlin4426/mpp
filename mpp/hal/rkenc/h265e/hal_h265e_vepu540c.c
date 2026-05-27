@@ -33,6 +33,8 @@
 #include "hal_h265e_stream_amend.h"
 #include "hal_bufs.h"
 #include "rkv_enc_def.h"
+
+#include "hal_dbg.h"
 #include "vepu5xx_common.h"
 #include "vepu540c_common.h"
 #include "hal_h265e_vepu540c.h"
@@ -72,7 +74,7 @@ typedef struct H265eV540cHalContext_t {
     void                *reg_out[MAX_TITLE_NUM];
 
     vepu540c_h265_fbk    feedback;
-    void                *dump_files;
+    HalDbgCtx           *dbg_ctx;
     RK_U32              frame_cnt_gen_ready;
 
     RK_S32              frame_type;
@@ -101,6 +103,31 @@ typedef struct H265eV540cHalContext_t {
     RK_S32                  ext_line_buf_size;
     MppBuffer               ext_line_buf;
 } H265eV540cHalContext;
+
+static void hal_h265e_vepu540c_dump_sw_regs(HalDbgCtx *dbg_ctx, H265eV540cRegSet *regs)
+{
+    vepu_sw_regs(dbg_ctx, regs->reg_ctl, VEPU540C_CTL_OFFSET, "w+");
+    vepu_sw_regs(dbg_ctx, regs->reg_base, VEPU540C_BASE_OFFSET, "a+");
+    vepu_sw_regs(dbg_ctx, regs->reg_rc_roi, VEPU540C_RCROI_OFFSET, "a+");
+    vepu_sw_regs(dbg_ctx, regs->reg_wgt, VEPU540C_WEG_OFFSET, "a+");
+    vepu_sw_regs(dbg_ctx, regs->reg_rdo, VEPU540C_RDOCFG_OFFSET, "a+");
+    vepu_sw_regs(dbg_ctx, regs->reg_scl, VEPU540C_SCLCFG_OFFSET, "a+");
+    vepu_sw_regs(dbg_ctx, regs->jpeg_table, VEPU540C_JPEGTAB_OFFSET, "a+");
+}
+
+static void hal_h265e_vepu540c_dump_hw_regs(HalDbgCtx *dbg_ctx, H265eV540cRegSet *regs,
+                                            H265eV540cStatusElem *elem)
+{
+    vepu_hw_regs(dbg_ctx, regs->reg_ctl, VEPU540C_CTL_OFFSET, "w+");
+    vepu_hw_regs(dbg_ctx, regs->reg_base, VEPU540C_BASE_OFFSET, "a+");
+    vepu_hw_regs(dbg_ctx, regs->reg_rc_roi, VEPU540C_RCROI_OFFSET, "a+");
+    vepu_hw_regs(dbg_ctx, regs->reg_wgt, VEPU540C_WEG_OFFSET, "a+");
+    vepu_hw_regs(dbg_ctx, regs->reg_rdo, VEPU540C_RDOCFG_OFFSET, "a+");
+    vepu_hw_regs(dbg_ctx, regs->reg_scl, VEPU540C_SCLCFG_OFFSET, "a+");
+    vepu_hw_regs(dbg_ctx, regs->jpeg_table, VEPU540C_JPEGTAB_OFFSET, "a+");
+    vepu_hw_regs(dbg_ctx, elem->hw_status, VEPU540C_REG_BASE_HW_STATUS, "a+");
+    vepu_hw_regs(dbg_ctx, elem->st, VEPU540C_STATUS_OFFSET, "a+");
+}
 
 #define TILE_BUF_SIZE  MPP_ALIGN(128 * 1024, 256)
 
@@ -545,6 +572,8 @@ MPP_RET hal_h265e_v540c_init(void *hal, MppEncHalCfg *cfg)
         memcpy(hw->aq_step_p, aq_qp_dealt_default, sizeof(hw->aq_step_p));
     }
 
+    hal_dbg_init(&ctx->dbg_ctx, "hal_h265e");
+
     hal_h265e_leave();
     return ret;
 }
@@ -555,6 +584,7 @@ MPP_RET hal_h265e_v540c_deinit(void *hal)
     RK_U32 i = 0;
 
     hal_h265e_enter();
+    hal_dbg_deinit(ctx->dbg_ctx);
     MPP_FREE(ctx->regs);
 
     for ( i = 0; i < MAX_TITLE_NUM; i++) {
@@ -1201,6 +1231,7 @@ MPP_RET hal_h265e_v540c_gen_regs(void *hal, HalEncTask *task)
     hevc_vepu540c_rc_roi *reg_klut = &regs->reg_rc_roi;
 
     hal_h265e_enter();
+    hal_dbg_setup(ctx->dbg_ctx, NULL);
     pic_width_align8 = (syn->pp.pic_width + 7) & (~7);
     pic_height_align8 = (syn->pp.pic_height + 7) & (~7);
     pic_wd32 = (syn->pp.pic_width +  31) / 32;
@@ -1338,6 +1369,8 @@ MPP_RET hal_h265e_v540c_start(void *hal, HalEncTask *enc_task)
         return MPP_NOK;
     }
 
+    hal_h265e_vepu540c_dump_sw_regs(ctx->dbg_ctx, hw_regs);
+
     cfg.reg = (RK_U32*)&hw_regs->reg_ctl;
     cfg.size = sizeof(hevc_vepu540c_control_cfg);
     cfg.offset = VEPU540C_CTL_OFFSET;
@@ -1437,6 +1470,13 @@ MPP_RET hal_h265e_v540c_start(void *hal, HalEncTask *enc_task)
     if (ret) {
         mpp_err_f("set register read failed %d\n", ret);
         return ret;
+    }
+
+    if (hal_dbg_flag_en(ctx->dbg_ctx, HAL_DBG_GET_REG)) {
+        RK_S32 ret_dbg = 0;
+        vepu540c_get_dbg_regs(ctx->dev, hw_regs, reg_wgt, ret_dbg);
+        if (ret_dbg)
+            mpp_err_f("debug register read failed %d\n", ret_dbg);
     }
 
     ret = mpp_dev_ioctl(ctx->dev, MPP_DEV_CMD_SEND, NULL);
@@ -1546,7 +1586,6 @@ static MPP_RET vepu540c_h265_set_feedback(H265eV540cHalContext *ctx, HalEncTask 
 }
 
 
-//#define DUMP_DATA
 MPP_RET hal_h265e_v540c_wait(void *hal, HalEncTask *task)
 {
     MPP_RET ret = MPP_OK;
@@ -1558,70 +1597,29 @@ MPP_RET hal_h265e_v540c_wait(void *hal, HalEncTask *task)
     if (enc_task->flags.err) {
         hal_h265e_err("enc_task->flags.err %08x, return early",
                       enc_task->flags.err);
+        hal_dbg_finish(ctx->dbg_ctx);
         return MPP_NOK;
     }
 
     ret = mpp_dev_ioctl(ctx->dev, MPP_DEV_CMD_POLL, NULL);
 
-#ifdef DUMP_DATA
-    static FILE *fp_fbd = NULL;
-    static FILE *fp_fbh = NULL;
-    static FILE *fp_dws = NULL;
-    HalBuf *recon_buf;
-    static RK_U32 frm_num = 0;
-    H265eSyntax_new *syn = (H265eSyntax_new *)enc_task->syntax.data;
-    recon_buf = hal_bufs_get_buf(ctx->dpb_bufs, syn->sp.recon_pic.slot_idx);
-    char file_name[20] = "";
-    size_t rec_size = mpp_buffer_get_size(recon_buf->buf[0]);
-    size_t dws_size = mpp_buffer_get_size(recon_buf->buf[1]);
+    if (hal_dbg_flag_en(ctx->dbg_ctx, HAL_DBG_DUMP)) {
+        H265eSyntax_new *syn = (H265eSyntax_new *)enc_task->syntax.data;
+        HalBuf *ref_buf = hal_bufs_get_buf(ctx->dpb_bufs, syn->sp.ref_pic.slot_idx);
+        HalBuf *recon_buf = hal_bufs_get_buf(ctx->dpb_bufs, syn->sp.recon_pic.slot_idx);
 
-    void *ptr = mpp_buffer_get_ptr(recon_buf->buf[0]);
-    void *dws_ptr = mpp_buffer_get_ptr(recon_buf->buf[1]);
-
-    sprintf(&file_name[0], "fbd%d.bin", frm_num);
-    if (fp_fbd != NULL) {
-        fclose(fp_fbd);
-        fp_fbd = NULL;
-    } else {
-        fp_fbd = fopen(file_name, "wb+");
-    }
-    if (fp_fbd) {
-        fwrite(ptr + ctx->fbc_header_len, 1, rec_size - ctx->fbc_header_len, fp_fbd);
-        fflush(fp_fbd);
+        if (ref_buf && ref_buf->cnt)
+            vepu_dump_fbc_buf(ctx->dbg_ctx, "refr_", ref_buf, ctx->fbc_header_len, 128);
+        if (recon_buf && recon_buf->cnt)
+            vepu_dump_fbc_buf(ctx->dbg_ctx, "recn_", recon_buf, ctx->fbc_header_len, 128);
     }
 
-    sprintf(&file_name[0], "fbh%d.bin", frm_num);
-
-    if (fp_fbh != NULL) {
-        fclose(fp_fbh);
-        fp_fbh = NULL;
-    } else {
-        fp_fbh = fopen(file_name, "wb+");
-    }
-
-    if (fp_fbh) {
-        fwrite(ptr , 1, ctx->fbc_header_len, fp_fbh);
-        fflush(fp_fbh);
-    }
-
-
-    sprintf(&file_name[0], "dws%d.bin", frm_num);
-
-    if (fp_dws != NULL) {
-        fclose(fp_dws);
-        fp_dws = NULL;
-    } else {
-        fp_dws = fopen(file_name, "wb+");
-    }
-
-    if (fp_dws) {
-        fwrite(dws_ptr , 1, dws_size, fp_dws);
-        fflush(fp_dws);
-    }
-    frm_num++;
-#endif
     if (ret)
         mpp_err_f("poll cmd failed %d status %d \n", ret, elem->hw_status.val);
+
+    H265eV540cRegSet *hw_regs = ctx->regs;
+    hal_h265e_vepu540c_dump_hw_regs(ctx->dbg_ctx, hw_regs, elem);
+    hal_dbg_finish(ctx->dbg_ctx);
 
     hal_h265e_leave();
     return ret;

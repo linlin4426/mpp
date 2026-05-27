@@ -11,6 +11,27 @@
 #define VEPU580_SLICE_FIFO_LEN          32
 #define VEPU580_OSD_ADDR_IDX_BASE       3092
 
+#define vepu580_h264e_get_dbg_regs(dev, regs, ret_acc) do { \
+    MppDevRegRdCfg _rd_cfg; \
+    VEPU_REG_RD(dev, regs, reg_ctl,    VEPU580_CONTROL_CFG_OFFSET, ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_base,   VEPU580_BASE_CFG_OFFSET,    ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_rc_klut,VEPU580_RC_KLUT_CFG_OFFSET, ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_s3,     VEPU580_SECTION_3_OFFSET,   ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_rdo,    VEPU580_RDO_CFG_OFFSET,     ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_scl,    VEPU580_SCL_CFG_OFFSET,     ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_osd,    VEPU580_OSD_OFFSET,         ret_acc); \
+} while (0)
+
+#define vepu580_h265e_get_dbg_regs(dev, regs, ret_acc) do { \
+    MppDevRegRdCfg _rd_cfg; \
+    VEPU_REG_RD(dev, regs, reg_ctl,    VEPU580_CTL_OFFSET,         ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_base,   VEPU580_BASE_OFFSET,        ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_rc_klut,VEPU580_RCKULT_OFFSET,      ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_wgt,    VEPU580_WEG_OFFSET,         ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_rdo,    VEPU580_RDOCFG_OFFSET,      ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_osd_cfg,VEPU580_OSD_OFFSET,         ret_acc); \
+} while (0)
+
 typedef struct Vepu580OsdPltColor_t {
     /* V component */
     RK_U32  v                       : 8;

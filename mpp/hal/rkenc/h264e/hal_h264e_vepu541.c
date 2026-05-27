@@ -38,6 +38,8 @@
 #include "hal_h264e_vepu541_reg.h"
 #include "hal_h264e_vepu541_reg_l2.h"
 #include "hal_h264e_stream_amend.h"
+
+#include "hal_dbg.h"
 #include "vepu541_common.h"
 #include "vepu5xx_common.h"
 
@@ -85,7 +87,30 @@ typedef struct HalH264eVepu541Ctx_t {
     Vepu541H264eRegSet      regs_set;
     Vepu541H264eRegL2Set    regs_l2_set;
     Vepu541H264eRegRet      regs_ret;
+
+    HalDbgCtx               *dbg_ctx;
 } HalH264eVepu541Ctx;
+
+static void hal_h264e_vepu541_dump_sw_regs(HalDbgCtx *dbg_ctx, HalH264eVepu541Ctx *ctx)
+{
+    RK_U32 l2_cnt = sizeof(ctx->regs_l2_set) / sizeof(RK_U32);
+    hal_dbg_dump_set_regs(dbg_ctx, (RK_U32 *)&ctx->regs_l2_set,
+                          l2_cnt, 0, "w+");
+    hal_dbg_dump_set_regs(dbg_ctx, (RK_U32 *)&ctx->regs_set,
+                          sizeof(ctx->regs_set) / sizeof(RK_U32), l2_cnt, "a+");
+}
+
+static void hal_h264e_vepu541_dump_hw_regs(HalDbgCtx *dbg_ctx, HalH264eVepu541Ctx *ctx)
+{
+    RK_U32 l2_cnt = sizeof(ctx->regs_l2_set) / sizeof(RK_U32);
+    hal_dbg_dump_get_regs(dbg_ctx, (RK_U32 *)&ctx->regs_l2_set,
+                          sizeof(ctx->regs_l2_set) / sizeof(RK_U32), 0, "w+");
+    hal_dbg_dump_get_regs(dbg_ctx, (RK_U32 *)&ctx->regs_set,
+                          sizeof(ctx->regs_set) / sizeof(RK_U32), l2_cnt, "a+");
+    hal_dbg_dump_get_regs(dbg_ctx, (RK_U32 *)&ctx->regs_ret,
+                          sizeof(ctx->regs_ret) / sizeof(RK_U32),
+                          l2_cnt + sizeof(ctx->regs_set) / sizeof(RK_U32), "a+");
+}
 
 #define CHROMA_KLUT_TAB_SIZE    (24 * sizeof(RK_U32))
 
@@ -99,9 +124,6 @@ static RK_U32 h264e_klut_weight[30] = {
     0x4500ffff, 0x659780a1, 0x8a81fffe, 0xCC000142,
     0xFF83FFFF, 0x000001FF,
 };
-
-static RK_U32 dump_l1_reg = 0;
-static RK_U32 dump_l2_reg = 0;
 
 static RK_S32 h264_aq_tthd_default[16] = {
     0,  0,  0,  0,
@@ -152,6 +174,7 @@ static MPP_RET hal_h264e_vepu541_deinit(void *hal)
         p->hw_recn = NULL;
     }
 
+    hal_dbg_deinit(p->dbg_ctx);
     hal_h264e_dbg_func("leave %p\n", p);
 
     return MPP_OK;
@@ -218,6 +241,7 @@ DONE:
 
     h264e_vepu_stream_amend_init(&p->amend);
 
+    hal_dbg_init(&p->dbg_ctx, "hal_h264e");
     hal_h264e_dbg_func("leave %p\n", p);
     return ret;
 }
@@ -1569,18 +1593,6 @@ static void setup_vepu541_l2(Vepu541H264eRegL2Set *regs, H264eSlice *slice, MppE
     regs->atr1_thd0_h264.atr1_thd1 = 4;
     regs->atr1_thd1_h264.atr1_thd2 = 49;
 
-    mpp_env_get_u32("dump_l2_reg", &dump_l2_reg, 0);
-
-    if (dump_l2_reg) {
-        mpp_log("L2 reg dump start:\n");
-        RK_U32 *p = (RK_U32 *)regs;
-
-        for (i = 0; i < (sizeof(*regs) / sizeof(RK_U32)); i++)
-            mpp_log("%04x %08x\n", 4 + i * 4, p[i]);
-
-        mpp_log("L2 reg done\n");
-    }
-
     hal_h264e_dbg_func("leave\n");
 }
 
@@ -1596,6 +1608,7 @@ static MPP_RET hal_h264e_vepu541_gen_regs(void *hal, HalEncTask *task)
     MPP_RET ret = MPP_OK;
     EncFrmStatus *frm_status = &task->rc_task->frm;
 
+    hal_dbg_setup(ctx->dbg_ctx, NULL);
     hal_h264e_dbg_func("enter %p\n", hal);
     hal_h264e_dbg_detail("frame %d generate regs now", ctx->frms->seq_idx);
 
@@ -1636,19 +1649,7 @@ static MPP_RET hal_h264e_vepu541_gen_regs(void *hal, HalEncTask *task)
 
     setup_vepu541_l2(&ctx->regs_l2_set, slice, &cfg->hw, cfg);
 
-    mpp_env_get_u32("dump_l1_reg", &dump_l1_reg, 0);
-
-    if (dump_l1_reg) {
-        mpp_log("L1 reg dump start:\n");
-        RK_U32 *p = (RK_U32 *)regs;
-        RK_S32 n = 0x1D0 / sizeof(RK_U32);
-        RK_S32 i;
-
-        for (i = 0; i < n; i++)
-            mpp_log("%04x %08x\n", i * 4, p[i]);
-
-        mpp_log("L1 reg done\n");
-    }
+    hal_h264e_vepu541_dump_sw_regs(ctx->dbg_ctx, ctx);
 
     ctx->frame_cnt++;
 
@@ -1710,6 +1711,13 @@ static MPP_RET hal_h264e_vepu541_start(void *hal, HalEncTask *task)
         if (ret) {
             mpp_err_f("set register read failed %d\n", ret);
             break;
+        }
+
+        if (hal_dbg_flag_en(ctx->dbg_ctx, HAL_DBG_GET_REG)) {
+            RK_S32 ret_dbg = 0;
+            vepu541_get_dbg_regs(ctx->dev, &ctx->regs_l2_set, &ctx->regs_set, ret_dbg);
+            if (ret_dbg)
+                mpp_err_f("debug register read failed %d\n", ret_dbg);
         }
 
         /* send request to hardware */
@@ -1779,6 +1787,19 @@ static MPP_RET hal_h264e_vepu541_wait(void *hal, HalEncTask *task)
         task->hw_length += ctx->regs_ret.st_bsl.bs_lgth;
     }
 
+    if (hal_dbg_flag_en(ctx->dbg_ctx, HAL_DBG_DUMP)) {
+        HalBufs bufs = ctx->hw_recn;
+        H264eFrmInfo *frms = ctx->frms;
+        RK_S32 fbc_hdr_size = ctx->pixel_buf_fbc_hdr_size;
+        HalBuf *refr = hal_bufs_get_buf(bufs, frms->refr_idx);
+        HalBuf *curr = hal_bufs_get_buf(bufs, frms->curr_idx);
+
+        if (refr && refr->cnt)
+            vepu_dump_fbc_buf(ctx->dbg_ctx, "refr_", refr, fbc_hdr_size, 128);
+        if (curr && curr->cnt)
+            vepu_dump_fbc_buf(ctx->dbg_ctx, "recn_", curr, fbc_hdr_size, 128);
+    }
+
     mpp_packet_add_segment_info(pkt, type, offset, ctx->regs_ret.st_bsl.bs_lgth);
 
     {
@@ -1795,6 +1816,9 @@ static MPP_RET hal_h264e_vepu541_wait(void *hal, HalEncTask *task)
             h264e_vepu_stream_amend_sync_ref_idc(amend);
         }
     }
+    hal_h264e_vepu541_dump_hw_regs(ctx->dbg_ctx, ctx);
+    hal_dbg_finish(ctx->dbg_ctx);
+
     hal_h264e_dbg_func("leave %p\n", hal);
 
     return ret;

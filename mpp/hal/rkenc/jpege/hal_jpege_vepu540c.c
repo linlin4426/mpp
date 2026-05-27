@@ -32,6 +32,8 @@
 #include "jpege_syntax.h"
 #include "hal_bufs.h"
 #include "rkv_enc_def.h"
+
+#include "hal_dbg.h"
 #include "vepu5xx_common.h"
 #include "vepu540c_common.h"
 #include "hal_jpege_vepu540c.h"
@@ -43,7 +45,7 @@ typedef struct jpegeV540cHalContext_t {
     void                *regs;
     void                *reg_out;
 
-    void                *dump_files;
+    HalDbgCtx           *dbg_ctx;
 
     RK_S32              frame_type;
     RK_S32              last_frame_type;
@@ -69,6 +71,23 @@ typedef struct jpegeV540cHalContext_t {
     JpegeSyntax         syntax;
     HalJpegeRc          hal_rc;
 } jpegeV540cHalContext;
+
+static void hal_jpege_vepu540c_dump_sw_regs(HalDbgCtx *dbg_ctx, JpegV540cRegSet *regs)
+{
+    vepu_sw_regs(dbg_ctx, regs->reg_ctl, VEPU540C_CTL_OFFSET, "w+");
+    vepu_sw_regs(dbg_ctx, regs->reg_base, VEPU540C_BASE_OFFSET, "a+");
+    vepu_sw_regs(dbg_ctx, regs->jpeg_table, VEPU540C_JPEGTAB_OFFSET, "a+");
+}
+
+static void hal_jpege_vepu540c_dump_hw_regs(HalDbgCtx *dbg_ctx, JpegV540cRegSet *regs,
+                                            JpegV540cStatus *elem)
+{
+    vepu_hw_regs(dbg_ctx, regs->reg_ctl, VEPU540C_CTL_OFFSET, "w+");
+    vepu_hw_regs(dbg_ctx, regs->reg_base, VEPU540C_BASE_OFFSET, "a+");
+    vepu_hw_regs(dbg_ctx, regs->jpeg_table, VEPU540C_JPEGTAB_OFFSET, "a+");
+    vepu_hw_regs(dbg_ctx, elem->hw_status, VEPU540C_REG_BASE_HW_STATUS, "a+");
+    vepu_hw_regs(dbg_ctx, elem->st, VEPU540C_STATUS_OFFSET, "a+");
+}
 
 MPP_RET hal_jpege_v540c_init(void *hal, MppEncHalCfg *cfg)
 {
@@ -97,6 +116,7 @@ MPP_RET hal_jpege_v540c_init(void *hal, MppEncHalCfg *cfg)
     jpege_bits_init(&ctx->bits);
     mpp_assert(ctx->bits);
     hal_jpege_rc_init(&ctx->hal_rc);
+    hal_dbg_init(&ctx->dbg_ctx, "hal_jpege");
 
     hal_jpege_leave();
     return ret;
@@ -107,6 +127,7 @@ MPP_RET hal_jpege_v540c_deinit(void *hal)
     jpegeV540cHalContext *ctx = (jpegeV540cHalContext *)hal;
 
     hal_jpege_enter();
+    hal_dbg_deinit(ctx->dbg_ctx);
     jpege_bits_deinit(ctx->bits);
     MPP_FREE(ctx->regs);
 
@@ -139,6 +160,7 @@ MPP_RET hal_jpege_v540c_gen_regs(void *hal, HalEncTask *task)
 {
     jpegeV540cHalContext *ctx = (jpegeV540cHalContext *)hal;
     JpegV540cRegSet *regs = ctx->regs;
+    hal_dbg_setup(ctx->dbg_ctx, NULL);
     jpeg_vepu540c_control_cfg *reg_ctl = &regs->reg_ctl;
     jpeg_vepu540c_base *reg_base = &regs->reg_base;
     JpegeBits bits = ctx->bits;
@@ -248,6 +270,8 @@ MPP_RET hal_jpege_v540c_start(void *hal, HalEncTask *enc_task)
         return MPP_NOK;
     }
 
+    hal_jpege_vepu540c_dump_sw_regs(ctx->dbg_ctx, hw_regs);
+
     cfg.reg = (RK_U32*)&hw_regs->reg_ctl;
     cfg.size = sizeof(jpeg_vepu540c_control_cfg);
     cfg.offset = VEPU540C_CTL_OFFSET;
@@ -306,7 +330,6 @@ MPP_RET hal_jpege_v540c_start(void *hal, HalEncTask *enc_task)
     return ret;
 }
 
-//#define DUMP_DATA
 static MPP_RET hal_jpege_vepu540c_status_check(void *hal)
 {
     jpegeV540cHalContext *ctx = (jpegeV540cHalContext *)hal;
@@ -355,6 +378,10 @@ MPP_RET hal_jpege_v540c_wait(void *hal, HalEncTask *task)
         hal_jpege_vepu540c_status_check(hal);
         task->hw_length += elem->st.jpeg_head_bits_l32;
     }
+
+    JpegV540cRegSet *hw_regs = ctx->regs;
+    hal_jpege_vepu540c_dump_hw_regs(ctx->dbg_ctx, hw_regs, elem);
+    hal_dbg_finish(ctx->dbg_ctx);
 
     hal_jpege_leave();
     return ret;

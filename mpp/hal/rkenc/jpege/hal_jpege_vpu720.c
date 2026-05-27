@@ -15,6 +15,7 @@
 #include "mpp_enc_hal.h"
 
 #include "jpege_syntax.h"
+#include "hal_dbg.h"
 #include "hal_hw_id.h"
 #include "hal_jpege_hdr.h"
 #include "hal_jpege_debug.h"
@@ -114,7 +115,27 @@ typedef struct JpegeVpu720HalCtx_t {
 
     RK_U32              is_vpu730;
     void                *roi_data;
+
+    HalDbgCtx           *dbg_ctx;
 } JpegeVpu720HalCtx;
+
+static void hal_jpege_vpu720_dump_sw_regs(HalDbgCtx *dbg_ctx, JpegeVpu720Reg *regs,
+                                          RK_U32 is_vpu730)
+{
+    vpu720_sw_regs(dbg_ctx, regs->reg_base, 0, "w+");
+    if (is_vpu730)
+        vpu720_sw_regs(dbg_ctx, regs->reg_rdo, JPEGE_VPU730_REG_ROI_OFFSET, "a+");
+}
+
+static void hal_jpege_vpu720_dump_hw_regs(HalDbgCtx *dbg_ctx, JpegeVpu720Reg *regs,
+                                          RK_U32 is_vpu730)
+{
+    vpu720_hw_regs(dbg_ctx, regs->reg_base, 0, "w+");
+    vpu720_hw_regs(dbg_ctx, regs->int_state, JPEGE_VPU720_REG_BASE_INT_STATE, "a+");
+    vpu720_hw_regs(dbg_ctx, regs->reg_st, JPEGE_VPU720_REG_STATUS_OFFSET, "a+");
+    if (is_vpu730)
+        vpu720_hw_regs(dbg_ctx, regs->reg_rdo, JPEGE_VPU730_REG_ROI_OFFSET, "a+");
+}
 
 #define JPEGE_VPU720_QTABLE_SIZE (64 * 3)
 
@@ -157,6 +178,7 @@ static MPP_RET hal_jpege_vpu720_init(void *hal, MppEncHalCfg *cfg)
     mpp_buffer_attach_dev(ctx->qtbl_buffer, ctx->dev);
     ctx->qtbl_sw_buf = (RK_U16 *)mpp_calloc(RK_U16, JPEGE_VPU720_QTABLE_SIZE);
     hal_jpege_rc_init(&ctx->hal_rc);
+    hal_dbg_init(&ctx->dbg_ctx, "hal_jpege");
 
     hal_jpege_leave();
     return ret;
@@ -168,6 +190,7 @@ static MPP_RET hal_jpege_vpu720_deinit(void *hal)
     JpegeVpu720HalCtx *ctx = (JpegeVpu720HalCtx *)hal;
 
     hal_jpege_enter();
+    hal_dbg_deinit(ctx->dbg_ctx);
     jpege_bits_deinit(ctx->bits);
 
     MPP_FREE(ctx->regs);
@@ -449,6 +472,7 @@ MPP_RET hal_jpege_vpu720_gen_regs(void *hal, HalEncTask *task)
 
     hal_jpege_enter();
 
+    hal_dbg_setup(ctx->dbg_ctx, NULL);
     jpege_vpu720_setup_format(hal, task);
 
     memset(regs, 0, sizeof(JpegeVpu720Reg));
@@ -595,6 +619,8 @@ MPP_RET hal_jpege_vpu720_start(void *hal, HalEncTask *task)
 
     hal_jpege_enter();
 
+    hal_jpege_vpu720_dump_sw_regs(ctx->dbg_ctx, regs, ctx->is_vpu730);
+
     if (task->flags.err) {
         mpp_err_f("task->flags.err 0x%08x, return early\n", task->flags.err);
         return MPP_NOK;
@@ -670,12 +696,14 @@ MPP_RET hal_jpege_vpu720_wait(void *hal, HalEncTask *task)
 
     if (task->flags.err) {
         mpp_err_f("task->flags.err 0x%08x, return earyl\n", task->flags.err);
+        hal_dbg_finish(ctx->dbg_ctx);
         return ret = MPP_NOK;
     }
 
     ret = mpp_dev_ioctl(ctx->dev, MPP_DEV_CMD_POLL, NULL);
     if (ret) {
         mpp_err_f("poll cmd failed %d\n", ret);
+        hal_dbg_finish(ctx->dbg_ctx);
         return ret = MPP_ERR_VPUHW;
     } else {
         if (int_state & 0x170)
@@ -688,6 +716,9 @@ MPP_RET hal_jpege_vpu720_wait(void *hal, HalEncTask *task)
                              reg_st->st_perf_working_cnt);
         task->hw_length += reg_st->st_bsl_l32_jpeg_head_bits;
     }
+
+    hal_jpege_vpu720_dump_hw_regs(ctx->dbg_ctx, regs, ctx->is_vpu730);
+    hal_dbg_finish(ctx->dbg_ctx);
 
     hal_jpege_leave();
     return MPP_OK;

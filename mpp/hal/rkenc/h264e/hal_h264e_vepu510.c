@@ -22,10 +22,9 @@
 #include "hal_h264e_stream_amend.h"
 #include "h264e_dpb.h"
 
+#include "hal_dbg.h"
 #include "vepu5xx_common.h"
 #include "vepu510_common.h"
-
-#define DUMP_REG                0
 #define MAX_TASK_CNT            2
 #define VEPU540C_MAX_ROI_NUM    8
 
@@ -161,6 +160,8 @@ typedef struct HalH264eVepu510Ctx_t {
     RK_S32                  smart_en;
     RK_S32                  qpmap_en;
     RK_S32                  sp_enc_en;
+
+    HalDbgCtx               *dbg_ctx;
 } HalH264eVepu510Ctx;
 
 #include "hal_h264e_vepu510_tune.c"
@@ -267,6 +268,8 @@ static MPP_RET hal_h264e_vepu510_deinit(void *hal)
         vepu510_h264e_tune_deinit(p->tune);
         p->tune = NULL;
     }
+
+    hal_dbg_deinit(p->dbg_ctx);
 
     hal_h264e_dbg_func("leave %p\n", p);
 
@@ -383,6 +386,8 @@ static MPP_RET hal_h264e_vepu510_init(void *hal, MppEncHalCfg *cfg)
 
     p->tune = vepu510_h264e_tune_init(p);
     memset(p->slot_to_dchs_txid, 0, sizeof(p->slot_to_dchs_txid));
+
+    hal_dbg_init(&p->dbg_ctx, "hal_h264e");
 
 DONE:
     if (ret)
@@ -2187,6 +2192,7 @@ static MPP_RET hal_h264e_vepu510_gen_regs(void *hal, HalEncTask *task)
     MPP_RET ret = MPP_OK;
     EncFrmStatus *frm_status = &task->rc_task->frm;
 
+    hal_dbg_setup(ctx->dbg_ctx, NULL);
     hal_h264e_dbg_func("enter %p\n", hal);
     hal_h264e_dbg_detail("frame %d generate regs now", ctx->frms->seq_idx);
 
@@ -2262,16 +2268,7 @@ static MPP_RET hal_h264e_vepu510_start(void *hal, HalEncTask *task)
         wr_cfg.reg = &regs->reg_ctl;
         wr_cfg.size = sizeof(regs->reg_ctl);
         wr_cfg.offset = VEPU510_CTL_OFFSET;
-#if DUMP_REG
-        {
-            RK_U32 i;
-            RK_U32 *reg = (RK_U32)wr_cfg.reg;
-            for ( i = 0; i < sizeof(regs->reg_ctl) / sizeof(RK_U32); i++) {
-                mpp_log("reg[%d] = 0x%08x\n", i, reg[i]);
-            }
-
-        }
-#endif
+        vepu510_dump_sw_regs(ctx->dbg_ctx, regs);
         ret = mpp_dev_ioctl(ctx->dev, MPP_DEV_REG_WR, &wr_cfg);
         if (ret) {
             mpp_err_f("set register write failed %d\n", ret);
@@ -2353,6 +2350,13 @@ static MPP_RET hal_h264e_vepu510_start(void *hal, HalEncTask *task)
             break;
         }
 
+        if (hal_dbg_flag_en(ctx->dbg_ctx, HAL_DBG_GET_REG)) {
+            RK_S32 ret_dbg = 0;
+            vepu510_get_dbg_regs(ctx->dev, regs, ret_dbg);
+            if (ret_dbg)
+                mpp_err_f("debug register read failed %d\n", ret_dbg);
+        }
+
         /* send request to hardware */
         ret = mpp_dev_ioctl(ctx->dev, MPP_DEV_CMD_SEND, NULL);
         if (ret) {
@@ -2417,6 +2421,16 @@ static MPP_RET hal_h264e_vepu510_wait(void *hal, HalEncTask *task)
     MppEncH264HwCfg *hw_cfg = &ctx->cfg->h264.hw_cfg;
     RK_S32 i;
 
+    if (hal_dbg_flag_en(ctx->dbg_ctx, HAL_DBG_DUMP)) {
+        HalBuf *curr = hal_bufs_get_buf(ctx->hw_recn, task->flags.curr_idx);
+        HalBuf *refr = hal_bufs_get_buf(ctx->hw_recn, task->flags.refr_idx);
+        RK_S32 fbc_hdr_size = ctx->pixel_buf_fbc_hdr_size;
+
+        if (refr && refr->cnt)
+            vepu_dump_fbc_buf(ctx->dbg_ctx, "refr_", refr, fbc_hdr_size, 128);
+        if (curr && curr->cnt)
+            vepu_dump_fbc_buf(ctx->dbg_ctx, "recn_", curr, fbc_hdr_size, 128);
+    }
     hal_h264e_dbg_func("enter %p\n", hal);
 
     /* if pass1 mode, it will disable split mode and the split out need to be disable */
@@ -2494,6 +2508,9 @@ static MPP_RET hal_h264e_vepu510_wait(void *hal, HalEncTask *task)
             h264e_vepu_stream_amend_sync_ref_idc(amend);
         }
     }
+
+    vepu510_dump_hw_regs(ctx->dbg_ctx, regs, regs->reg_st);
+    hal_dbg_finish(ctx->dbg_ctx);
 
     hal_h264e_dbg_func("leave %p ret %d\n", hal, ret);
 

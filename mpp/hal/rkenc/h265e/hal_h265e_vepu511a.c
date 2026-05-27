@@ -27,6 +27,7 @@
 #include "hal_h265e_vepu511a_reg.h"
 #include "hal_h265e_stream_amend.h"
 
+#include "hal_dbg.h"
 #include "vepu5xx_common.h"
 #include "vepu511a_common.h"
 
@@ -118,7 +119,7 @@ typedef struct H265eV511AHalContext_t {
 
     Vepu511aH265Fbk     feedback;
     Vepu511aH265Fbk     last_frame_fb;
-    void                *dump_files;
+    HalDbgCtx           *dbg_ctx;
     RK_U32              frame_cnt_gen_ready;
 
     RK_S32              frame_type;
@@ -238,55 +239,6 @@ static RK_U8 vepu511a_h265_cqm_inter8[64] = {
     20, 24, 25, 28, 33, 41, 54, 71,
     24, 25, 28, 33, 41, 54, 71, 91
 };
-
-void save_to_file_511a(char *name, void *ptr, size_t size)
-{
-    FILE *fp = fopen(name, "w+b");
-    if (fp) {
-        fwrite(ptr, 1, size, fp);
-        fclose(fp);
-    } else
-        mpp_err("create file %s failed\n", name);
-}
-
-void vepu511a_h265e_dump(H265eV511AHalContext *ctx, HalEncTask *enc_task __maybe_unused)
-{
-    H265eSyntax_new *syn = ctx->syn;
-    HalBuf *hal_buf = hal_bufs_get_buf(ctx->dpb_bufs, syn->sp.ref_pic.slot_idx);
-    size_t buf_size = mpp_buffer_get_size(hal_buf->buf[0]);
-    size_t dws_size = mpp_buffer_get_size(hal_buf->buf[1]);
-    void *ptr = mpp_buffer_get_ptr(hal_buf->buf[0]);
-    void *dws_ptr = mpp_buffer_get_ptr(hal_buf->buf[1]);
-    RK_U32 frm_num = ctx->frm->frame_count;
-    RK_S32 pid = getpid();
-    char name[128];
-    size_t name_len = sizeof(name) - 1;
-
-    snprintf(name, name_len, "/mnt/sdcard/dump/refr_fbd_%d_frm%d.bin", pid, frm_num);
-    save_to_file_511a(name, ptr + ctx->fbc_header_len, buf_size - ctx->fbc_header_len);
-
-    snprintf(name, name_len, "/mnt/sdcard/dump/refr_fbh_%d_frm%d.bin", pid, frm_num);
-    save_to_file_511a(name, ptr, ctx->fbc_header_len);
-
-    snprintf(name, name_len, "/mnt/sdcard/dump/refr_dsp_%d_frm%d.bin", pid, frm_num);
-    save_to_file_511a(name, dws_ptr, dws_size);
-
-    hal_buf = hal_bufs_get_buf(ctx->dpb_bufs, syn->sp.recon_pic.slot_idx);
-    buf_size = mpp_buffer_get_size(hal_buf->buf[0]);
-    dws_size = mpp_buffer_get_size(hal_buf->buf[1]);
-    ptr = mpp_buffer_get_ptr(hal_buf->buf[0]);
-    dws_ptr = mpp_buffer_get_ptr(hal_buf->buf[1]);
-
-    snprintf(name, name_len, "/mnt/sdcard/dump/recn_fbd_%d_frm%d_slot%d.bin", pid, frm_num,  syn->sp.recon_pic.slot_idx);
-    save_to_file_511a(name, ptr + ctx->fbc_header_len, buf_size - ctx->fbc_header_len);
-
-    snprintf(name, name_len, "/mnt/sdcard/dump/recn_fbh_%d_frm%d_slot%d.bin", pid, frm_num,  syn->sp.recon_pic.slot_idx);
-    save_to_file_511a(name, ptr, ctx->fbc_header_len);
-
-    snprintf(name, name_len, "/mnt/sdcard/dump/recn_dsp_%d_frm%d_slot%d.bin", pid, frm_num,  syn->sp.recon_pic.slot_idx);
-    save_to_file_511a(name, dws_ptr, dws_size);
-
-}
 
 static void setup_ext_line_bufs(H265eV511AHalContext *ctx)
 {
@@ -422,6 +374,7 @@ MPP_RET hal_h265e_vepu511a_deinit(void *hal)
 {
     H265eV511AHalContext *ctx = (H265eV511AHalContext *)hal;
     hal_h265e_enter();
+    hal_dbg_deinit(ctx->dbg_ctx);
     MPP_FREE(ctx->poll_cfgs);
     MPP_FREE(ctx->input_fmt);
     hal_bufs_deinit(ctx->dpb_bufs);
@@ -541,6 +494,8 @@ MPP_RET hal_h265e_vepu511a_init(void *hal, MppEncHalCfg *cfg)
     cfg->cap_recn_out = 1;
 
     ctx->tune = vepu511a_h265e_tune_init(ctx);
+
+    hal_dbg_init(&ctx->dbg_ctx, "hal_h265e");
 
 DONE:
     if (ret)
@@ -2316,6 +2271,7 @@ MPP_RET hal_h265e_vepu511a_gen_regs(void *hal, HalEncTask *task)
     EncFrmStatus *frm = &task->rc_task->frm;
 
     hal_h265e_enter();
+    hal_dbg_setup(ctx->dbg_ctx, NULL);
 
     hal_h265e_dbg_simple("frame %d | type %d | start gen regs11",
                          ctx->frame_num, ctx->frame_type);
@@ -2388,6 +2344,8 @@ MPP_RET hal_h265e_vepu511a_start(void *hal, HalEncTask *enc_task)
                       enc_task->flags.err);
         return MPP_NOK;
     }
+
+    vepu511a_dump_sw_regs(ctx->dbg_ctx, hw_regs);
 
     cfg.reg = (RK_U32*)&hw_regs->reg_ctl;
     cfg.size = sizeof(Vepu511aControlCfg);
@@ -2498,6 +2456,13 @@ MPP_RET hal_h265e_vepu511a_start(void *hal, HalEncTask *enc_task)
     if (ret) {
         mpp_loge_f("set register offsets failed %d\n", ret);
         return ret;
+    }
+
+    if (hal_dbg_flag_en(ctx->dbg_ctx, HAL_DBG_GET_REG)) {
+        RK_S32 ret_dbg = 0;
+        vepu511a_get_dbg_regs(ctx->dev, hw_regs, ret_dbg);
+        if (ret_dbg)
+            mpp_err_f("debug register read failed %d\n", ret_dbg);
     }
 
     cfg1.reg = &reg_out->hw_status;
@@ -2740,7 +2705,6 @@ static void vepu511a_h265e_update_tune_stat(H265eV511AHalContext *ctx, HalEncTas
                      ctx->frame_num - 1, info->bit_real, info->quality_real, info->madi, info->madp);
 }
 
-//#define DUMP_DATA
 MPP_RET hal_h265e_vepu511a_wait(void *hal, HalEncTask *task)
 {
     MPP_RET ret = MPP_OK;
@@ -2760,6 +2724,7 @@ MPP_RET hal_h265e_vepu511a_wait(void *hal, HalEncTask *task)
     if (enc_task->flags.err) {
         hal_h265e_err("enc_task->flags.err %08x, return early",
                       enc_task->flags.err);
+        hal_dbg_finish(ctx->dbg_ctx);
         return MPP_NOK;
     }
 
@@ -2820,12 +2785,22 @@ MPP_RET hal_h265e_vepu511a_wait(void *hal, HalEncTask *task)
         mpp_packet_add_segment_info(pkt, type, offset, elem->st.bs_lgth_l32);
     }
 
-#ifdef DUMP_DATA
-    vepu511a_h265e_dump(ctx, task);
-#endif
+    if (hal_dbg_flag_en(ctx->dbg_ctx, HAL_DBG_DUMP)) {
+        H265eSyntax_new *syn = ctx->syn;
+        HalBuf *ref_buf = hal_bufs_get_buf(ctx->dpb_bufs, syn->sp.ref_pic.slot_idx);
+        HalBuf *recn_buf = hal_bufs_get_buf(ctx->dpb_bufs, syn->sp.recon_pic.slot_idx);
+
+        if (ref_buf && ref_buf->cnt)
+            vepu_dump_fbc_buf(ctx->dbg_ctx, "refr_", ref_buf, ctx->fbc_header_len, 128);
+        if (recn_buf && recn_buf->cnt)
+            vepu_dump_fbc_buf(ctx->dbg_ctx, "recn_", recn_buf, ctx->fbc_header_len, 128);
+    }
 
     if (ret)
         mpp_loge_f("poll cmd failed %d status %d \n", ret, elem->hw_status);
+
+    vepu511a_dump_hw_regs(ctx->dbg_ctx, regs, elem->st);
+    hal_dbg_finish(ctx->dbg_ctx);
 
     hal_h265e_leave();
     return ret;

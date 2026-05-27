@@ -36,6 +36,17 @@
 #define VEPU540C_MAX_ROI_NUM         8
 #define VEPU540C_SLICE_FIFO_LEN      8
 
+#define vepu540c_get_dbg_regs(dev, regs, s3fld, ret_acc) do { \
+    MppDevRegRdCfg _rd_cfg; \
+    VEPU_REG_RD(dev, regs, reg_ctl,    VEPU540C_CTL_OFFSET,      ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_base,   VEPU540C_BASE_OFFSET,     ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_rc_roi, VEPU540C_RCROI_OFFSET,    ret_acc); \
+    VEPU_REG_RD(dev, regs, s3fld,      VEPU540C_WEG_OFFSET,      ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_rdo,    VEPU540C_RDOCFG_OFFSET,   ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_scl,    VEPU540C_SCLCFG_OFFSET,   ret_acc); \
+    VEPU_REG_RD(dev, regs, jpeg_table, VEPU540C_JPEGTAB_OFFSET,  ret_acc); \
+} while (0)
+
 typedef union {
     struct {
         RK_U32 enc_done_sta          : 1;

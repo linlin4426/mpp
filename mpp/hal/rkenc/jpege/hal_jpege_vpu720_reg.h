@@ -548,6 +548,14 @@ typedef struct JpegeVpu720StatusReg_t {
 #define JPEGE_VPU730_REG_ROI_OFFSET 0x0300
 #define JPEGE_VPU730_REG_ROI_NUM 16
 
+#define vpu720_sw_regs(dbg_ctx, regs, offset, mode) \
+    hal_dbg_dump_set_regs(dbg_ctx, (RK_U32 *)&(regs), sizeof(regs) / sizeof(RK_U32), \
+                          offset / sizeof(RK_U32), mode)
+
+#define vpu720_hw_regs(dbg_ctx, regs, offset, mode) \
+    hal_dbg_dump_get_regs(dbg_ctx, (RK_U32 *)&(regs), sizeof(regs) / sizeof(RK_U32), \
+                          offset / sizeof(RK_U32), mode)
+
 typedef struct JpegeVpu730FrmRdoqCfg_t {
     rk_u32 en                   : 1;
     rk_u32 level                : 6;

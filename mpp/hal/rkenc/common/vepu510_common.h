@@ -7,6 +7,7 @@
 #define VEPU510_COMMON_H
 
 #include "rk_venc_cmd.h"
+#include "mpp_device.h"
 
 #define VEPU510_CTL_OFFSET           (0 * sizeof(RK_U32))       /* 0x00000000 reg0    - 0x00000120 reg72 */
 #define VEPU510_FRAME_OFFSET         (156 * sizeof(RK_U32))     /* 0x00000270 reg156  - 0x000003f4 reg253 */
@@ -19,6 +20,35 @@
 #define VEPU510_REG_BASE_HW_STATUS   (0x2c)
 #define VEPU510_MAX_ROI_NUM          8
 #define VEPU510_SLICE_FIFO_LEN       8
+
+#define vepu510_get_dbg_regs(dev, regs, ret_acc) do {    \
+    MppDevRegRdCfg _rd_cfg; \
+    VEPU_REG_RD(dev, regs, reg_ctl,   VEPU510_CTL_OFFSET,      ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_frm,   VEPU510_FRAME_OFFSET,    ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_rc_roi,VEPU510_RC_ROI_OFFSET,   ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_param, VEPU510_PARAM_OFFSET,    ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_sqi,   VEPU510_SQI_OFFSET,      ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_scl,   VEPU510_SCL_OFFSET,      ret_acc); \
+} while (0)
+
+#define vepu510_dump_sw_regs(dbg_ctx, regs) do { \
+    vepu_sw_regs(dbg_ctx, (regs)->reg_ctl, VEPU510_CTL_OFFSET, "w+"); \
+    vepu_sw_regs(dbg_ctx, (regs)->reg_frm, VEPU510_FRAME_OFFSET, "a+"); \
+    vepu_sw_regs(dbg_ctx, (regs)->reg_rc_roi, VEPU510_RC_ROI_OFFSET, "a+"); \
+    vepu_sw_regs(dbg_ctx, (regs)->reg_param, VEPU510_PARAM_OFFSET, "a+"); \
+    vepu_sw_regs(dbg_ctx, (regs)->reg_sqi, VEPU510_SQI_OFFSET, "a+"); \
+    vepu_sw_regs(dbg_ctx, (regs)->reg_scl, VEPU510_SCL_OFFSET, "a+"); \
+} while (0)
+
+#define vepu510_dump_hw_regs(dbg_ctx, regs, st_reg) do { \
+    vepu_hw_regs(dbg_ctx, (regs)->reg_ctl, VEPU510_CTL_OFFSET, "w+"); \
+    vepu_hw_regs(dbg_ctx, (regs)->reg_frm, VEPU510_FRAME_OFFSET, "a+"); \
+    vepu_hw_regs(dbg_ctx, (regs)->reg_rc_roi, VEPU510_RC_ROI_OFFSET, "a+"); \
+    vepu_hw_regs(dbg_ctx, (regs)->reg_param, VEPU510_PARAM_OFFSET, "a+"); \
+    vepu_hw_regs(dbg_ctx, (regs)->reg_sqi, VEPU510_SQI_OFFSET, "a+"); \
+    vepu_hw_regs(dbg_ctx, (regs)->reg_scl, VEPU510_SCL_OFFSET, "a+"); \
+    vepu_hw_regs(dbg_ctx, st_reg, VEPU510_STATUS_OFFSET, "a+"); \
+} while (0)
 
 typedef struct Vepu510Online_t {
     /* 0x00000270 reg156 */

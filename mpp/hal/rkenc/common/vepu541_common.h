@@ -27,6 +27,12 @@
 
 #define VEPU541_MAX_ROI_NUM         8
 
+#define vepu541_get_dbg_regs(dev, l2_regs, main_regs, ret_acc) do { \
+    MppDevRegRdCfg _rd_cfg; \
+    VEPU_REG_RD_PTR(dev, l2_regs,  VEPU541_REG_BASE_L2, ret_acc); \
+    VEPU_REG_RD_PTR(dev, main_regs, 0,                   ret_acc); \
+} while (0)
+
 /*
  * Vepu541RoiCfg
  *

@@ -23,6 +23,36 @@
 #define VEPU511_MAX_ROI_NUM             8
 #define VEPU511_SLICE_FIFO_LEN          8
 
+#define vepu511_get_dbg_regs(dev, regs, ret_acc) do {    \
+    MppDevRegRdCfg _rd_cfg; \
+    VEPU_REG_RD(dev, regs, reg_ctl,      VEPU511_CTL_OFFSET,         ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_frm,      VEPU511_FRAME_OFFSET,       ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_param,    VEPU511_PARAM_OFFSET,       ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_sqi,      VEPU511_SQI_OFFSET,         ret_acc); \
+    VEPU_REG_RD(dev, regs, reg_osd,      VEPU511_OSD_OFFSET,         ret_acc); \
+} while (0)
+
+#define vepu511_dump_sw_regs(dbg_ctx, regs) do { \
+    vepu_sw_regs(dbg_ctx, (regs)->reg_ctl, VEPU511_CTL_OFFSET, "w+"); \
+    vepu_sw_regs(dbg_ctx, (regs)->reg_frm, VEPU511_FRAME_OFFSET, "a+"); \
+    vepu_sw_regs(dbg_ctx, (regs)->reg_rc_roi, VEPU511_RC_ROI_OFFSET, "a+"); \
+    vepu_sw_regs(dbg_ctx, (regs)->reg_param, VEPU511_PARAM_OFFSET, "a+"); \
+    vepu_sw_regs(dbg_ctx, (regs)->reg_sqi, VEPU511_SQI_OFFSET, "a+"); \
+    vepu_sw_regs(dbg_ctx, (regs)->reg_scl_jpgtbl, VEPU511_SCL_JPGTBL_OFFSET, "a+"); \
+    vepu_sw_regs(dbg_ctx, (regs)->reg_osd, VEPU511_OSD_OFFSET, "a+"); \
+} while (0)
+
+#define vepu511_dump_hw_regs(dbg_ctx, regs, st_reg) do { \
+    vepu_hw_regs(dbg_ctx, (regs)->reg_ctl, VEPU511_CTL_OFFSET, "w+"); \
+    vepu_hw_regs(dbg_ctx, (regs)->reg_frm, VEPU511_FRAME_OFFSET, "a+"); \
+    vepu_hw_regs(dbg_ctx, (regs)->reg_rc_roi, VEPU511_RC_ROI_OFFSET, "a+"); \
+    vepu_hw_regs(dbg_ctx, (regs)->reg_param, VEPU511_PARAM_OFFSET, "a+"); \
+    vepu_hw_regs(dbg_ctx, (regs)->reg_sqi, VEPU511_SQI_OFFSET, "a+"); \
+    vepu_hw_regs(dbg_ctx, (regs)->reg_scl_jpgtbl, VEPU511_SCL_JPGTBL_OFFSET, "a+"); \
+    vepu_hw_regs(dbg_ctx, (regs)->reg_osd, VEPU511_OSD_OFFSET, "a+"); \
+    vepu_hw_regs(dbg_ctx, st_reg, VEPU511_STATUS_OFFSET, "a+"); \
+} while (0)
+
 #define REF_BODY_SIZE(w, h)             MPP_ALIGN((((w) * (h) * 3 / 2) + 48 * MPP_MAX(w, h)), SZ_4K)
 #define REF_WRAP_BODY_EXT_SIZE(w, h)    MPP_ALIGN((240 * MPP_MAX(w, h)), SZ_4K)
 #define REF_HEADER_SIZE(w, h)           MPP_ALIGN((((w) * (h) / 64) + MPP_MAX(w, h) / 2), SZ_4K)
