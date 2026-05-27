@@ -19,7 +19,7 @@ RK_S32 vdpu_compare_rcb_size(const void *a, const void *b)
 
 void vdpu_afbc_align_calc(MppBufSlots slots, MppFrame frame, RK_U32 expand)
 {
-    RK_U32 ver_stride = 0;
+    RK_U32 ver_stride = mpp_frame_get_ver_stride(frame);
     RK_U32 img_height = mpp_frame_get_height(frame);
     RK_U32 img_width = mpp_frame_get_width(frame);
     RK_U32 hdr_stride = (*compat_ext_fbc_hdr_256_odd) ?
@@ -31,7 +31,7 @@ void vdpu_afbc_align_calc(MppBufSlots slots, MppFrame frame, RK_U32 expand)
 
     mpp_frame_set_fbc_hdr_stride(frame, hdr_stride);
 
-    ver_stride = mpp_align_16(img_height);
+    ver_stride = ver_stride ? ver_stride : img_height;
     if (*compat_ext_fbc_buf_size) {
         ver_stride += expand;
     }
