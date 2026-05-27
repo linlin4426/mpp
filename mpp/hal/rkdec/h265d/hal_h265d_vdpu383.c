@@ -31,15 +31,13 @@
 
 #define PPS_SIZE                        (112 * 64)//(96x64)
 
-#define CABAC_TAB_ALIGEND_SIZE          (MPP_ALIGN(27456, SZ_4K))
 #define SPSPPS_ALIGNED_SIZE             (MPP_ALIGN(176, SZ_4K))
 #define RPS_ALIGEND_SIZE                (MPP_ALIGN(400 * 8, SZ_4K))
 #define SCALIST_ALIGNED_SIZE            (MPP_ALIGN(81 * 1360, SZ_4K))
 #define INFO_BUFFER_SIZE                (SPSPPS_ALIGNED_SIZE + RPS_ALIGEND_SIZE + SCALIST_ALIGNED_SIZE)
-#define ALL_BUFFER_SIZE(cnt)            (CABAC_TAB_ALIGEND_SIZE + INFO_BUFFER_SIZE *cnt)
+#define ALL_BUFFER_SIZE(cnt)            (INFO_BUFFER_SIZE *cnt)
 
-#define CABAC_TAB_OFFSET                (0)
-#define SPSPPS_OFFSET(pos)              (CABAC_TAB_OFFSET + CABAC_TAB_ALIGEND_SIZE + (INFO_BUFFER_SIZE * pos))
+#define SPSPPS_OFFSET(pos)              (INFO_BUFFER_SIZE * pos)
 #define RPS_OFFSET(pos)                 (SPSPPS_OFFSET(pos) + SPSPPS_ALIGNED_SIZE)
 #define SCALIST_OFFSET(pos)             (RPS_OFFSET(pos) + RPS_ALIGEND_SIZE)
 
@@ -87,7 +85,6 @@ static MPP_RET hal_h265d_vdpu383_init(void *hal, MppHalCfg *cfg)
         }
 
         reg_ctx->bufs_fd = mpp_buffer_get_fd(reg_ctx->bufs);
-        reg_ctx->offset_cabac = CABAC_TAB_OFFSET;
         for (i = 0; i < max_cnt; i++) {
             reg_ctx->g_buf[i].hw_regs = mpp_calloc_size(void, sizeof(Vdpu383RegSet));
             reg_ctx->offset_spspps[i] = SPSPPS_OFFSET(i);
@@ -103,12 +100,6 @@ static MPP_RET hal_h265d_vdpu383_init(void *hal, MppHalCfg *cfg)
         reg_ctx->spspps_offset = reg_ctx->offset_spspps[0];
         reg_ctx->rps_offset = reg_ctx->offset_rps[0];
         reg_ctx->sclst_offset = reg_ctx->offset_sclst[0];
-    }
-
-    ret = mpp_buffer_write(reg_ctx->bufs, 0, (void*)cabac_table, sizeof(cabac_table));
-    if (ret) {
-        mpp_err("h265d write cabac_table data failed\n");
-        return ret;
     }
 
     if (cfg->hal_fbc_adj_cfg) {
