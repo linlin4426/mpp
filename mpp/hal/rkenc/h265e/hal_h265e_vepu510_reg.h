@@ -815,7 +815,28 @@ typedef struct H265eV510RegSet_t {
 } H265eV510RegSet;
 
 typedef struct H265eV510StatusElem_t {
-    RK_U32 hw_status;
+    union {
+        RK_U32 hw_status;
+        struct {
+            RK_U32 enc_done_sta          : 1;
+            RK_U32 lkt_node_done_sta     : 1;
+            RK_U32 sclr_done_sta         : 1;
+            RK_U32 vslc_done_sta         : 1;
+            RK_U32 vbsf_oflw_sta         : 1;
+            RK_U32 vbuf_lens_sta         : 1;
+            RK_U32 enc_err_sta           : 1;
+            RK_U32 vsrc_err_sta          : 1;
+            RK_U32 wdg_sta               : 1;
+            RK_U32 lkt_err_int_sta       : 1;
+            RK_U32 lkt_err_stop_sta      : 1;
+            RK_U32 lkt_force_stop_sta    : 1;
+            RK_U32 jslc_done_sta         : 1;
+            RK_U32 jbsf_oflw_sta         : 1;
+            RK_U32 jbuf_lens_sta         : 1;
+            RK_U32 dvbm_err_sta          : 1;
+            RK_U32 reserved              : 16;
+        };
+    };
     Vepu510Status st;
 } H265eV510StatusElem;
 

@@ -896,7 +896,22 @@ typedef struct H265eV541IoctlExtraInfo_t {
 } H265eV541IoctlExtraInfo;
 
 typedef struct H265eV541IoctlOutputElem_t {
-    RK_U32 hw_status;
+    union {
+        RK_U32 hw_status;
+        struct {
+            RK_U32    enc_done_sta  :  1;
+            RK_U32    lkt_done_sta  :  1;
+            RK_U32    sclr_done_sta :  1;
+            RK_U32    slc_done_sta  :  1;
+            RK_U32    bsf_oflw_sta  :  1;
+            RK_U32    brsp_otsd_sta :  1;
+            RK_U32    wbus_err_sta  :  1;
+            RK_U32    rbus_err_sta  :  1;
+            RK_U32    wdg_sta       :  1;
+            RK_U32    reserved      : 23;
+        };
+    };
+
 
     struct {
         RK_U32    bs_lgth : 32;

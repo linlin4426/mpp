@@ -336,21 +336,10 @@ static MPP_RET hal_jpege_vepu540c_status_check(void *hal)
     jpegeV540cHalContext *ctx = (jpegeV540cHalContext *)hal;
     JpegV540cStatus *elem = (JpegV540cStatus *)ctx->reg_out;
 
-    vepu540c_hw_status hw_status = elem->hw_status;
-
-    hal_jpege_dbg_detail("hw_status: 0x%08x", hw_status.val);
-    if (hw_status.int_sta.enc_done_sta)
-        hal_jpege_dbg_detail("RKV_ENC_INT_ENC_DONE");
-
-    if (hw_status.int_sta.wdg_sta)
-        mpp_err_f("RKV_ENC_INT_WDG_TIMEOUT");
-
-    if (hw_status.int_sta.jslc_done_sta)
-        hal_jpege_dbg_detail("RKV_ENC_INT_JSL_DONE");
-
-    if (hw_status.int_sta.jbsf_oflw_sta)
-        mpp_err_f("RKV_ENC_INT_JBSF_OFLOW");
-
+    if (!elem->hw_status.int_sta.enc_done_sta) {
+        mpp_err_f("jpeg enc not done hw_status: 0x%08x\n", elem->hw_status.val);
+        return MPP_NOK;
+    }
 
     return MPP_OK;
 }
@@ -359,8 +348,9 @@ MPP_RET hal_jpege_v540c_wait(void *hal, HalEncTask *task)
 {
     MPP_RET ret = MPP_OK;
     jpegeV540cHalContext *ctx = (jpegeV540cHalContext *)hal;
-    HalEncTask *enc_task = task;
     JpegV540cStatus *elem = (JpegV540cStatus *)ctx->reg_out;
+    HalEncTask *enc_task = task;
+
     hal_jpege_enter();
 
     if (enc_task->flags.err) {
@@ -375,9 +365,6 @@ MPP_RET hal_jpege_v540c_wait(void *hal, HalEncTask *task)
     if (ret) {
         mpp_err_f("poll cmd failed %d\n", ret);
         ret = MPP_ERR_VPUHW;
-    } else {
-        hal_jpege_vepu540c_status_check(hal);
-        task->hw_length += elem->st.jpeg_head_bits_l32;
     }
 
     JpegV540cRegSet *hw_regs = ctx->regs;
@@ -419,10 +406,18 @@ MPP_RET hal_jpege_v540c_get_task(void *hal, HalEncTask *task)
 
 MPP_RET hal_jpege_v540c_ret_task(void *hal, HalEncTask *task)
 {
-    (void)hal;
+    jpegeV540cHalContext *ctx = (jpegeV540cHalContext *)hal;
     EncRcTaskInfo *rc_info = &task->rc_task->info;
+    JpegV540cStatus *elem = (JpegV540cStatus *)ctx->reg_out;
+    MPP_RET ret = MPP_OK;
+
     hal_jpege_enter();
 
+    ret = hal_jpege_vepu540c_status_check(hal);
+    if (ret)
+        return ret;
+
+    task->hw_length += elem->st.jpeg_head_bits_l32;
     task->length += task->hw_length;
 
     // setup bit length for rate control

@@ -2475,37 +2475,14 @@ static MPP_RET hal_h264e_vepu580_wait(void *hal, HalEncTask *task)
                 }
             }
         } while (!slice_last);
-
-        ret = hal_h264e_vepu580_status_check(regs);
-        if (!ret)
-            task->hw_length += regs->reg_st.bs_lgth_l32;
     } else {
         ret = mpp_dev_ioctl(ctx->dev, MPP_DEV_CMD_POLL, NULL);
         if (ret) {
             mpp_err_f("poll cmd failed %d\n", ret);
             ret = MPP_ERR_VPUHW;
-        } else {
-            ret = hal_h264e_vepu580_status_check(regs);
-            if (!ret)
-                task->hw_length += regs->reg_st.bs_lgth_l32;
         }
 
         mpp_packet_add_segment_info(pkt, type, offset, regs->reg_st.bs_lgth_l32);
-    }
-
-    if (!(split_out & MPP_ENC_SPLIT_OUT_LOWDELAY) && !ret) {
-        HalH264eVepuStreamAmend *amend = &ctx->amend_sets[task->flags.reg_idx];
-
-        if (amend->enable) {
-            amend->old_length = task->hw_length;
-            amend->slice->is_multi_slice = (ctx->cfg->split.split_mode > 0);
-            h264e_vepu_stream_amend_proc(amend, &ctx->cfg->h264.hw_cfg);
-            task->hw_length = amend->new_length;
-        } else if (amend->prefix) {
-            /* check prefix value */
-            amend->old_length = task->hw_length;
-            h264e_vepu_stream_amend_sync_ref_idc(amend);
-        }
     }
 
     hal_h264e_vepu580_dump_hw_regs(ctx->dbg_ctx, regs);
@@ -2524,8 +2501,37 @@ static MPP_RET hal_h264e_vepu580_ret_task(void * hal, HalEncTask * task)
     RK_U32 mb_w = ctx->sps->pic_width_in_mbs;
     RK_U32 mb_h = ctx->sps->pic_height_in_mbs;
     RK_U32 mbs = mb_w * mb_h;
+    MPP_RET ret = MPP_OK;
 
     hal_h264e_dbg_func("enter %p\n", hal);
+
+    mpp_dev_multi_offset_reset(ctx->offsets);
+
+    if (ctx->dpb) {
+        h264e_dpb_hal_end(ctx->dpb, task->flags.curr_idx);
+        h264e_dpb_hal_end(ctx->dpb, task->flags.refr_idx);
+    }
+
+    ret = hal_h264e_vepu580_status_check(regs);
+    if (ret)
+        return ret;
+
+    task->hw_length += regs->reg_st.bs_lgth_l32;
+
+    if (!(ctx->cfg->split.split_out & MPP_ENC_SPLIT_OUT_LOWDELAY)) {
+        HalH264eVepuStreamAmend *amend = &ctx->amend_sets[task->flags.reg_idx];
+
+        if (amend->enable) {
+            amend->old_length = task->hw_length;
+            amend->slice->is_multi_slice = (ctx->cfg->split.split_mode > 0);
+            h264e_vepu_stream_amend_proc(amend, &ctx->cfg->h264.hw_cfg);
+            task->hw_length = amend->new_length;
+        } else if (amend->prefix) {
+            /* check prefix value */
+            amend->old_length = task->hw_length;
+            h264e_vepu_stream_amend_sync_ref_idc(amend);
+        }
+    }
 
     // update total hardware length
     task->length += task->hw_length;
@@ -2586,13 +2592,6 @@ static MPP_RET hal_h264e_vepu580_ret_task(void * hal, HalEncTask * task)
     hal_h264e_dbg_rc("motion_level %u, complex_level %u\n", rc_info->motion_level, rc_info->complex_level);
 
     vepu580_h264e_tune_stat_update(ctx->tune, task);
-
-    mpp_dev_multi_offset_reset(ctx->offsets);
-
-    if (ctx->dpb) {
-        h264e_dpb_hal_end(ctx->dpb, task->flags.curr_idx);
-        h264e_dpb_hal_end(ctx->dpb, task->flags.refr_idx);
-    }
 
     hal_h264e_dbg_func("leave %p\n", hal);
 

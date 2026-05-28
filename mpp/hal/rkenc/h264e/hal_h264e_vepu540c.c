@@ -1644,29 +1644,12 @@ static MPP_RET hal_h264e_vepu540c_status_check(void *hal)
     HalH264eVepu540cCtx *ctx = (HalH264eVepu540cCtx *)hal;
     HalVepu540cRegSet *regs_set = ctx->regs_set;
 
-    if (regs_set->reg_ctl.int_sta.lkt_node_done_sta)
-        hal_h264e_dbg_detail("lkt_done finish");
-
-    if (regs_set->reg_ctl.int_sta.enc_done_sta)
-        hal_h264e_dbg_detail("enc_done finish");
-
-    if (regs_set->reg_ctl.int_sta.vslc_done_sta)
-        hal_h264e_dbg_detail("enc_slice finsh");
-
-    if (regs_set->reg_ctl.int_sta.sclr_done_sta)
-        hal_h264e_dbg_detail("safe clear finsh");
-
-    if (regs_set->reg_ctl.int_sta.vbsf_oflw_sta)
-        mpp_err_f("bit stream overflow");
-
-    if (regs_set->reg_ctl.int_sta.vbuf_lens_sta)
-        mpp_err_f("bus write full");
-
-    if (regs_set->reg_ctl.int_sta.enc_err_sta)
-        mpp_err_f("bus error");
-
-    if (regs_set->reg_ctl.int_sta.wdg_sta)
-        mpp_err_f("wdg timeout");
+    if (!regs_set->reg_ctl.int_sta.enc_done_sta) {
+        RK_U32 hw_status;
+        memcpy(&hw_status, &regs_set->reg_ctl.int_sta, sizeof(hw_status));
+        mpp_err_f("enc not done hw_status: 0x%08x\n", hw_status);
+        return MPP_NOK;
+    }
 
     return MPP_OK;
 }
@@ -1698,27 +1681,9 @@ static MPP_RET hal_h264e_vepu540c_wait(void *hal, HalEncTask *task)
     if (ret) {
         mpp_err_f("poll cmd failed %d\n", ret);
         ret = MPP_ERR_VPUHW;
-    } else {
-        hal_h264e_vepu540c_status_check(hal);
-        task->hw_length += regs_set->reg_st.bs_lgth_l32;
     }
 
     mpp_packet_add_segment_info(pkt, type, offset, regs_set->reg_st.bs_lgth_l32);
-
-    {
-        HalH264eVepuStreamAmend *amend = &ctx->amend;
-
-        if (amend->enable) {
-            amend->old_length = task->hw_length;
-            amend->slice->is_multi_slice = (ctx->cfg->split.split_mode > 0);
-            h264e_vepu_stream_amend_proc(amend, &ctx->cfg->h264.hw_cfg);
-            task->hw_length = amend->new_length;
-        } else if (amend->prefix) {
-            /* check prefix value */
-            amend->old_length = task->hw_length;
-            h264e_vepu_stream_amend_sync_ref_idc(amend);
-        }
-    }
 
     hal_h264e_vepu540c_dump_hw_regs(ctx->dbg_ctx, regs_set);
     hal_dbg_finish(ctx->dbg_ctx);
@@ -1736,7 +1701,30 @@ static MPP_RET hal_h264e_vepu540c_ret_task(void *hal, HalEncTask *task)
     RK_U32 mb_h = ctx->sps->pic_height_in_mbs;
     RK_U32 mbs = mb_w * mb_h;
     HalVepu540cRegSet *regs_set = (HalVepu540cRegSet *)ctx->regs_set;
+    MPP_RET ret = MPP_OK;
+
     hal_h264e_dbg_func("enter %p\n", hal);
+
+    ret = hal_h264e_vepu540c_status_check(hal);
+    if (ret)
+        return ret;
+
+    task->hw_length += regs_set->reg_st.bs_lgth_l32;
+
+    {
+        HalH264eVepuStreamAmend *amend = &ctx->amend;
+
+        if (amend->enable) {
+            amend->old_length = task->hw_length;
+            amend->slice->is_multi_slice = (ctx->cfg->split.split_mode > 0);
+            h264e_vepu_stream_amend_proc(amend, &ctx->cfg->h264.hw_cfg);
+            task->hw_length = amend->new_length;
+        } else if (amend->prefix) {
+            /* check prefix value */
+            amend->old_length = task->hw_length;
+            h264e_vepu_stream_amend_sync_ref_idc(amend);
+        }
+    }
 
     // update total hardware length
     task->length += task->hw_length;
