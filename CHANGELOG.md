@@ -1,3 +1,404 @@
+## 1.0.12 (2026-05-29)
+### Feature
+- [mpi_enc]: Support load ref_cfg json file
+- [mpp_cfg]: Add ref_cfg json apply/extract api
+- [kmpp]: Add kmpp_venc_test implement
+- [mpp_enc]: Support force idr by KEY_INPUT_IDR_REQ meta
+- [kmpp_obj]: Add resize interface
+- [mpp_test]: Add mpp_test.h
+- [mpp_enc_cfg]: Add ENTRY VLA support
+- [mpp_cfg]: Add Variable Length Array (VLA) support
+- [mpp_frame]: Add data_layout info to the MppFrame.
+- [mpp_soc]: Add FBC/tile info to the SoC module.
+- [vdpu384b]: Supports vdpu384b scaling down
+- [mpp_trie]: Add progressive support
+- [hal_dbg]: Support loading data from file
+- [vepu511a]: Add tuning procedure for H.264
+- [osal]: Add MPP_DEV_SET_FLAG support for register write flags
+- [hal]: Add hal_dbg dump interfaces for rkvdec
+- [osal]: Add mpp_mkdir_p api
+- [legacy]: Support RKFBC output format
+- [osal]: Add runtime read-write path probe
+- [vpu_api]: Add RKFBC output format definition
+- [vepu511a]: Add tuning procedure for HEVC
+- [vdpu383/384b]: Enable fast parse support
+- [kmpp_obj]: Add s8/u8/arr for elem type
+- [mpp]: Add elem type in mpp_internal.h
+- [utils]: Add utils singleton
+- [vdpp]: Enbale change loglevel dynamically
+- [vepu511a]: Setup quant registers for H.264
+- [vdpp]: Add vdpp3 for RK3572 and RK3538
+- [mpp_soc]: Support vepu511a on rk3572
+- [vepu_511a]: Add vepu511a h265e support
+- [vepu_511a]: Add vepu511a h264e support
+- [vepu_511a]: Add vepu_511a common for rk3572
+- [mpp_ring]: Add mpp wrap ring buffer module
+- [mpp_sys]: Add venc show_cfg / dump_cfg cmd
+- [mpp_buf_slot]: Add MppDecCfg update
+- [mpp_runtime]: Add mpp system service thread
+- [mpp_parser]: Use api register module
+- [test]: Optimize enc cfg configuration
+- [utils]: Support reorder argv when option parse
+- [vdpu384a]: Refactor the RCB calculation
+- [vdpu383]: Refactor the RCB calculation
+- [build]: Support detail build config by MPP_SOC
+- [vdpu384b]: Enable support for RK3539.
+- [cmake]: Add window ndk build support
+- [mpp_singleton]: Add module without order id
+- [cmake]: Add function to merge objects
+- [utils]: Add split_path_file_inplace
+- [vdpu384b]: Enable support for RK3572/RK3538.
+- [vdpu384b]: Support RK3572/RK3538 new features
+- [mpp_enc_args]: Enc test args object implement
+- [vdpu38x]: Add vdpu38x common module
+- [kmpp_obj]: Add kmpp_obj_copy func
+- [jpegd]: Add VPU730 JPEG decoder
+- [jpege]: Add VPU730 JPEG encoder
+- [soc]: Add RK3538 and RK3572 description
+- [build]: Add soc.cmake
+- [h265d]: Skip extract rbsp when hw support
+- [vdpp]: Add output luma_avg
+- [mpp_meta]: Add frame / meta dup function
+- [mpp]: Use macro to create mpp_cfg
+- [kmpp_vdec]: Add kmpp_vdec module
+- [kmpp_venc]: Add kmpp_venc module
+- [mpp_enc_cfg]: Change to object implement
+- [kmpp_obj_helper]: Support no IMPL_TYPE objdef
+- [kmpp_obj]: Add kmpp ioctl trie query
+- [kmpp_ioc]: Add kmpp_ioc module
+- [kmpp_obj]: Add ioctl related macro
+- [kmpp_obj]: Add KmppShm allocate function
+- [kmpp_obj]: Add more functions
+
+### Fix
+- [hal_rkdec]: Fix duplicate align on ver_stride in fbc mode
+- [kmpp_obj]: Add ioc list management
+- [kmpp]: Fix error on get meta from kmpp_packet
+- [kmpp_meta]: Fix get_obj failure
+- [mpp_test]: Set stride on info change
+- [av1d_parser]: Fix signed value parsing reads extra bit
+- [mpp_enc_ref_test]: Fix test case error
+- [sys_cfg]: Fix low H.264 decode FPS at 4096x2160.
+- [mpp_trie]: Fix name len update on add_entry
+- [kmpp_obj]: Fix flag bitmap overflow on arm64
+- [mpp_cfg_io]: Fix array print format
+- [hal_vepu511]: Explicitly clear jpeg_stnd for video encoding
+- [rc]: Fix i_refresh_bit memory leak in deinit
+- fix CHANGELOG.md
+- [sys_cfg]: For AFBC, fixed border extension of 8 pixels.
+- [vdpu38x]: YUV400 should be calculated as YUV420
+- [hal_h264e/h265e]: Fix the top address of bitstream buf
+- [h264d]: Add missing api call in rkv reg
+- [vdpp]: Fix the vdpp buffer dump behavior
+- [cmake]: add PRIVATE to ASAN_LIB
+- [vepu511/511a]: Fix RGB CSC range via get_rgb2yuv_cfg
+- [vepu511a]: Fix RDO lambda_idx_p error for H.264
+- [crc]: Fix CRC interface usage issue.
+- [h265d]: Fix RPS flags after sort/flip
+- [misc]: Fix compile error on old ndk
+- [h264d]: Skip more_rbsp_data for baseline/main/extended profiles
+- [mpp_rc]: Prevent drop_gap bypass during reencode
+- [h265d]: Fix overlap scan OOB read and carry-over data loss in spliter
+- [build]: Fix static build missing hal object issue
+- [mpi_dec_test]: Fix tile output issue
+- [vepu511a]: Fix H.264 regs assignment error
+- [rc]: Fix incorrect QP constraint
+- [mpp_dec]: Mpp_frame supports AFBC/RKFBC
+- [hal]: Fix reg buf usage in non-fast-parse mode
+- [vdpu383]: Fix vpd9d stride(fbc) config issue
+- [rc]: Fix fps calculation
+- [vdpu383_avs2]: Fix AVS2 decoding failure issue
+- [mpp_sys_cfg]: Fix hor pixel stride calculation issue
+- [h265d]: Fix return value check issue
+- [kmpp]: Fix clang compile error
+- [vepu511a]: Update SAO anti-blur regs setup for HEVC
+- [vepu511a]: Update SMEAR regs setup for HEVC
+- [jpegd]: Fix oversized buf size calculated by mpp_sys_cfg
+- [h265d]: Fix hvcc deadloop issue
+- [hdr_meta]: Add hdr meta pool with ref_cnt
+- [vepu511a]: Update anti-stripe regs setup for HEVC
+- [vepu511a]: Update ATR regs setup for HEVC
+- [vepu511a]: Update ATF regs setup for HEVC
+- [dchs]: fix TSVC dual-core refs config issue
+- [mpp_cfg_io]: Adapt cfg io array
+- [h265e_vepu511a]: Fix colmv load condition
+- [vepu511/511a]: Drop dual-core frame parallel support
+- [vepu511a]: Fix regs assignment error
+- [dec_demo]: The decoder demo supports tile output
+- [h265d_rkv]: Fix rkv ref and poc setup overflow
+- [vepu_511a]: Reorganize speed mode levels
+- [h265d]: Fix invalid hvcc data crash on seek
+- [vdpu384b]: Fix fbc payload stride cfg issues
+- [vp9_vdpu384b]: Fix fbc ref frm stride cfg issues
+- [mpp_list]: Fix mpp_list_wait_timed return value
+- [mpp_dec]: Fix eos frame output flow
+- [vdpu383/384b]: Fix FBC mode change on info change
+- [test]: Modify some json file
+- [mpp]: Fix encoder tile4x4 yuv400
+- [hal_vepu5xx]: Correct slice info register structure
+- [hal_h265e]: Fix split out crash for vepu_511/511a
+- [hal_av1d]: Fix dec timeout in some case for rk3588
+- [av1d]: Fix the value of AV1_REF_CONTEXTS
+- [test]: Fix rc set cfg
+- [h265e_vepu511a]: Fix compiler warning
+- [vdpp]: Move macro definition
+- [cmake]: Fix debug option not taking effect in Clang NDK builds
+- [h264_afbc]: Fix the FBC buffer edge expansion error.
+- [vp9d]: Fix error when show existing frame case
+- [hal_av1d_vdpu384b]: Fix compile warning
+- [cmake]: Fix cmake warning
+- [vdpu384b]: Fix AV1 decoding corruption issue.
+- [hal_jpege]: Fix jpeg hdr write twice when reencode
+- [av1d]: Fix error when read quant params and tiles info
+- [vp9d]: missing fmt setting for 10bit
+- [vp9]: Clean up debug log
+- [mpp_osal]: Fix signed/unsigned comparison warning
+- [cmake]: Add more warning option
+- [kmpp]: Fix compiler warnings in kmpp
+- [mpp_hal]: Fix compiler warnings in hal modules
+- [mpp_dec]: Fix compiler warnings in dec modules
+- [mpp_base]: Fix compiler warnings in base module
+- [osal]: Fix compiler warnings in OSAL modules
+- [enc_utils]: Fix compiler warnings in utils
+- [hal]: Remove unsupported soc types from enc hal
+- [osal]: Add singleton id validation
+- [build]: update Android.bp
+- [mpp_sys]: Fix temp variable initialization issue
+- [av1d_parser]: Fix src/dst initialization issue
+- [mpp_sys]: Fix temp variable initialization issue
+- [codec]: Fix rc update when jpeg cfg change
+- [test]: Fix compile warning
+- [mpp_singleton]: Fix 64-bit mask overflow
+- [mpp_enc]: Fix two pass error with igop=1 when h265e
+- [mpp_enc_refs]: Fix twopass err with igop=1 when h264e
+- Fix QAC Rule-21.1 for version.in
+- [inc]: Fix QAC warning for mpp_hash.h
+- [osal]: Avoid spinlock deadlock
+- [sys_cfg]: Fix AFBC buffer size calculation issue
+- [vdpu38x]: Fix rcb sram not being used issue
+- [utils]: Fix enc cfg get/set error
+- [mpi_test]: Fix compiler warning
+- [hal_vp8d]: Fix compiler warning
+- [vepu511]: Fix scaling list error for h265
+- [vepu511]: Fix scaling list error for h264
+- [hal_h265e_vepu511]: Register hal api for RV1126B
+- [mpp_thread]: Fix thread status on stop
+- [mpp]: Fix memory leak issues
+- [vdpp2]: Fix the sharp register definition
+- Clean QAC Rule-10.1
+- [base]: Clean QAC Rule-10.1
+- [hal]: Clean QAC Rule-10.1
+- [codec]: Clean QAC Rule-10.1
+- [cmake]: Fix soc matching error
+- [utils]: Fix opt parse crash
+- [mpp_enc_hal]: Fix enc hal init issue
+- [cmake]: Fix thread library dependency on linux
+- [kmpp_obj]: Fix memory out-of-bounds
+- [cmake]: Fix odr-violation issue
+- [utils]: Fix compilation error
+- [mpp_build]: Fix object rps output dir
+- [build]: Add mpp_hal to whole_archive list
+- [hal_h265e/jpege]: Remove unsed api variable in ctx
+- [cmake]: Skip non-existent target in merge_objects()
+- [h265e_api]: Set default sao bit ratio to 5
+- [license]: Restore the following files to LGPL
+- [vdpp]: Fix known bugs
+- [hal_vepu511]: Fix two pass configure issue
+- [mpp_soc]: RK3538 does not support AVS2 decoding
+- [hal]: Adjust hal buf slots max count
+- [hal_vepu]: poll max set to 1 on split out lowdelay mode
+- [vdpu38x_com]: Fix rcb calc issue
+- [sys_cfg]: Fix decoder sys_cfg crash
+- [hal_av1]: Fix oversized buffer allocation
+- [h265d_parser]: Fix heap-use-after-free issue
+- [mpp_comm]: Add alignment macros to sync with the doc.
+- [av1d]: Pass use_superres to the HAL
+- [hal_av1_vdpu383]: Fix global data read page fault.
+- [h265d]: Modify RefPicList array size to 16
+- [build]: Fix compilation issue with different codec option
+- Rename macro _mpp_dbg _mpp_dbg_f for Rule-21.1
+- Clean QAC Rule-21.2 and 8.2
+- Clean QAC Rule-21.10
+- Convert CRLF to LF
+- [av1]: Rename macro for av1d_cbs.c
+- Clean QAC M3CM Rule 10.1 8.12 9.3
+- Clean QAC M3CM Rule-18.7
+- Clean QAC rules for some file.h
+- [mpp_enc]: Fix force idr failed by control
+- [h264d]: Fix extra data lost issue
+- [h265d_parser]: Split mulit slice hvcC packets
+- [h265d]: Fix hdr dynamic data loss
+- fix for M3CM Rule-8.2
+- fix for M3CM Rule-21.1
+- [h264e]: fix mutual dependencies
+- [h265e]: fix mutual dependencies
+- fix MISRA warning
+- [h265d]: fix GDR stream decoding
+- [rkenc]: fix a typo
+- [hal_h265e_vepu511]: Align subjective configuration
+- [vepu_511]: Sync vepu511 regs from kmpp to mpp
+- [hal_avs2d]: fix old reflist not reset issue
+- [kmpp_meta]: Fix compiler warning
+- [cmake]: Add dependent libs to pkgconfig
+- [mpp_enc_impl]: Fix ref_cfg setup error
+- [avs2d]: fix parser segment fault
+- [vproc]: Fix missing hdr_info on vproc flow
+- [mpp_singleton]: Fix 64-bit mask overflow
+- [inc]: Reserve split variable for compatibility
+- [mpp]: Fix c89 build error
+- [mpp_singleton]: Fix cluster sgln id conflict
+- [osal]: Align MppMemPoolNode to 8-byte
+- [tools]: Remove invalid window path
+- [utils]: Fix osd test compilation warning
+- [cmake]: Fix libm / libmvec compile error
+- [cmake]: Fix debug option on high ndk
+- [kmpp_obj]: Fix a typo
+- [kmpp_obj]: Fix objdef index error for ioctl
+- [kmpp_obj_macro]: Fix GET_ARG0 macro
+- [kmpp_obj]: Fix log format
+- [kmpp_buffer_test]: Fix sptr setup error
+- [mpp]: Fix compilation warnings
+- [mpp_soc]: Add mpp_debug env reading when init
+- [test]: Fix shm test crash on old kernel
+- [hal_av1d_vdpu383]: Fix Roku player crash after seeking.
+- [parser]: Ensure the DTS is transmitted to the frame
+- [h265d]: Fix rps data update issue
+- [kmpp_obj]: Add ptr / st compatibility handling
+- [buf_slot]: Clean up invalid logs
+- [mpp]: Fix some typos
+- [kmpp_obj]: Fix obj update flag update issue
+- [hal_av1d]: Fix AV1 background frame decoding failure.
+
+### Docs
+- Update 1.0.12 CHANGELOG.md
+- Update developer guide to 0.8
+- Update readme.txt
+- Add SECURITY.md
+
+### Refactor
+- [hal_h265d]: Remove unused CABAC table from VDPU383
+- [kmpp_obj]: Refactor vla support
+- [enc]: Refactor mpp_enc_ref module
+- [hal_vp9d]: Refactor hal_vp9 ref-frame configuration
+- [scale_down]: Thumbnail Frame Info.
+- [utils]: Refactor CRC verify with context management
+- [hal_avs2d]: Refactor avs2 hal debug
+- [hal_av1d]: Refactor av1d hal debug
+- [hal_vp9d]: Refactor vp9d hal debug
+- [hal_h265d]: Refactor h265d hal debug
+- [hal_h264d]: Refactor h264d hal debug
+- [hal]: Refactor hal debug
+- [vdpu383/384a/384b]: Merge cur frm stride info setup
+- [base]: Refactor cfg to json/log
+- [mpp_enc_args]: Move mpp_enc_args to utils
+- [osal]: Add factory pattern for singleton
+- [h265d]: Update H.265 decoder
+- [hal]: Remove duplicate AFBC align functions
+- [vdpp]: Refactor vdpp codes
+- [av1d]: Update parser code
+- [vp9d]: Update parser code
+- [hal]: Update dec hal apis registration
+- [utils]: Integrate enc command get by env
+- [h265d]: Add h265d_debug.h
+- [hal]: Remove duplicate AFBC align functions
+- [vdpu384b]: Generalize RCB register configuration
+- [hal]: Add prefixes to register offset macros
+- [vdpu384a]: Merge control regs setup
+- [vdpu383]: Merge control regs setup
+- [vdpu384b]: Merge control regs setup
+- [vdpu384a]: Vdpu384a Register Simplification
+- [vdpu383]: Vdpu383 Register Simplification
+- [hal_av1d]: Pack stride-related registers
+- [hal]: Update enc hal apis registration
+- [hal_jpegd]: Fix hal_api usage
+- [hal_vp8d]: Fix hal_api usage
+- [hal_m2vd]: Fix hal_api usage
+- [hal_mpg4d]: Fix hal_api usage
+- [hal_avsd]: Fix hal_api usage
+- [mpp]: Use OBJECT to replace STATIC
+- [hal]: Collect hw_id into common
+- [hal_avs2d]: Extract the shared parts into common
+- [hal_h265d]: Extract the shared parts into common
+- [hal_h264d]: Extract the shared parts into common
+- [hal_vp9d]: Extract the shared parts into common
+- [hal_av1d]: Extract the shared parts into common
+- [avsd]: Use the common alignment function
+- [avs2d]: Use the common alignment function
+- [h265d]: Use the common alignment function
+- [h264d]: Use the common alignment function
+- [vp9d]: Use the common alignment function
+- [av1d]: Use the common alignment function
+- [mpp_common]: Add common alignment functions.
+- [hal_avs2d]: Collect ctx into common
+- [hal_h265d]: Collect ctx into common
+- [hal_h264d]: Collect ctx into common
+- [hal_vp9d]: Collect ctx into common
+- [hal_av1d]: Collect ctx into common
+- [vdpu_rcb]: Move rcb to common module
+- [hal_av1d]: Extract g_default_prob to the common file.
+- [jpegd]: Extract JPEG VPU7xx decoder common part
+- [mpp]: Remove MppCfgInfo struct
+- [mpp]: Refactor C++ mpp to C
+- [mpp]: Rename file type from C++ to C
+- [mpp_cluster]: Refactor C++ mpp_cluster to C
+
+### Test
+- [dec]: Check the slot pointer to avoid coredump
+- [mpp_cfg_test]: Add comprehensive array type tests
+- [enc_cfg]: Add enc fmt cfg json file
+- [test]: Add cfg json file
+- [test]: Add cfg_file option for enc tests
+- [osd]: Add osd3 test for RV1126B
+
+### Chore
+- [kmpp_obj]: Replace mpp_err with mpp_loge
+- [mpp_enc_cfg]: Use ARRAY macro
+- [mpp_trie]: Add mpp_trie_get_entry output
+- [mpp_trie]: Fix some format
+- [mpp_test]: Unify log format
+- [test]: Update mpp_enc_cfg_test
+- [inc]: Prepare for array refactoring
+- [git]: Add .claude to gitignore
+- [mpp_trie]: Add last info in add_entry
+- [git]: Add .cache to gitignore
+- [vdpp]: Update libvdpp to v1.4.2
+- [log]: Disable sys_cfg/legacy stride check.
+- [mpp_bit]: Add more 64bit macro
+- [test]: Adjust format
+- [mpp_bit]: Add more macro
+- [file]: Ignore local build / debug / cscope files
+- [vdpp]: Adjust some code format
+- [syntax]: Unify data type in syntax.h
+- [gitignore]: Add Clangd ignore file
+- [mpp]: Remove unused cleanup code
+- [mpp_dec]: Add mpp_dec_to_cfg
+- [mpp_enc]: Add mpp_enc_to_cfg
+- [mpp_dec_cfg]: Add status for reading
+- [mpp_common]: Add mpp_clip_/mpp_round_pow2
+- [mpp_bitread]: Add mpp_read_signbits
+- [build]: Fix relinking issue of modified files.
+- [h265d_debug]: Add more debug flag
+- [mpp_bit.h]: Add mpp_bit.h for bit operations
+- [change_log]: Add previous tag -p option
+- [mpp_soc]: Add coding to index function
+- [vproc]: Remove rga support
+- [build]: RK3572/RK3538, trim unused codecs
+- [hal_rkvdec]: Add rkvdec common dir
+- [osal]: Remove direct dependency on dma-buf.h
+- [mpp_frame]: Add IS_AFBC MCRO
+- [legacy]: remove unused code
+- [mpp]: Rename some enum and macro
+- [mpp]: Delete mpp_enc_cfg_impl.h
+- [astyle]: Format code by new astyle config
+- [kmpp_obj]: Add ioctl return output object
+- [kmpp_obj]: Add ioctl return value to KmppIoc
+- [kmpp_ioc]: Use kernel ioctl define only
+- [kmpp_buffer]: Use new ioctl cmd macro
+- [kmpp_ioc]: Disable ioc entry mismatch log
+- [kmpp_obj]: Change kmpp_shm get / put input
+- [kmpp_obj]: Update macros
+- [mpp_enc_cfg]: Remove MppEncCodecCfg
+
 ## 1.0.11 (2025-09-10)
 ### Feature
 - [mpp_trie]: Add info name max length record
