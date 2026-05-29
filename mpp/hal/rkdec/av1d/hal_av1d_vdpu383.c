@@ -546,8 +546,6 @@ MPP_RET vdpu383_av1d_wait(void *hal, HalTaskInfo *task)
     HalBuf *hal_buf_tmp = NULL;
     MppBuffer mbuffer = NULL;
 
-    hal_dbg_finish(reg_ctx->dbg_ctx);
-
     if (hal_dbg_flag_en(reg_ctx->dbg_ctx, HAL_DBG_DUMP) && 0 == p_hal->fast_mode) {
         hal_buf_tmp = hal_bufs_get_buf(reg_ctx->colmv_bufs, dxva->CurrPic.Index7Bits);
         hal_dbg_dumpf_buf(reg_ctx->dbg_ctx, "colmv_cur_frame.dat", hal_buf_tmp->buf[0],
@@ -602,7 +600,8 @@ __SKIP_HARD:
     if (p_hal->fast_mode)
         reg_ctx->reg_buf[task->dec.reg_index].valid = 0;
 
-    (void)task;
+    hal_dbg_finish(reg_ctx->dbg_ctx);
+
 __RETURN:
     return ret = MPP_OK;
 }

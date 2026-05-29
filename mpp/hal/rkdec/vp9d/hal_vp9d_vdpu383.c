@@ -731,8 +731,6 @@ static MPP_RET hal_vp9d_vdpu383_wait(void *hal, HalTaskInfo *task)
 
     mpp_assert(hw_regs);
 
-    hal_dbg_finish(p_hal->dbg_ctx);
-
     ret = mpp_dev_ioctl(p_hal->cfg->dev, MPP_DEV_CMD_POLL, NULL);
     if (ret)
         mpp_err_f("poll cmd failed %d\n", ret);
@@ -786,7 +784,8 @@ static MPP_RET hal_vp9d_vdpu383_wait(void *hal, HalTaskInfo *task)
         hw_ctx->g_buf[task->dec.reg_index].use_flag = 0;
     }
 
-    (void)task;
+    hal_dbg_finish(p_hal->dbg_ctx);
+
     return ret;
 }
 

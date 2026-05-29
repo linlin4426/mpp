@@ -515,8 +515,6 @@ MPP_RET hal_avs2d_vdpu384b_wait(void *hal, HalTaskInfo *task)
     reg_ctx = (Avs2dRkvRegCtx *)p_hal->reg_ctx;
     regs = p_hal->fast_mode ? reg_ctx->reg_buf[task->dec.reg_index].regs : reg_ctx->regs;
 
-    hal_dbg_finish(p_hal->dbg_ctx);
-
     if ((task->dec.flags.parse_err || task->dec.flags.ref_err) &&
         !p_hal->cfg->cfg->base.disable_error) {
         AVS2D_HAL_DBG(AVS2D_HAL_DBG_ERROR, "found task error.\n");
@@ -569,7 +567,9 @@ MPP_RET hal_avs2d_vdpu384b_wait(void *hal, HalTaskInfo *task)
         reg_ctx->reg_buf[task->dec.reg_index].valid = 0;
 
 __RETURN:
+    hal_dbg_finish(p_hal->dbg_ctx);
     AVS2D_HAL_TRACE("Out. ret %d", ret);
+
     return ret;
 }
 

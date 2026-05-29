@@ -368,7 +368,7 @@ MPP_RET hal_dbg_dump_regs(HalDbgCtx *ctx, RK_U32 *regs, RK_U32 reg_cnt,
 
     for (i = 0; i < reg_cnt; i++) {
         fprintf(reg_fd, "frm: %04d  reg[%03d]: 0x%08zx: 0x%08x\n",
-                ctx->cur_frm_idx - 1, base_idx + i,
+                ctx->cur_frm_idx, base_idx + i,
                 (base_idx + i) * sizeof(RK_U32), regs[i]);
     }
 

@@ -544,8 +544,6 @@ MPP_RET vdpu384b_h264d_wait(void *hal, HalTaskInfo *task)
                             reg_ctx->reg_buf[task->dec.reg_index].regs :
                             reg_ctx->regs;
 
-    hal_dbg_finish(p_hal->dbg_ctx);
-
     if (task->dec.flags.parse_err ||
         (task->dec.flags.ref_err && !p_hal->cfg->cfg->base.disable_error)) {
         goto __SKIP_HARD;
@@ -591,8 +589,9 @@ __SKIP_HARD:
         reg_ctx->reg_buf[task->dec.reg_index].valid = 0;
     }
 
-    (void)task;
 __RETURN:
+    hal_dbg_finish(p_hal->dbg_ctx);
+
     return ret = MPP_OK;
 }
 
