@@ -194,6 +194,13 @@ static rk_u32 sizeof_type(MppCfgType type)
     return sizes[type];
 }
 
+static void mpp_cfg_set_flag(void *st, rk_u32 flag_offset)
+{
+    rk_u32 *flag_ptr = (rk_u32 *)((rk_u8 *)st + (((rk_u32)flag_offset & ~31U) / 8));
+
+    *flag_ptr |= 1U << (flag_offset & 31);
+}
+
 static char *dup_str(const char *str, rk_s32 len)
 {
     char *ret = NULL;
@@ -4251,6 +4258,8 @@ static void write_struct(MppCfgIoImpl *obj, MppTrie trie, MppCfgStrBuf *str,
             rk_s32 cpy_size = MPP_MIN((rk_s32)tbl->tbl.elem_size, (rk_s32)obj->raw_size);
 
             memcpy((rk_u8 *)st + tbl->tbl.elem_offset, obj->raw, cpy_size);
+            if (tbl->tbl.flag_offset && cpy_size > 0)
+                mpp_cfg_set_flag(st, tbl->tbl.flag_offset);
         } else {
             rk_s32 src_cnt = obj->raw_count;
             rk_s32 dst_cnt = (rk_s32)type->vla.vla.elem_count;
@@ -4316,6 +4325,9 @@ static void write_struct(MppCfgIoImpl *obj, MppTrie trie, MppCfgStrBuf *str,
                 } break;
                 }
             }
+            /* Set update flag for VLA array field */
+            if (tbl->tbl.flag_offset && cnt > 0)
+                mpp_cfg_set_flag(st, tbl->tbl.flag_offset);
         }
     }
 
@@ -4350,6 +4362,9 @@ static void write_struct(MppCfgIoImpl *obj, MppTrie trie, MppCfgStrBuf *str,
             }
             idx++;
         }
+        /* Set update flag for non-VLA array field */
+        if (tbl->tbl.flag_offset && idx > 0)
+            mpp_cfg_set_flag(st, tbl->tbl.flag_offset);
     }
 
     /* Complex VLA array: write elements back to struct */
