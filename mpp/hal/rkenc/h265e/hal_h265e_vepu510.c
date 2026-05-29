@@ -1955,7 +1955,6 @@ MPP_RET hal_h265e_v510_gen_regs(void *hal, HalEncTask *task)
     H265eV510HalContext *ctx = (H265eV510HalContext *)hal;
     HalEncTask *enc_task = task;
 
-    hal_dbg_setup(ctx->dbg_ctx, NULL);
     EncRcTask *rc_task = enc_task->rc_task;
     EncFrmStatus *frm = &rc_task->frm;
     H265eSyntax_new *syn = ctx->syn;
@@ -1971,6 +1970,8 @@ MPP_RET hal_h265e_v510_gen_regs(void *hal, HalEncTask *task)
     MPP_RET ret = MPP_OK;
 
     hal_h265e_enter();
+    hal_dbg_setup(ctx->dbg_ctx, NULL);
+
     pic_width_align8 = (syn->pp.pic_width + 7) & (~7);
     pic_height_align8 = (syn->pp.pic_height + 7) & (~7);
     pic_wd32 = (syn->pp.pic_width +  31) / 32;
@@ -2114,6 +2115,7 @@ MPP_RET hal_h265e_v510_start(void *hal, HalEncTask *enc_task)
     if (enc_task->flags.err) {
         hal_h265e_err("enc_task->flags.err %08x, return e arly",
                       enc_task->flags.err);
+        hal_dbg_finish(ctx->dbg_ctx);
         return MPP_NOK;
     }
 

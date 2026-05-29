@@ -2917,6 +2917,7 @@ MPP_RET hal_h265e_v580_start(void *hal, HalEncTask *enc_task)
     if (enc_task->flags.err) {
         hal_h265e_err("enc_task->flags.err %08x, return e arly",
                       enc_task->flags.err);
+        hal_dbg_finish(ctx->dbg_ctx);
         return MPP_NOK;
     }
 
@@ -3324,7 +3325,7 @@ MPP_RET hal_h265e_v580_wait(void *hal, HalEncTask *task)
 
         for (k = 0; k < ctx->tile_num; k++) {
             hal_h265e_vepu580_dump_hw_regs(ctx->dbg_ctx, frm->regs_set[k],
-                                           frm->regs_ret[k], k == 0 ? "w" : "a");
+                                           frm->regs_ret[k], k == 0 ? "w+" : "a+");
         }
     }
 

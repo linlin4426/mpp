@@ -1494,8 +1494,9 @@ static MPP_RET hal_h264e_vepu540c_gen_regs(void *hal, HalEncTask *task)
     H264eSlice *slice = ctx->slice;
     MPP_RET ret = MPP_OK;
 
-    hal_dbg_setup(ctx->dbg_ctx, NULL);
     hal_h264e_dbg_func("enter %p\n", hal);
+
+    hal_dbg_setup(ctx->dbg_ctx, NULL);
     hal_h264e_dbg_detail("frame %d generate regs now", ctx->frms->seq_idx);
 
     /* register setup */
@@ -1679,6 +1680,8 @@ static MPP_RET hal_h264e_vepu540c_wait(void *hal, HalEncTask *task)
     MppPacket pkt = task->packet;
     RK_S32 offset = mpp_packet_get_length(pkt);
 
+    hal_h264e_dbg_func("enter %p\n", hal);
+
     if (hal_dbg_flag_en(ctx->dbg_ctx, HAL_DBG_DUMP)) {
         HalBufs bufs = ctx->hw_recn;
         H264eFrmInfo *frms = ctx->frms;
@@ -1691,8 +1694,6 @@ static MPP_RET hal_h264e_vepu540c_wait(void *hal, HalEncTask *task)
         if (curr && curr->cnt)
             vepu_dump_fbc_buf(ctx->dbg_ctx, "recn_", curr, fbc_hdr_size, 128);
     }
-
-    hal_h264e_dbg_func("enter %p\n", hal);
     ret = mpp_dev_ioctl(ctx->dev, MPP_DEV_CMD_POLL, NULL);
     if (ret) {
         mpp_err_f("poll cmd failed %d\n", ret);

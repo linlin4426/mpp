@@ -1608,8 +1608,8 @@ static MPP_RET hal_h264e_vepu541_gen_regs(void *hal, HalEncTask *task)
     MPP_RET ret = MPP_OK;
     EncFrmStatus *frm_status = &task->rc_task->frm;
 
-    hal_dbg_setup(ctx->dbg_ctx, NULL);
     hal_h264e_dbg_func("enter %p\n", hal);
+    hal_dbg_setup(ctx->dbg_ctx, NULL);
     hal_h264e_dbg_detail("frame %d generate regs now", ctx->frms->seq_idx);
 
     /* register setup */

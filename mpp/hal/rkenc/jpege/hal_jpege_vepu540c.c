@@ -160,7 +160,6 @@ MPP_RET hal_jpege_v540c_gen_regs(void *hal, HalEncTask *task)
 {
     jpegeV540cHalContext *ctx = (jpegeV540cHalContext *)hal;
     JpegV540cRegSet *regs = ctx->regs;
-    hal_dbg_setup(ctx->dbg_ctx, NULL);
     jpeg_vepu540c_control_cfg *reg_ctl = &regs->reg_ctl;
     jpeg_vepu540c_base *reg_base = &regs->reg_base;
     JpegeBits bits = ctx->bits;
@@ -172,6 +171,8 @@ MPP_RET hal_jpege_v540c_gen_regs(void *hal, HalEncTask *task)
     RK_S32 bitpos;
 
     hal_jpege_enter();
+    hal_dbg_setup(ctx->dbg_ctx, NULL);
+
     cfg.enc_task = task;
     cfg.jpeg_reg_base = &reg_base->jpegReg;
     cfg.dev = ctx->dev;
@@ -354,8 +355,6 @@ static MPP_RET hal_jpege_vepu540c_status_check(void *hal)
     return MPP_OK;
 }
 
-
-
 MPP_RET hal_jpege_v540c_wait(void *hal, HalEncTask *task)
 {
     MPP_RET ret = MPP_OK;
@@ -367,6 +366,8 @@ MPP_RET hal_jpege_v540c_wait(void *hal, HalEncTask *task)
     if (enc_task->flags.err) {
         mpp_err_f("enc_task->flags.err %08x, return early",
                   enc_task->flags.err);
+        hal_dbg_finish(ctx->dbg_ctx);
+
         return MPP_NOK;
     }
 

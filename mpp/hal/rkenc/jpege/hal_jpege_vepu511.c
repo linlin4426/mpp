@@ -44,6 +44,7 @@ static void hal_jpege_vepu511_dump_hw_regs(HalDbgCtx *dbg_ctx, JpegV511RegSet *r
     vepu_hw_regs(dbg_ctx, regs->reg_frm, VEPU511_JPEGE_FRAME_OFFSET, "a+");
     vepu_hw_regs(dbg_ctx, regs->reg_table, VEPU511_JPEGE_TABLE_OFFSET, "a+");
     vepu_hw_regs(dbg_ctx, regs->reg_osd, VEPU511_JPEGE_OSD_OFFSET, "a+");
+    vepu_hw_regs(dbg_ctx, elem->hw_status, VEPU511_REG_BASE_HW_STATUS, "a+");
     vepu_hw_regs(dbg_ctx, elem->st, VEPU511_JPEGE_STATUS_OFFSET, "a+");
 }
 
@@ -377,7 +378,6 @@ MPP_RET hal_jpege_vepu511_gen_regs(void *hal, HalEncTask *task)
 {
     JpegeV511HalContext *ctx = (JpegeV511HalContext *)hal;
     JpegV511RegSet *regs = ctx->regs;
-    hal_dbg_setup(ctx->dbg_ctx, NULL);
     Vepu511ControlCfg *reg_ctl = &regs->reg_ctl;
     JpegVepu511Frame *jpeg_frm = &regs->reg_frm;
     JpegeBits bits = ctx->bits;
@@ -390,6 +390,8 @@ MPP_RET hal_jpege_vepu511_gen_regs(void *hal, HalEncTask *task)
     RK_S32 bitpos;
 
     hal_jpege_enter();
+    hal_dbg_setup(ctx->dbg_ctx, NULL);
+
     cfg.enc_task = task;
     cfg.jpeg_reg_base = jpeg_frm;
     cfg.dev = ctx->dev;
@@ -616,6 +618,7 @@ MPP_RET hal_jpege_vepu511_wait(void *hal, HalEncTask *task)
     if (enc_task->flags.err) {
         mpp_err_f("enc_task->flags.err %08x, return early",
                   enc_task->flags.err);
+        hal_dbg_finish(ctx->dbg_ctx);
         return MPP_NOK;
     }
 

@@ -2279,9 +2279,9 @@ static MPP_RET hal_h264e_vepu511a_gen_regs(void *hal, HalEncTask *task)
     EncFrmStatus *frm = &rc_task->frm;
     MPP_RET ret = MPP_OK;
 
-    hal_dbg_setup(ctx->dbg_ctx, NULL);
-
     hal_h264e_dbg_func("enter %p\n", hal);
+
+    hal_dbg_setup(ctx->dbg_ctx, NULL);
     hal_h264e_dbg_detail("frame %d generate regs now", ctx->frms->seq_idx);
 
     /* register setup */
@@ -2420,13 +2420,16 @@ static MPP_RET hal_h264e_vepu511a_start(void *hal, HalEncTask *task)
                 mpp_err_f("debug register read failed %d\n", ret_dbg);
         }
 
-        rd_cfg.reg = &regs->reg_ctl.int_sta;
-        rd_cfg.size = sizeof(RK_U32);
-        rd_cfg.offset = VEPU511A_REG_BASE_HW_STATUS;
-        ret = mpp_dev_ioctl(ctx->dev, MPP_DEV_REG_RD, &rd_cfg);
-        if (ret) {
-            mpp_loge_f("set register read failed %d\n", ret);
-            break;
+        /* read int_sta only when debug GET_REG is off (reg_ctl read covers it) */
+        if (!hal_dbg_flag_en(ctx->dbg_ctx, HAL_DBG_GET_REG)) {
+            rd_cfg.reg = &regs->reg_ctl.int_sta;
+            rd_cfg.size = sizeof(RK_U32);
+            rd_cfg.offset = VEPU511A_REG_BASE_HW_STATUS;
+            ret = mpp_dev_ioctl(ctx->dev, MPP_DEV_REG_RD, &rd_cfg);
+            if (ret) {
+                mpp_loge_f("set register read failed %d\n", ret);
+                break;
+            }
         }
 
         rd_cfg.reg = &regs->reg_st;
@@ -2503,6 +2506,8 @@ static MPP_RET hal_h264e_vepu511a_wait(void *hal, HalEncTask *task)
     MppEncH264HwCfg *hw_cfg = &ctx->cfg->h264.hw_cfg;
     RK_S32 i;
 
+    hal_h264e_dbg_func("enter %p\n", hal);
+
     if (hal_dbg_flag_en(ctx->dbg_ctx, HAL_DBG_DUMP)) {
         H264eFrmInfo *frms = ctx->frms;
         HalBuf *ref_buf = hal_bufs_get_buf(ctx->hw_recn, frms->refr_idx);
@@ -2514,8 +2519,6 @@ static MPP_RET hal_h264e_vepu511a_wait(void *hal, HalEncTask *task)
         if (recn_buf && recn_buf->cnt)
             vepu_dump_fbc_buf(ctx->dbg_ctx, "recn_", recn_buf, fbc_hdr_size, 128);
     }
-
-    hal_h264e_dbg_func("enter %p\n", hal);
 
     /* if pass1 mode, it will disable split mode and the split out need to be disable */
     if (task->rc_task->frm.save_pass1)

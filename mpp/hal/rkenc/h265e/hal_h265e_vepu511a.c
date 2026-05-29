@@ -2342,6 +2342,7 @@ MPP_RET hal_h265e_vepu511a_start(void *hal, HalEncTask *enc_task)
     if (enc_task->flags.err) {
         hal_h265e_err("enc_task->flags.err %08x, return e arly",
                       enc_task->flags.err);
+        hal_dbg_finish(ctx->dbg_ctx);
         return MPP_NOK;
     }
 

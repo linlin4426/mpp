@@ -2265,7 +2265,6 @@ static void vepu511_h265_global_cfg_set(H265eV511HalContext *ctx, H265eV511RegSe
 MPP_RET hal_h265e_vepu511_gen_regs(void *hal, HalEncTask *task)
 {
     H265eV511HalContext *ctx = (H265eV511HalContext *)hal;
-    hal_dbg_setup(ctx->dbg_ctx, NULL);
     Vepu511H265eFrmCfg *frm_cfg = ctx->frm;
     H265eV511RegSet *regs = frm_cfg->regs_set;
     MPP_RET ret = MPP_OK;
@@ -2277,6 +2276,7 @@ MPP_RET hal_h265e_vepu511_gen_regs(void *hal, HalEncTask *task)
     EncFrmStatus *frm = &task->rc_task->frm;
 
     hal_h265e_enter();
+    hal_dbg_setup(ctx->dbg_ctx, NULL);
 
     hal_h265e_dbg_simple("frame %d | type %d | start gen regs11",
                          ctx->frame_num, ctx->frame_type);
@@ -2349,6 +2349,7 @@ MPP_RET hal_h265e_vepu511_start(void *hal, HalEncTask *enc_task)
     if (enc_task->flags.err) {
         hal_h265e_err("enc_task->flags.err %08x, return e arly",
                       enc_task->flags.err);
+        hal_dbg_finish(ctx->dbg_ctx);
         return MPP_NOK;
     }
 
@@ -2482,17 +2483,14 @@ MPP_RET hal_h265e_vepu511_start(void *hal, HalEncTask *enc_task)
         return ret;
     }
 
-    /* read hw_status only when debug GET_REG is off (reg_ctl read covers it) */
-    if (!hal_dbg_flag_en(ctx->dbg_ctx, HAL_DBG_GET_REG)) {
-        cfg1.reg = &reg_out->hw_status;
-        cfg1.size = sizeof(RK_U32);
-        cfg1.offset = VEPU511_REG_BASE_HW_STATUS;
+    cfg1.reg = &reg_out->hw_status;
+    cfg1.size = sizeof(RK_U32);
+    cfg1.offset = VEPU511_REG_BASE_HW_STATUS;
 
-        ret = mpp_dev_ioctl(ctx->dev, MPP_DEV_REG_RD, &cfg1);
-        if (ret) {
-            mpp_err_f("set register read failed %d\n", ret);
-            return ret;
-        }
+    ret = mpp_dev_ioctl(ctx->dev, MPP_DEV_REG_RD, &cfg1);
+    if (ret) {
+        mpp_err_f("set register read failed %d\n", ret);
+        return ret;
     }
 
     cfg1.reg = &reg_out->st;
