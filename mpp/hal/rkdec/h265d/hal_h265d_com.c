@@ -2696,7 +2696,6 @@ RK_S32 hal_h265d_vdpu38x_output_pps_packet(void *hal, void *dxva, RK_U32 *scanli
     {
         void *pps_ptr = mpp_buffer_get_ptr(reg_ctx->bufs) + reg_ctx->spspps_offset;
         RK_U64 *pps_packet = reg_ctx->pps_buf;
-
         if (NULL == pps_ptr) {
             mpp_err("hal: pps_data get ptr failed\n");
             return MPP_ERR_NOMEM;
@@ -2938,6 +2937,8 @@ RK_S32 hal_h265d_vdpu38x_output_pps_packet(void *hal, void *dxva, RK_U32 *scanli
             }
         }
         mpp_put_align(&bp, 64, 0);//128
+        hal_dbg_dump_data(reg_ctx->dbg_ctx, "global_cfg.dat", reg_ctx->pps_buf,
+                          reg_ctx->pps_buf_sz * 8, 128, 0, "w+");
         memcpy(pps_ptr, reg_ctx->pps_buf, reg_ctx->pps_buf_sz);
     } /* --- end spspps data ------*/
 
@@ -2958,9 +2959,6 @@ RK_S32 hal_h265d_vdpu38x_output_pps_packet(void *hal, void *dxva, RK_U32 *scanli
         *scanlist_addr = reg_ctx->bufs_fd;
         mpp_dev_set_reg_offset(reg_ctx->cfg->dev, 132, addr + reg_ctx->sclst_offset);
     }
-
-    hal_dbg_dump_data(reg_ctx->dbg_ctx, "global_cfg.dat", reg_ctx->pps_buf,
-                      reg_ctx->pps_buf_sz * 8, 128, 0, "w+");
 
     return 0;
 }
