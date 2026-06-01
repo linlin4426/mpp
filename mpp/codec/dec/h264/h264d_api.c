@@ -513,6 +513,15 @@ MPP_RET h264d_control(void *decoder, MpiCmd cmd_type, void *param)
     case MPP_DEC_SET_MAX_USE_BUFFER_SIZE :
         p_Dec->p_Inp->max_buf_size = (param) ? (*((RK_U32 *)param)) : (0);
         break;
+    case MPP_DEC_SET_FRAME_INFO : {
+        MppFrame frame = (MppFrame)param;
+
+        if (!frame)
+            break;
+
+        if (!mpp_frame_get_ver_stride(frame))
+            mpp_frame_set_ver_stride(frame, p_Dec->p_Vid->height);
+    } break;
     default:
         break;
     }
