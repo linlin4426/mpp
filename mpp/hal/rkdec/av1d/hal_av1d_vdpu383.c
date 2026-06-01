@@ -263,7 +263,7 @@ MPP_RET vdpu383_av1d_gen_regs(void *hal, HalTaskInfo *task)
         regs->comm_paras.reg67_global_len = VDPU383_UNCMPS_HEADER_SIZE / 16; // 128 bit as unit
         regs->comm_addrs.reg131_gbl_base = ctx->bufs_fd;
         mpp_dev_set_reg_offset(cfg->dev, 131, ctx->offset_uncomps);
-        hal_dbg_dumpf_buf(ctx->dbg_ctx, "global_cfg.dat", ctx->bufs, 0,
+        hal_dbg_dumpf_buf(ctx->dbg_ctx, "global_cfg.dat", ctx->bufs, ctx->offset_uncomps,
                           VDPU383_UNCMPS_HEADER_SIZE, 128, "w+");
         // input strm
         p_hal->strm_len = (RK_S32)mpp_packet_get_length(task->dec.input_packet);
