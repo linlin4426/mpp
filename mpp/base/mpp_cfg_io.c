@@ -2027,7 +2027,7 @@ static rk_s32 store_vla_complex(MppCfgIoImpl *parent, MppCfgIoImpl *elem)
     return rk_ok;
 }
 
-void finish_vla_trim(MppCfgIoImpl *parent)
+static void finish_vla_trim(MppCfgIoImpl *parent)
 {
     rk_s32 count = parent->array_count;
 
@@ -2066,13 +2066,43 @@ static rk_s32 parse_vla_number_and_bool(MppCfgStrBuf *str, MppCfgType *type,
 {
     char *buf = NULL;
     char *b = NULL;
+    rk_s32 ret;
 
     buf = show_byte_f(str, 0);
     if (!buf)
         goto failed;
 
-    if (buf[0] == '-' || (buf[0] >= '0' && buf[0] <= '9'))
-        return parse_number(str, type, val, peek);
+    if (buf[0] == '-' || (buf[0] >= '0' && buf[0] <= '9')) {
+        MppCfgType orig_type;
+
+        ret = parse_number(str, &orig_type, val, peek);
+        if (ret)
+            goto failed;
+
+        /* unify integers as s64 and floats as f64, avoid element width mismatch within array */
+        if (orig_type == MPP_CFG_TYPE_f32 || orig_type == MPP_CFG_TYPE_f64) {
+            *type = MPP_CFG_TYPE_f64;
+            val->f64 = (double)(orig_type == MPP_CFG_TYPE_f32 ? val->f32 : val->f64);
+        } else {
+            *type = MPP_CFG_TYPE_s64;
+            switch (orig_type) {
+            case MPP_CFG_TYPE_s32: {
+                val->s64 = val->s32;
+            } break;
+            case MPP_CFG_TYPE_u32: {
+                val->s64 = (rk_s64)val->u32;
+            } break;
+            case MPP_CFG_TYPE_u64: {
+                val->s64 = (rk_s64)val->u64;
+            } break;
+            case MPP_CFG_TYPE_s64:
+            default: {
+            } break;
+            }
+        }
+        return ret;
+    }
+
 
     if (buf[0] == 't') {
         b = test_byte_f(str, 4);
@@ -2105,10 +2135,10 @@ failed:
     return rk_nok;
 }
 
-typedef rk_s32 (*parse_vla_value_fn)(MppCfgIoImpl *, const char *, MppCfgStrBuf *);
+typedef rk_s32 (*ParseVlaValueFunc)(MppCfgIoImpl *, const char *, MppCfgStrBuf *);
 
 static rk_s32 parse_vla_type(MppCfgIoImpl *parent, MppCfgStrBuf *str,
-                             parse_vla_value_fn parse_val)
+                             ParseVlaValueFunc parse_val)
 {
     rk_s32 ret;
 
@@ -2148,8 +2178,8 @@ static rk_s32 parse_vla_type(MppCfgIoImpl *parent, MppCfgStrBuf *str,
     return rk_ok;
 }
 
-rk_s32 parse_vla_elem(MppCfgIoImpl *parent, MppCfgStrBuf *str,
-                      parse_vla_value_fn parse_val)
+static rk_s32 parse_vla_elem(MppCfgIoImpl *parent, MppCfgStrBuf *str,
+                             ParseVlaValueFunc parse_val)
 {
     rk_s32 idx = parent->array_count;
     rk_s32 ret;
@@ -2223,7 +2253,6 @@ static rk_s32 parse_log_array(MppCfgIoImpl *obj, MppCfgStrBuf *str)
     char *buf = NULL;
     rk_s32 old = str->offset;
     rk_s32 ret = rk_nok;
-    char arr_name[64] = {0};
 
     if (str->depth >= MAX_CFG_DEPTH) {
         mpp_loge_f("depth %2d reached max\n", MAX_CFG_DEPTH);
@@ -2270,31 +2299,28 @@ static rk_s32 parse_log_array(MppCfgIoImpl *obj, MppCfgStrBuf *str)
             goto failed;
         }
 
-        snprintf(arr_name, sizeof(arr_name), "array_%d", parent->array_count);
-        /* parse value */
-        ret = parse_log_value(parent, arr_name, str);
-        if (ret) {
-            ret = -6;
+        ret = parse_vla_elem(parent, str, parse_log_value);
+        if (ret < 0)
             goto failed;
-        }
 
         buf = skip_ws_f(str);
         if (!buf) {
             ret = -7;
             goto failed;
         }
-        parent->array_count++;
 
         if (buf[0] == ']')
             break;
     } while (1);
 
+    buf = skip_ws_f(str);
     if (!buf || buf[0] != ']') {
         ret = -9;
         goto failed;
     }
 
     skip_byte_f(str, 1);
+    finish_vla_trim(parent);
 
     cfg_io_dbg_from("depth %2d offset %d -> %d array parse success\n",
                     str->depth, old, str->offset);
@@ -2814,7 +2840,6 @@ static rk_s32 parse_json_array(MppCfgIoImpl *obj, MppCfgStrBuf *str)
     char *buf = NULL;
     rk_s32 old = str->offset;
     rk_s32 ret = rk_nok;
-    char arr_name[64] = {0};
 
     if (str->depth >= MAX_CFG_DEPTH) {
         mpp_loge_f("depth %2d reached max\n", MAX_CFG_DEPTH);
@@ -2861,14 +2886,9 @@ static rk_s32 parse_json_array(MppCfgIoImpl *obj, MppCfgStrBuf *str)
             goto failed;
         }
 
-        snprintf(arr_name, sizeof(arr_name), "array_%d", parent->array_count);
-
-        /* parse value */
-        ret = parse_json_value(parent, arr_name, str);
-        if (ret) {
-            ret = -6;
+        ret = parse_vla_elem(parent, str, parse_json_value);
+        if (ret < 0)
             goto failed;
-        }
 
         buf = skip_ws_f(str);
         if (!buf) {
@@ -2888,7 +2908,6 @@ static rk_s32 parse_json_array(MppCfgIoImpl *obj, MppCfgStrBuf *str)
                 break;
 
             cfg_io_dbg_from("depth %2d offset %d: get next array\n", str->depth, str->offset);
-            parent->array_count++;
             continue;
         }
         break;
@@ -2901,6 +2920,7 @@ static rk_s32 parse_json_array(MppCfgIoImpl *obj, MppCfgStrBuf *str)
     }
 
     skip_byte_f(str, 1);
+    finish_vla_trim(parent);
 
     cfg_io_dbg_from("depth %2d offset %d -> %d array parse success\n",
                     str->depth, old, str->offset);
@@ -3246,7 +3266,6 @@ static rk_s32 parse_toml_array(MppCfgIoImpl *obj, MppCfgStrBuf *str)
     char *buf = NULL;
     rk_s32 old = str->offset;
     rk_s32 ret = rk_nok;
-    char arr_name[64] = {0};
 
     if (str->depth >= MAX_CFG_DEPTH) {
         mpp_loge_f("depth %2d reached max\n", MAX_CFG_DEPTH);
@@ -3292,13 +3311,9 @@ static rk_s32 parse_toml_array(MppCfgIoImpl *obj, MppCfgStrBuf *str)
             goto failed;
         }
 
-        snprintf(arr_name, sizeof(arr_name), "array_%d", parent->array_count);
-        /* parse value */
-        ret = parse_toml_value(parent, arr_name, str);
-        if (ret) {
-            ret = -65;
+        ret = parse_vla_elem(parent, str, parse_toml_value);
+        if (ret < 0)
             goto failed;
-        }
 
         buf = skip_ws_f(str);
         if (!buf) {
@@ -3318,18 +3333,19 @@ static rk_s32 parse_toml_array(MppCfgIoImpl *obj, MppCfgStrBuf *str)
                 break;
 
             cfg_io_dbg_from("depth %2d offset %d: get next array\n", str->depth, str->offset);
-            parent->array_count++;
             continue;
         }
         break;
     } while (1);
 
+    buf = skip_ws_f(str);
     if (!buf || buf[0] != ']') {
         ret = -68;
         goto failed;
     }
 
     skip_byte_f(str, 1);
+    finish_vla_trim(parent);
 
     cfg_io_dbg_from("depth %2d offset %d -> %d array parse success\n",
                     str->depth, old, str->offset);
@@ -4173,9 +4189,80 @@ static void write_struct(MppCfgIoImpl *obj, MppTrie trie, MppCfgStrBuf *str,
     /* VLA array: copy raw data from VLA buffer back to struct */
     if (obj->type == MPP_CFG_TYPE_ARRAY && IS_VLA_SIMPLE_TYPE(obj->array_type) &&
         tbl->tbl.elem_type == ELEM_TYPE_arr) {
-        rk_s32 cpy_size = MPP_MIN((rk_s32)tbl->tbl.elem_size, (rk_s32)obj->raw_size);
+        rk_s32 src_esz = sizeof_type(obj->array_type);
+        rk_s32 dst_esz = (type && type->vla.vla.type == ENTRY_TYPE_VLA_INFO) ?
+                         (rk_s32)type->vla.vla.elem_size : src_esz;
 
-        memcpy((rk_u8 *)st + tbl->tbl.elem_offset, obj->raw, cpy_size);
+        if (src_esz == dst_esz) {
+            rk_s32 cpy_size = MPP_MIN((rk_s32)tbl->tbl.elem_size, (rk_s32)obj->raw_size);
+
+            memcpy((rk_u8 *)st + tbl->tbl.elem_offset, obj->raw, cpy_size);
+        } else {
+            rk_s32 src_cnt = obj->raw_count;
+            rk_s32 dst_cnt = (rk_s32)type->vla.vla.elem_count;
+            rk_s32 cnt = MPP_MIN(src_cnt, dst_cnt);
+            rk_s32 i;
+
+            cfg_io_dbg_show("VLA elem size mismatch: src cnt %d size %d, dst cnt %d size %d.\n",
+                            src_cnt, src_esz, dst_cnt, dst_esz);
+
+            for (i = 0; i < cnt; i++) {
+                void *src = (rk_u8 *)obj->raw + i * src_esz;
+                void *dst = (rk_u8 *)st + tbl->tbl.elem_offset + i * dst_esz;
+
+                if (!src || !dst) {
+                    mpp_loge_f("VLA elem index %d : src or dst is NULL\n", i);
+                    break;
+                }
+
+                switch (type->array_type) {
+                case MPP_CFG_TYPE_s8: {
+                    rk_s8 v = (rk_s8) * (rk_s64 *)src;
+                    *(rk_s8 *)dst = v;
+                } break;
+                case MPP_CFG_TYPE_u8: {
+                    rk_u8 v = (rk_u8) * (rk_s64 *)src;
+                    *(rk_u8 *)dst = v;
+                } break;
+                case MPP_CFG_TYPE_s16: {
+                    rk_s16 v = (rk_s16) * (rk_s64 *)src;
+                    *(rk_s16 *)dst = v;
+                } break;
+                case MPP_CFG_TYPE_u16: {
+                    rk_u16 v = (rk_u16) * (rk_s64 *)src;
+                    *(rk_u16 *)dst = v;
+                } break;
+                case MPP_CFG_TYPE_s32: {
+                    rk_s32 v = (rk_s32) * (rk_s64 *)src;
+                    *(rk_s32 *)dst = v;
+                } break;
+                case MPP_CFG_TYPE_u32: {
+                    rk_u32 v = (rk_u32) * (rk_s64 *)src;
+                    *(rk_u32 *)dst = v;
+                } break;
+                case MPP_CFG_TYPE_s64: {
+                    *(rk_s64 *)dst = *(rk_s64 *)src;
+                } break;
+                case MPP_CFG_TYPE_u64: {
+                    rk_u64 v = (rk_u64) * (rk_s64 *)src;
+                    *(rk_u64 *)dst = v;
+                } break;
+                case MPP_CFG_TYPE_f32: {
+                    float v = (float) * (double *)src;
+                    *(float *)dst = v;
+                } break;
+                case MPP_CFG_TYPE_f64: {
+                    *(double *)dst = *(double *)src;
+                } break;
+                default: {
+                    mpp_loge_f("VLA unsupported target type %s for src %s\n",
+                               strof_type(type->array_type),
+                               strof_type(obj->array_type));
+                    return;
+                } break;
+                }
+            }
+        }
     }
 
     /* Non-VLA array from parsed string: write child elements to struct */
