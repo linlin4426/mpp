@@ -25,6 +25,7 @@
 
 #define MAX_CFG_DEPTH                   (64)
 #define CFG_IO_ARRAY_ELEM_COUNT         (8)
+#define VLA_INIT_CNT                    (8)
 
 #define CFG_IO_DBG_FLOW                 (0x00000001)
 #define CFG_IO_DBG_BYTE                 (0x00000002)
@@ -1798,12 +1799,16 @@ static rk_s32 mpp_cfg_to_toml(MppCfgIoImpl *impl, MppCfgStrBuf *str, rk_s32 firs
     return write_byte_f(str, buf, &len);
 }
 
-static rk_s32 parse_number(MppCfgStrBuf *str, MppCfgType *type, MppCfgVal *val)
+static rk_s32 parse_number(MppCfgStrBuf *str, MppCfgType *type, MppCfgVal *val, rk_s32 peek)
 {
     char *buf = NULL;
     char tmp[64];
     long double value;
     rk_u32 i;
+    rk_u32 str_offset;
+
+    if (peek)
+        str_offset = str->offset;
 
     for (i = 0; i < sizeof(tmp) - 1; i++) {
         buf = show_byte_f(str, 0);
@@ -1828,6 +1833,9 @@ static rk_s32 parse_number(MppCfgStrBuf *str, MppCfgType *type, MppCfgVal *val)
     }
 
 done:
+    if (peek)
+        str->offset = str_offset;
+
     if (!i)
         return rk_nok;
 
@@ -1909,6 +1917,300 @@ static rk_s32 parse_log_string(MppCfgStrBuf *str, char **name, rk_s32 *len, rk_u
 
     *name = start;
     *len = name_len;
+
+    return rk_ok;
+}
+
+static rk_s32 store_vla_simple(MppCfgIoImpl *parent, rk_s32 idx, void *val)
+{
+    rk_s32 esz = sizeof_type(parent->array_type);
+
+    if (!parent->raw) {
+        rk_s32 init_cnt = VLA_INIT_CNT;
+        void *raw_buf = NULL;
+
+        raw_buf = mpp_calloc_size(void, init_cnt * esz);
+        if (!raw_buf) {
+            mpp_loge_f("vla %-16s calloc raw_buf failed\n", parent->name);
+            return rk_nok;
+        }
+
+        parent->raw = raw_buf;
+        parent->raw_size = init_cnt * esz;
+        parent->raw_count = init_cnt;
+        parent->vla.vla.type = ENTRY_TYPE_VLA_INFO;
+        parent->vla.vla.elem_size = esz;
+        parent->vla.vla.elem_count = init_cnt;
+        parent->vla.vla.flex_count = 1;
+        memcpy(raw_buf, val, esz);
+    } else {
+        char *ptr = parent->raw;
+
+        if (idx >= parent->raw_count) {
+            rk_s32 new_cnt = parent->raw_count * 2;
+            rk_s32 new_size = new_cnt * esz;
+
+            if ((new_cnt & ~0xffff) || (new_size & ~0xffff)) {
+                mpp_loge_f("vla %-16s raw_count %d size %d exceeds 16bit limit\n",
+                           parent->name, new_cnt, new_size);
+                return rk_nok;
+            }
+
+            ptr = mpp_realloc_size(ptr, char, new_size);
+            if (!ptr) {
+                mpp_loge_f("vla %-16s realloc raw_buf to %d bytes failed\n",
+                           parent->name, new_size);
+                return rk_nok;
+            }
+
+            memset(ptr + parent->raw_size, 0, new_size - parent->raw_size);
+            parent->raw = (void *)ptr;
+            parent->raw_count = new_cnt;
+            parent->raw_size = new_size;
+        }
+
+        memcpy(ptr + idx * esz, val, esz);
+    }
+
+    return rk_ok;
+}
+
+static rk_s32 store_vla_complex(MppCfgIoImpl *parent, MppCfgIoImpl *elem)
+{
+    rk_s32 idx = parent->array_count;
+
+    if (!parent->elems) {
+        rk_s32 init_cnt = VLA_INIT_CNT;
+        void **elems_buf = NULL;
+
+        elems_buf = mpp_calloc_size(void *, init_cnt);
+        if (!elems_buf) {
+            mpp_loge_f("vla %-16s calloc elems_buf failed\n", parent->name);
+            return rk_nok;
+        }
+
+        parent->elems = (MppCfgIoImpl **)elems_buf;
+        parent->array_size = init_cnt;
+        parent->vla.vla.type = ENTRY_TYPE_VLA_INFO;
+        parent->vla.vla.elem_size = sizeof(MppCfgIoImpl *);
+        parent->vla.vla.elem_count = init_cnt;
+        parent->vla.vla.flex_count = 1;
+    } else {
+        if (idx >= parent->array_size) {
+            MppCfgIoImpl **ptr = parent->elems;
+            rk_s32 new_cnt = parent->array_size * 2;
+            rk_s32 new_size = new_cnt * sizeof(MppCfgIoImpl *);
+
+            if ((new_cnt & ~0xffff) || (new_size & ~0xffff)) {
+                mpp_loge_f("vla %-16s elem_count %d size %d exceeds 16bit limit\n",
+                           parent->name, new_cnt, new_size);
+                return rk_nok;
+            }
+
+            ptr = mpp_realloc_size(ptr, MppCfgIoImpl *, new_size);
+            if (!ptr) {
+                mpp_loge_f("vla %-16s realloc elems_buf to %d bytes failed\n",
+                           parent->name, new_size);
+                return rk_nok;
+            }
+
+            memset(&ptr[parent->array_size], 0,
+                   (new_cnt - parent->array_size) * sizeof(MppCfgIoImpl *));
+            parent->elems = ptr;
+            parent->array_size = new_cnt;
+        }
+    }
+
+    parent->elems[idx] = elem;
+    list_del_init(&elem->list);
+
+    return rk_ok;
+}
+
+void finish_vla_trim(MppCfgIoImpl *parent)
+{
+    rk_s32 count = parent->array_count;
+
+    if (IS_VLA_SIMPLE_TYPE(parent->array_type)) {
+        parent->raw_count = count;
+        parent->raw_size = count * sizeof_type(parent->array_type);
+    } else {
+        parent->array_size = count;
+    }
+
+    parent->vla.vla.elem_count = count;
+}
+
+static rk_s32 peek_vla_is_simple(MppCfgStrBuf *str)
+{
+    char *buf = show_byte_f(str, 0);
+
+    if (!buf)
+        return 0;
+
+    switch (buf[0]) {
+    case 't':
+    case 'f':
+    case '-':
+    case '0' ... '9': {
+        return 1;
+    } break;
+    default: {
+        return 0;
+    } break;
+    }
+}
+
+static rk_s32 parse_vla_number_and_bool(MppCfgStrBuf *str, MppCfgType *type,
+                                        MppCfgVal *val, rk_s32 peek)
+{
+    char *buf = NULL;
+    char *b = NULL;
+
+    buf = show_byte_f(str, 0);
+    if (!buf)
+        goto failed;
+
+    if (buf[0] == '-' || (buf[0] >= '0' && buf[0] <= '9'))
+        return parse_number(str, type, val, peek);
+
+    if (buf[0] == 't') {
+        b = test_byte_f(str, 4);
+        if (b && !strncmp(b, "true", 4)) {
+            val->b1 = 1;
+            *type = MPP_CFG_TYPE_BOOL;
+            if (!peek)
+                skip_byte_f(str, 4);
+            return rk_ok;
+        }
+        goto failed;
+    }
+
+    if (buf[0] == 'f') {
+        b = test_byte_f(str, 5);
+        if (b && !strncmp(b, "false", 5)) {
+            val->b1 = 0;
+            *type = MPP_CFG_TYPE_BOOL;
+            if (!peek)
+                skip_byte_f(str, 5);
+            return rk_ok;
+        }
+        goto failed;
+    }
+
+failed:
+    mpp_loge_f("parse number/bool failed at offset %d char '%c'.\n",
+               str->offset, buf ? buf[0] : '\0');
+
+    return rk_nok;
+}
+
+typedef rk_s32 (*parse_vla_value_fn)(MppCfgIoImpl *, const char *, MppCfgStrBuf *);
+
+static rk_s32 parse_vla_type(MppCfgIoImpl *parent, MppCfgStrBuf *str,
+                             parse_vla_value_fn parse_val)
+{
+    rk_s32 ret;
+
+    if (peek_vla_is_simple(str)) {
+        MppCfgVal val;
+        MppCfgType type;
+
+        ret = parse_vla_number_and_bool(str, &type, &val, 1);
+        if (ret) {
+            mpp_loge_f("vla %-16s failed to peek simple type for array\n",
+                       parent->name);
+            return ret;
+        }
+
+        parent->array_type = type;
+    } else {
+        MppCfgIoImpl *first_child = NULL;
+
+        ret = parse_val(parent, NULL, str);
+        if (ret) {
+            mpp_loge_f("vla %-16s failed to parse first complex element\n",
+                       parent->name);
+            return ret;
+        }
+
+        first_child = list_last_entry(&parent->child, MppCfgIoImpl, list);
+
+        if (IS_VLA_COMPLEX_TYPE(first_child->type)) {
+            parent->array_type = first_child->type;
+        } else {
+            mpp_loge_f("vla %-16s first element type %s is not a valid VLA element type\n",
+                       parent->name, strof_type(first_child->type));
+            return rk_nok;
+        }
+    }
+
+    return rk_ok;
+}
+
+rk_s32 parse_vla_elem(MppCfgIoImpl *parent, MppCfgStrBuf *str,
+                      parse_vla_value_fn parse_val)
+{
+    rk_s32 idx = parent->array_count;
+    rk_s32 ret;
+
+    if (parent->array_type == MPP_CFG_TYPE_INVALID) {
+        /* first element: determine mode by peeking type */
+        ret = parse_vla_type(parent, str, parse_val);
+        if (ret) {
+            mpp_loge_f("vla %-16s failed to detect array element type\n",
+                       parent->name);
+            return -10;
+        }
+    }
+
+    if (IS_VLA_SIMPLE_TYPE(parent->array_type)) {
+        /* simple mode: all elements must be simple values */
+        MppCfgVal val;
+        MppCfgType num_type;
+
+        ret = parse_vla_number_and_bool(str, &num_type, &val, 0);
+        if (ret) {
+            mpp_loge_f("vla %-16s element %d: expected simple type %s, got non-simple\n",
+                       parent->name, idx, strof_type(parent->array_type));
+            return -10;
+        }
+        if (num_type != parent->array_type) {
+            mpp_loge_f("vla %-16s element %d: type mismatch expected %s got %s\n",
+                       parent->name, idx, strof_type(parent->array_type), strof_type(num_type));
+            return -10;
+        }
+        ret = store_vla_simple(parent, idx, &val);
+        if (ret) {
+            mpp_loge_f("vla %-16s element %d: failed to store simple value\n",
+                       parent->name, idx);
+            return -10;
+        }
+    } else {
+        /* complex mode: all elements must be complex values of same type */
+        MppCfgIoImpl *elem = NULL;
+
+        if (parent->elems) {
+            ret = parse_val(parent, NULL, str);
+            if (ret)
+                return ret;
+        }
+
+        elem = list_last_entry(&parent->child, MppCfgIoImpl, list);
+        if (elem->type != parent->array_type) {
+            mpp_loge_f("vla %-16s element %d: type mismatch expected %s got %s\n",
+                       parent->name, idx, strof_type(parent->array_type), strof_type(elem->type));
+            return -10;
+        }
+        ret = store_vla_complex(parent, elem);
+        if (ret) {
+            mpp_loge_f("vla %-16s element %d: failed to store complex value\n",
+                       parent->name, idx);
+            return -10;
+        }
+    }
+
+    parent->array_count++;
 
     return rk_ok;
 }
@@ -2081,7 +2383,7 @@ static rk_s32 parse_log_value(MppCfgIoImpl *parent, const char *name, MppCfgStrB
         cfg_io_dbg_from("depth %2d offset %d: get value number start\n",
                         str->depth, str->offset);
 
-        ret = parse_number(str, &type, &val);
+        ret = parse_number(str, &type, &val, 0);
         if (ret)
             return ret;
 
@@ -2685,7 +2987,7 @@ static rk_s32 parse_json_value(MppCfgIoImpl *parent, const char *name, MppCfgStr
         cfg_io_dbg_from("depth %2d offset %d: get value number start\n",
                         str->depth, str->offset);
 
-        ret = parse_number(str, &type, &val);
+        ret = parse_number(str, &type, &val, 0);
         if (ret)
             return ret;
 
@@ -3141,7 +3443,7 @@ static rk_s32 parse_toml_value(MppCfgIoImpl *parent, const char *name, MppCfgStr
         cfg_io_dbg_from("depth %2d offset %d: get value number start\n",
                         str->depth, str->offset);
 
-        ret = parse_number(str, &type, &val);
+        ret = parse_number(str, &type, &val, 0);
         if (ret)
             return ret;
 
