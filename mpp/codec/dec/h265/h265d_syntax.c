@@ -189,8 +189,9 @@ static void fill_picture_parameters(const H265dPrs *p, DXVA_PicParams_HEVC *pp)
         }
 
         if (cur_src_rps) {
-            RK_U32 n_pics = p->slice.st_rps_using->num_neg;
+            RK_U32 n_pics = cur_src_rps->num_neg;
             cur_dst_rps->num_negative_pics = n_pics;
+            cur_dst_rps->ref_idx_plus1 = cur_src_rps->ref_idx_plus1;
             cur_dst_rps->num_positive_pics = cur_src_rps->num_deltas - n_pics;
             for (i = 0; i < cur_dst_rps->num_negative_pics; i++) {
                 cur_dst_rps->delta_poc_s0[i] = cur_src_rps->poc_delta[i];
@@ -208,6 +209,7 @@ static void fill_picture_parameters(const H265dPrs *p, DXVA_PicParams_HEVC *pp)
                 RK_U32 n_pics = src_rps[i].num_neg;
                 dst_rps[i].num_negative_pics = n_pics;
                 dst_rps[i].num_positive_pics = src_rps[i].num_deltas - n_pics;
+                dst_rps[i].ref_idx_plus1 = src_rps[i].ref_idx_plus1;
                 for (j = 0; j < dst_rps[i].num_negative_pics; j++) {
                     dst_rps[i].delta_poc_s0[j] = src_rps[i].poc_delta[j];
                     dst_rps[i].s0_used_flag[j] = MPP_GET_BIT(src_rps[i].flags, j);

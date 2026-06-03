@@ -2911,27 +2911,31 @@ RK_S32 hal_h265d_vdpu38x_output_pps_packet(void *hal, void *dxva, RK_U32 *scanli
              soc_type == ROCKCHIP_SOC_RK3572 ||
              soc_type == ROCKCHIP_SOC_RK3539) &&
             dxva_ctx->pp.rps_update_flag) {
-            Short_SPS_RPS_HEVC *cur_st_rps_ptr = &dxva_ctx->pp.cur_st_rps;
+            Short_SPS_RPS_HEVC *st_rps_ptr = NULL;
+
+            st_rps_ptr = (dxva_ctx->pp.cur_st_rps.ref_idx_plus1 == 0) ?
+                         &dxva_ctx->pp.cur_st_rps :
+                         &dxva_ctx->pp.sps_st_rps[dxva_ctx->pp.cur_st_rps.ref_idx_plus1 - 1];
 
             for (i = 0; i < 32; i ++) {
                 mpp_put_bits(&bp, dxva_ctx->pp.sps_lt_rps[i].lt_ref_pic_poc_lsb, 16);
                 mpp_put_bits(&bp, dxva_ctx->pp.sps_lt_rps[i].used_by_curr_pic_lt_flag, 1);
             }
 
-            mpp_put_bits(&bp, cur_st_rps_ptr->num_negative_pics, 4);
-            mpp_put_bits(&bp, cur_st_rps_ptr->num_positive_pics, 4);
+            mpp_put_bits(&bp, st_rps_ptr->num_negative_pics, 4);
+            mpp_put_bits(&bp, st_rps_ptr->num_positive_pics, 4);
 
-            for (i = 0; i <  cur_st_rps_ptr->num_negative_pics; i++) {
-                mpp_put_bits(&bp, cur_st_rps_ptr->delta_poc_s0[i], 16);
-                mpp_put_bits(&bp, cur_st_rps_ptr->s0_used_flag[i], 1);
+            for (i = 0; i <  st_rps_ptr->num_negative_pics; i++) {
+                mpp_put_bits(&bp, st_rps_ptr->delta_poc_s0[i], 16);
+                mpp_put_bits(&bp, st_rps_ptr->s0_used_flag[i], 1);
             }
 
-            for (i = 0; i <  cur_st_rps_ptr->num_positive_pics; i++) {
-                mpp_put_bits(&bp, cur_st_rps_ptr->delta_poc_s1[i], 16);
-                mpp_put_bits(&bp, cur_st_rps_ptr->s1_used_flag[i], 1);
+            for (i = 0; i <  st_rps_ptr->num_positive_pics; i++) {
+                mpp_put_bits(&bp, st_rps_ptr->delta_poc_s1[i], 16);
+                mpp_put_bits(&bp, st_rps_ptr->s1_used_flag[i], 1);
             }
 
-            for ( i = cur_st_rps_ptr->num_negative_pics + cur_st_rps_ptr->num_positive_pics; i < 15; i++) {
+            for ( i = st_rps_ptr->num_negative_pics + st_rps_ptr->num_positive_pics; i < 15; i++) {
                 mpp_put_bits(&bp, 0, 16);
                 mpp_put_bits(&bp, 0, 1);
             }

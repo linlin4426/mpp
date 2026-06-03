@@ -307,8 +307,6 @@ MPP_RET h265d_callback(void *ctx, void *err_info)
         s->rps_need_upate = 0;
     }
 
-    (void) err_info;
-
     return MPP_OK;
 }
 

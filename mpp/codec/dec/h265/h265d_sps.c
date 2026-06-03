@@ -104,6 +104,7 @@ static RK_S32 h265d_rps_direct(BitReadCtx_t *bit, H265dStRps *rps)
 
     READ_UE(bit, &rps->num_neg);
     READ_UE(bit, &num_positive);
+    rps->ref_idx_plus1 = 0;
 
     if (rps->num_neg >= MAX_REFS || num_positive >= MAX_REFS) {
         mpp_loge("sps: short term rps refs count over max\n");
@@ -174,8 +175,10 @@ static RK_S32 h265d_rps_prediction(BitReadCtx_t *bit, H265dStRps *rps,
             return MPP_ERR_STREAM;
         }
         ref_rps = &sps->st_rps_sps[sps->nb_st_rps - delta_idx];
+        rps->ref_idx_plus1 = sps->nb_st_rps - delta_idx + 1;
     } else {
         ref_rps = &sps->st_rps_sps[rps - sps->st_rps_sps - 1];
+        rps->ref_idx_plus1 = 0;
     }
 
     READ_BITS(bit, 1, &sign_flag);

@@ -18,6 +18,7 @@ typedef struct H265dStRps_t {
     RK_S32 ref_delta_cnt;    /* reference delta count */
     RK_S32 poc_delta[32];    /* POC delta values */
     RK_U32 flags;            /* flags for each picture (bit field) */
+    RK_U32 ref_idx_plus1;    /* reference index + 1, 0: invalid */
 } H265dStRps;
 
 /* Long-Term Reference Picture Set in SPS */
@@ -52,6 +53,7 @@ typedef struct Short_SPS_RPS_HEVC_t {
     RK_U8 s0_used_flag[16];
     RK_S16 delta_poc_s1[16];
     RK_U8  s1_used_flag[16];
+    RK_U32 ref_idx_plus1;
 } Short_SPS_RPS_HEVC;
 
 typedef struct LT_SPS_RPS_HEVC_t {
