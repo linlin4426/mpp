@@ -225,83 +225,6 @@ done:
     return ret;
 }
 
-rk_s32 mpp_trie_init_by_root(MppTrie *trie, void *root)
-{
-    MppTrieImpl *p;
-    MppTrieInfo *info;
-    rk_s32 i;
-
-    if (!trie || !root) {
-        mpp_loge_f("invalid trie %p root %p\n", trie, root);
-        return rk_nok;
-    }
-
-    *trie = NULL;
-    p = mpp_calloc(MppTrieImpl, 1);
-    if (!p) {
-        mpp_loge_f("create trie impl failed\n");
-        return rk_nok;
-    }
-
-    info = mpp_trie_get_info_from_root(root, "__name__");
-    if (info)
-        p->name = mpp_trie_info_ctx(info);
-
-    info = mpp_trie_get_info_from_root(root, "__node__");
-    if (info)
-        p->node_used = *(rk_u32 *)mpp_trie_info_ctx(info);
-
-    info = mpp_trie_get_info_from_root(root, "__info__");
-    if (info)
-        p->info_count = *(rk_u32 *)mpp_trie_info_ctx(info);
-
-    /* import and update new buffer */
-    p->nodes = (MppTrieNode *)root;
-
-    if (mpp_trie_debug & MPP_TRIE_DBG_IMPORT)
-        mpp_trie_dump(p, "root import");
-
-    info = mpp_trie_get_info_first(p);
-
-    for (i = 0; i < p->info_count; i++) {
-        const char *name = mpp_trie_info_name(info);
-        MppTrieInfo *info_set = info;
-        MppTrieInfo *info_ret = mpp_trie_get_info(p, name);
-
-        info = mpp_trie_get_info_next(p, info);
-
-        if (info_ret && info_set == info_ret && info_ret->index == i)
-            continue;
-
-        mpp_loge_f("trie check on import found mismatch info %s [%d:%p] - [%d:%p]\n",
-                   name, i, info_set, info_ret ? info_ret->index : -1, info_ret);
-        return rk_nok;
-    }
-
-    *trie = p;
-
-    return rk_ok;
-}
-
-rk_s32 mpp_trie_deinit(MppTrie trie)
-{
-    if (trie) {
-        MppTrieImpl *p = (MppTrieImpl *)trie;
-
-        /* NOTE: do not remvoe imported root */
-        if (p->node_count)
-            mpp_free(p->nodes);
-        else
-            p->nodes = NULL;
-
-        MPP_FREE(p->info_buf);
-        MPP_FREE(p);
-        return rk_ok;
-    }
-
-    return rk_nok;
-}
-
 static rk_s32 mpp_trie_walk(MppTrieWalk *p, rk_s32 idx, rk_u32 key, rk_u32 keyx, rk_u32 end)
 {
     MppTrieNode *node = &p->root[idx];
@@ -376,6 +299,156 @@ static rk_s32 mpp_trie_walk(MppTrieWalk *p, rk_s32 idx, rk_u32 key, rk_u32 keyx,
     return next;
 }
 
+static MppTrieNode *mpp_trie_get_node_at(MppTrieNode *root, rk_s32 start, const char *name)
+{
+    const char *s = name;
+    MppTrieWalk walk;
+    rk_s32 idx = start;
+
+    if (!root || !name || !*name) {
+        mpp_loge_f("invalid root %p name %p\n", root, name);
+        return NULL;
+    }
+
+    trie_dbg_get("root %p search %s from %d\n", root, name, start);
+
+    walk.root = root;
+    walk.tag = 0;
+    walk.len = 0;
+    walk.match = 0;
+
+    do {
+        char key = *s++;
+        rk_u32 key0 = (key >> 4) & 0xf;
+        rk_u32 key1 = key & 0xf;
+        rk_u32 end = s[0] == '\0';
+
+        idx = mpp_trie_walk(&walk, idx, key, key0, 0);
+        if (idx < 0)
+            break;
+
+        idx = mpp_trie_walk(&walk, idx, key, key1, end);
+        if (idx < 0 || end)
+            break;
+    } while (1);
+
+    trie_dbg_get("get %s ret node %d:%d\n", name, idx, (idx >= 0) ? root[idx].id : INVALID_NODE_ID);
+
+    return (idx >= 0) ? &root[idx] : NULL;
+}
+
+rk_s32 mpp_trie_init_by_root(MppTrie *trie, void *root)
+{
+    MppTrieImpl *p;
+    MppTrieInfo *info;
+    rk_s32 i;
+
+    if (!trie || !root) {
+        mpp_loge_f("invalid trie %p root %p\n", trie, root);
+        return rk_nok;
+    }
+
+    *trie = NULL;
+    p = mpp_calloc(MppTrieImpl, 1);
+    if (!p) {
+        mpp_loge_f("create trie impl failed\n");
+        return rk_nok;
+    }
+
+    info = mpp_trie_get_info_from_root(root, "__name__");
+    if (info)
+        p->name = mpp_trie_info_ctx(info);
+
+    info = mpp_trie_get_info_from_root(root, "__node__");
+    if (info)
+        p->node_used = *(rk_u32 *)mpp_trie_info_ctx(info);
+
+    info = mpp_trie_get_info_from_root(root, "__info__");
+    if (info)
+        p->info_count = *(rk_u32 *)mpp_trie_info_ctx(info);
+
+    /* import and update new buffer */
+    p->nodes = (MppTrieNode *)root;
+
+    if (mpp_trie_debug & MPP_TRIE_DBG_IMPORT)
+        mpp_trie_dump(p, "root import");
+
+    info = mpp_trie_get_info_first(p);
+
+    for (i = 0; i < p->info_count; i++) {
+        const char *name = mpp_trie_info_name(info);
+        MppTrieInfo *info_set = info;
+        MppTrieInfo *info_ret = mpp_trie_get_info(p, name);
+
+        info = mpp_trie_get_info_next(p, info);
+
+        if (info_ret && info_set == info_ret && info_ret->index == i)
+            continue;
+
+        /*
+         * Fallback for entries under VLA/array sub-trees.
+         * The info stores the segment name but the entry is registered
+         * under a sub-root node. Walk back through prev links to find
+         * the sub-root ancestor, then retry the name lookup from there.
+         */
+        if (!info_ret) {
+            rk_s32 off = (rk_s32)((rk_u8 *)info_set - (rk_u8 *)p->nodes);
+            rk_s32 j;
+            rk_s32 validated = 0;
+
+            for (j = 0; j < p->node_used; j++) {
+                MppTrieNode *n = &p->nodes[j];
+
+                if (n->id != off)
+                    continue;
+
+                rk_s32 walk = n->idx;
+
+                while (walk > 0 && !p->nodes[walk].sub_root)
+                    walk = p->nodes[walk].prev;
+
+                if (walk > 0) {
+                    MppTrieNode *node = mpp_trie_get_node_at(p->nodes, walk, name);
+                    if (node && node == n)
+                        validated = 1;
+                }
+
+                break;
+            }
+
+            if (validated)
+                continue;
+        }
+
+        mpp_loge_f("trie check on import found mismatch info %s [%d:%p] - [%d:%p]\n",
+                   name, i, info_set, info_ret ? info_ret->index : -1, info_ret);
+        return rk_nok;
+    }
+
+    *trie = p;
+
+    return rk_ok;
+}
+
+rk_s32 mpp_trie_deinit(MppTrie trie)
+{
+    if (trie) {
+        MppTrieImpl *p = (MppTrieImpl *)trie;
+
+        /* NOTE: do not remvoe imported root */
+        if (p->node_count)
+            mpp_free(p->nodes);
+        else
+            p->nodes = NULL;
+
+        MPP_FREE(p->info_buf);
+        MPP_FREE(p);
+        return rk_ok;
+    }
+
+    return rk_nok;
+}
+
 /*
  * trie_pave_segment - pave one segment's characters into trie from start_idx
  *
@@ -417,44 +490,6 @@ static rk_s32 trie_pave_segment(MppTrieImpl *p, const char *seg, rk_s32 seg_len,
     }
 
     return idx;
-}
-
-static MppTrieNode *mpp_trie_get_node_at(MppTrieNode *root, rk_s32 start, const char *name)
-{
-    const char *s = name;
-    MppTrieWalk walk;
-    rk_s32 idx = start;
-
-    if (!root || !name || !*name) {
-        mpp_loge_f("invalid root %p name %p\n", root, name);
-        return NULL;
-    }
-
-    trie_dbg_get("root %p search %s from %d\n", root, name, start);
-
-    walk.root = root;
-    walk.tag = 0;
-    walk.len = 0;
-    walk.match = 0;
-
-    do {
-        char key = *s++;
-        rk_u32 key0 = (key >> 4) & 0xf;
-        rk_u32 key1 = key & 0xf;
-        rk_u32 end = s[0] == '\0';
-
-        idx = mpp_trie_walk(&walk, idx, key, key0, 0);
-        if (idx < 0)
-            break;
-
-        idx = mpp_trie_walk(&walk, idx, key, key1, end);
-        if (idx < 0 || end)
-            break;
-    } while (1);
-
-    trie_dbg_get("get %s ret node %d:%d\n", name, idx, (idx >= 0) ? root[idx].id : INVALID_NODE_ID);
-
-    return (idx >= 0) ? &root[idx] : NULL;
 }
 
 static MppTrieNode *mpp_trie_get_node(MppTrieNode *root, const char *name)
