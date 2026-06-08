@@ -340,7 +340,7 @@ static MPP_RET vepu511a_h265_setup_hal_bufs(H265eV511AHalContext *ctx)
 
     smear_size = MPP_ALIGN(prep->width, 256) / 256 * MPP_ALIGN(prep->height, 32) / 32 * 16;
     smear_r_size = MPP_ALIGN(prep->height, 256) / 256 * MPP_ALIGN(prep->width, 32) / 32 * 16;
-    smear_size = MPP_MAX(smear_size, smear_r_size) * 2;
+    smear_size = MPP_MAX(smear_size, smear_r_size);
 
     if (frame_size > ctx->frame_size || new_max_cnt > old_max_cnt ||
         smear_size != ctx->smear_size) {
