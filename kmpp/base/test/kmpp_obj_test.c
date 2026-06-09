@@ -584,7 +584,7 @@ static rk_s32 kmpp_obj_vla_test(const char *name, rk_u32 flag)
     VlaTestTop *top;
     VlaTestMid *mid0, *mid1;
     VlaTestInner *inner0, *inner1;
-    KmppEntry path[KMPP_VLA_MAX_DEPTH];
+    KmppObjPos pos;
     rk_s32 val;
     rk_s32 ret = rk_ok;
     (void)name;
@@ -710,89 +710,106 @@ static rk_s32 kmpp_obj_vla_test(const char *name, rk_u32 flag)
     inner1[1].tag = 5;
 
     /* 5. test: single VLA + tbl */
-    ret = kmpp_obj_vla_resolve(obj, "mid:0:id", path);
+    kmpp_obj_pos_init(&pos);
+    ret = kmpp_obj_pos_seek(obj, &pos, "mid", 0);
     if (ret) {
-        mpp_log("vla_resolve mid:0:id failed\n");
+        mpp_log("pos_seek mid 0 failed\n");
         goto fail;
     }
-    ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    ret = kmpp_obj_pos_get_s32(obj, &pos, "id", &val);
     if (ret || val != 100) {
-        mpp_log("mid:0:id = %d expected 100\n", val);
+        mpp_log("mid[0].id = %d expected 100\n", val);
         goto fail;
     }
     test_detail("  mid:0:id           = %d  ok\n", val);
 
-    ret = kmpp_obj_vla_resolve(obj, "mid:1:id", path);
+    ret = kmpp_obj_pos_seek(obj, &pos, NULL, 1);
     if (ret) {
-        mpp_log("vla_resolve mid:1:id failed\n");
+        mpp_log("pos_seek mid 1 failed\n");
         goto fail;
     }
-    ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    ret = kmpp_obj_pos_get_s32(obj, &pos, "id", &val);
     if (ret || val != 200) {
-        mpp_log("mid:1:id = %d expected 200\n", val);
+        mpp_log("mid[1].id = %d expected 200\n", val);
         goto fail;
     }
     test_detail("  mid:1:id           = %d  ok\n", val);
 
     /* 6. test: double VLA + tbl */
-    ret = kmpp_obj_vla_resolve(obj, "mid:0:inner:0:value", path);
+    kmpp_obj_pos_init(&pos);
+    ret = kmpp_obj_pos_seek(obj, &pos, "mid", 0);
     if (ret) {
-        mpp_log("vla_resolve mid:0:inner:0:value failed\n");
+        mpp_log("pos_seek mid 0 failed\n");
         goto fail;
     }
-    ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    ret = kmpp_obj_pos_seek(obj, &pos, "inner", 0);
+    if (ret) {
+        mpp_log("pos_seek inner 0 failed\n");
+        goto fail;
+    }
+    ret = kmpp_obj_pos_get_s32(obj, &pos, "value", &val);
     if (ret || val != 10) {
-        mpp_log("mid:0:inner:0:value = %d expected 10\n", val);
+        mpp_log("mid[0].inner[0].value = %d expected 10\n", val);
         goto fail;
     }
     test_detail("  mid:0:inner:0:value = %d  ok\n", val);
 
-    ret = kmpp_obj_vla_resolve(obj, "mid:0:inner:1:tag", path);
+    ret = kmpp_obj_pos_seek(obj, &pos, NULL, 1);
     if (ret) {
-        mpp_log("vla_resolve mid:0:inner:1:tag failed\n");
+        mpp_log("pos_seek inner 1 failed\n");
         goto fail;
     }
-    ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    ret = kmpp_obj_pos_get_s32(obj, &pos, "tag", &val);
     if (ret || val != 2) {
-        mpp_log("mid:0:inner:1:tag = %d expected 2\n", val);
+        mpp_log("mid[0].inner[1].tag = %d expected 2\n", val);
         goto fail;
     }
     test_detail("  mid:0:inner:1:tag   = %d  ok\n", val);
 
-    ret = kmpp_obj_vla_resolve(obj, "mid:1:inner:0:value", path);
+    kmpp_obj_pos_init(&pos);
+    ret = kmpp_obj_pos_seek(obj, &pos, "mid", 1);
     if (ret) {
-        mpp_log("vla_resolve mid:1:inner:0:value failed\n");
+        mpp_log("pos_seek mid 1 failed\n");
         goto fail;
     }
-    ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    ret = kmpp_obj_pos_seek(obj, &pos, "inner", 0);
+    if (ret) {
+        mpp_log("pos_seek inner 0 failed\n");
+        goto fail;
+    }
+    ret = kmpp_obj_pos_get_s32(obj, &pos, "value", &val);
     if (ret || val != 40) {
-        mpp_log("mid:1:inner:0:value = %d expected 40\n", val);
+        mpp_log("mid[1].inner[0].value = %d expected 40\n", val);
         goto fail;
     }
     test_detail("  mid:1:inner:0:value = %d  ok\n", val);
 
-    ret = kmpp_obj_vla_resolve(obj, "mid:1:inner:1:tag", path);
+    ret = kmpp_obj_pos_seek(obj, &pos, NULL, 1);
     if (ret) {
-        mpp_log("vla_resolve mid:1:inner:1:tag failed\n");
+        mpp_log("pos_seek inner 1 failed\n");
         goto fail;
     }
-    ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    ret = kmpp_obj_pos_get_s32(obj, &pos, "tag", &val);
     if (ret || val != 5) {
-        mpp_log("mid:1:inner:1:tag = %d expected 5\n", val);
+        mpp_log("mid[1].inner[1].tag = %d expected 5\n", val);
         goto fail;
     }
     test_detail("  mid:1:inner:1:tag   = %d  ok\n", val);
 
     /* 7. set and readback */
-    ret = kmpp_obj_vla_resolve(obj, "mid:0:inner:2:value", path);
+    kmpp_obj_pos_init(&pos);
+    ret = kmpp_obj_pos_seek(obj, &pos, "mid", 0);
     if (ret)
         goto fail;
-    ret = kmpp_obj_vla_tbl_set_s32(obj, path, 99);
+    ret = kmpp_obj_pos_seek(obj, &pos, "inner", 2);
+    if (ret)
+        goto fail;
+    ret = kmpp_obj_pos_set_s32(obj, &pos, "value", 99);
     if (ret) {
-        mpp_log("set mid:0:inner:2:value failed\n");
+        mpp_log("set mid[0].inner[2].value failed\n");
         goto fail;
     }
-    ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    ret = kmpp_obj_pos_get_s32(obj, &pos, "value", &val);
     if (ret || val != 99) {
         mpp_log("readback = %d expected 99\n", val);
         goto fail;
@@ -800,22 +817,20 @@ static rk_s32 kmpp_obj_vla_test(const char *name, rk_u32 flag)
     test_detail("  mid:0:inner:2:value set/get = %d  ok\n", val);
 
     /* 8. out of range */
-    ret = kmpp_obj_vla_resolve(obj, "mid:2:id", path);
-    if (ret)
-        goto fail;
-    ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    kmpp_obj_pos_init(&pos);
+    ret = kmpp_obj_pos_seek(obj, &pos, "mid", 2);
     if (!ret) {
-        mpp_log("mid:2:id should fail (out of range)\n");
+        mpp_log("mid[2] should fail (out of range)\n");
         goto fail;
     }
     test_detail("  mid:2:id           out of range (expected)\n");
 
-    ret = kmpp_obj_vla_resolve(obj, "mid:0:inner:3:value", path);
+    ret = kmpp_obj_pos_seek(obj, &pos, "mid", 0);
     if (ret)
         goto fail;
-    ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
+    ret = kmpp_obj_pos_seek(obj, &pos, "inner", 3);
     if (!ret) {
-        mpp_log("mid:0:inner:3:value should fail\n");
+        mpp_log("inner[3] should fail\n");
         goto fail;
     }
     test_detail("  mid:0:inner:3:value out of range (expected)\n");

@@ -34,7 +34,7 @@ extern KmppObjDef mpp_enc_ref_cfg_objdef(void);
  * test_objdef_access - verify objdef trie entries (metadata only)
  *
  * Scalar entries and array subroots are queried directly.
- * VLA field access requires index: use st_cfg:0:field via kmpp_obj_vla_resolve.
+ * VLA field access uses kmpp_obj_pos_seek + kmpp_obj_pos_get_s32.
  */
 static rk_s32 test_objdef_access(void)
 {
@@ -106,44 +106,9 @@ static rk_s32 test_objdef_access(void)
 }
 
 /*
- * helper: resolve field entry from indexed VLA path
- *
- * Resolves "st_cfg:0:is_non_ref" and returns pointer to terminal LOC_TBL entry.
- */
-static KmppEntry *vla_resolve_field(KmppObj obj, const char *path,
-                                    KmppEntry *chain)
-{
-    rk_s32 i;
-    rk_s32 ret = kmpp_obj_vla_resolve(obj, path, chain);
-
-    if (ret)
-        return NULL;
-
-    for (i = KMPP_VLA_MAX_DEPTH - 1; i >= 0; i--) {
-        if (chain[i].val)
-            return &chain[i];
-    }
-
-    return NULL;
-}
-
-/*
- * helper: read s32 from VLA element via array base + stride + field offset
- */
-static rk_s32 vla_read_s32(void *base, rk_u32 stride, rk_s32 cnt,
-                           KmppEntry *field, rk_s32 idx, rk_s32 *val)
-{
-    if (idx < 0 || idx >= cnt)
-        return rk_nok;
-
-    *val = *(rk_s32 *)((char *)base + idx * stride + field->tbl.elem_offset);
-    return rk_ok;
-}
-
-/*
  * test_obj_access - verify VLA data access on obj instance
  *
- * Uses kmpp_obj_vla_resolve for field metadata,
+ * Uses kmpp_obj_pos for field navigation,
  * uses MPP_REF_ST_ARR/LT_ARR for array base address.
  */
 static rk_s32 test_obj_access(void)
@@ -154,8 +119,7 @@ static rk_s32 test_obj_access(void)
     KmppEntry *lt_cfg_arr = NULL;
     MppEncRefCfg obj = NULL;
     MppEncRefCfgImpl *cfg;
-    KmppEntry chain[KMPP_VLA_MAX_DEPTH];
-    KmppEntry *fld;
+    KmppObjPos pos;
     rk_s32 val;
 
     mpp_logi("test_obj_access start\n");
@@ -193,60 +157,52 @@ static rk_s32 test_obj_access(void)
     cfg->lt_cfg_cnt = 1;
 
     /* st_cfg:0:is_non_ref -> 0 */
-    fld = vla_resolve_field(obj, "st_cfg:0:is_non_ref", chain);
-    MPP_ASSERT_NOT_NULLm("resolve st_cfg:0:is_non_ref", fld);
-    _mpp_ret = vla_read_s32(st_arr, st_cfg_arr->vla.elem_size, cfg->st_cfg_cnt,
-                            fld, 0, &val);
-    MPP_ASSERT_FALSEm("read st_cfg:0:is_non_ref", _mpp_ret);
+    kmpp_obj_pos_init(&pos);
+    _mpp_ret = kmpp_obj_pos_seek(obj, &pos, "st_cfg", 0);
+    MPP_ASSERT_FALSEm("pos_seek st_cfg 0", _mpp_ret);
+    _mpp_ret = kmpp_obj_pos_get_s32(obj, &pos, "is_non_ref", &val);
+    MPP_ASSERT_FALSEm("pos_get st_cfg:0:is_non_ref", _mpp_ret);
     MPP_ASSERT_EQm("st_cfg:0:is_non_ref", 0, val);
 
     /* st_cfg:1:is_non_ref -> 1 */
-    fld = vla_resolve_field(obj, "st_cfg:1:is_non_ref", chain);
-    MPP_ASSERT_NOT_NULLm("resolve st_cfg:1:is_non_ref", fld);
-    _mpp_ret = vla_read_s32(st_arr, st_cfg_arr->vla.elem_size, cfg->st_cfg_cnt,
-                            fld, 1, &val);
-    MPP_ASSERT_FALSEm("read st_cfg:1:is_non_ref", _mpp_ret);
+    _mpp_ret = kmpp_obj_pos_seek(obj, &pos, NULL, 1);
+    MPP_ASSERT_FALSEm("pos_seek st_cfg 1", _mpp_ret);
+    _mpp_ret = kmpp_obj_pos_get_s32(obj, &pos, "is_non_ref", &val);
+    MPP_ASSERT_FALSEm("pos_get st_cfg:1:is_non_ref", _mpp_ret);
     MPP_ASSERT_EQm("st_cfg:1:is_non_ref", 1, val);
 
     /* st_cfg:2:temporal_id -> 1 */
-    fld = vla_resolve_field(obj, "st_cfg:2:temporal_id", chain);
-    MPP_ASSERT_NOT_NULLm("resolve st_cfg:2:temporal_id", fld);
-    _mpp_ret = vla_read_s32(st_arr, st_cfg_arr->vla.elem_size, cfg->st_cfg_cnt,
-                            fld, 2, &val);
-    MPP_ASSERT_FALSEm("read st_cfg:2:temporal_id", _mpp_ret);
+    _mpp_ret = kmpp_obj_pos_seek(obj, &pos, NULL, 2);
+    MPP_ASSERT_FALSEm("pos_seek st_cfg 2", _mpp_ret);
+    _mpp_ret = kmpp_obj_pos_get_s32(obj, &pos, "temporal_id", &val);
+    MPP_ASSERT_FALSEm("pos_get st_cfg:2:temporal_id", _mpp_ret);
     MPP_ASSERT_EQm("st_cfg:2:temporal_id", 1, val);
 
     /* st_cfg:3:ref_arg -> 40 */
-    fld = vla_resolve_field(obj, "st_cfg:3:ref_arg", chain);
-    MPP_ASSERT_NOT_NULLm("resolve st_cfg:3:ref_arg", fld);
-    _mpp_ret = vla_read_s32(st_arr, st_cfg_arr->vla.elem_size, cfg->st_cfg_cnt,
-                            fld, 3, &val);
-    MPP_ASSERT_FALSEm("read st_cfg:3:ref_arg", _mpp_ret);
+    _mpp_ret = kmpp_obj_pos_seek(obj, &pos, NULL, 3);
+    MPP_ASSERT_FALSEm("pos_seek st_cfg 3", _mpp_ret);
+    _mpp_ret = kmpp_obj_pos_get_s32(obj, &pos, "ref_arg", &val);
+    MPP_ASSERT_FALSEm("pos_get st_cfg:3:ref_arg", _mpp_ret);
     MPP_ASSERT_EQm("st_cfg:3:ref_arg", 40, val);
 
     /* lt_cfg:0:lt_idx -> 2 */
-    fld = vla_resolve_field(obj, "lt_cfg:0:lt_idx", chain);
-    MPP_ASSERT_NOT_NULLm("resolve lt_cfg:0:lt_idx", fld);
-    _mpp_ret = vla_read_s32(lt_arr, lt_cfg_arr->vla.elem_size, cfg->lt_cfg_cnt,
-                            fld, 0, &val);
-    MPP_ASSERT_FALSEm("read lt_cfg:0:lt_idx", _mpp_ret);
+    kmpp_obj_pos_init(&pos);
+    _mpp_ret = kmpp_obj_pos_seek(obj, &pos, "lt_cfg", 0);
+    MPP_ASSERT_FALSEm("pos_seek lt_cfg 0", _mpp_ret);
+    _mpp_ret = kmpp_obj_pos_get_s32(obj, &pos, "lt_idx", &val);
+    MPP_ASSERT_FALSEm("pos_get lt_cfg:0:lt_idx", _mpp_ret);
     MPP_ASSERT_EQm("lt_cfg:0:lt_idx", 2, val);
 
     /* lt_cfg:0:lt_gap -> 100 */
-    fld = vla_resolve_field(obj, "lt_cfg:0:lt_gap", chain);
-    MPP_ASSERT_NOT_NULLm("resolve lt_cfg:0:lt_gap", fld);
-    _mpp_ret = vla_read_s32(lt_arr, lt_cfg_arr->vla.elem_size, cfg->lt_cfg_cnt,
-                            fld, 0, &val);
-    MPP_ASSERT_FALSEm("read lt_cfg:0:lt_gap", _mpp_ret);
+    _mpp_ret = kmpp_obj_pos_get_s32(obj, &pos, "lt_gap", &val);
+    MPP_ASSERT_FALSEm("pos_get lt_cfg:0:lt_gap", _mpp_ret);
     MPP_ASSERT_EQm("lt_cfg:0:lt_gap", 100, val);
 
     /* st_cfg:4:is_non_ref -> out of range (should fail) */
+    kmpp_obj_pos_init(&pos);
     {
-        fld = vla_resolve_field(obj, "st_cfg:4:is_non_ref", chain);
-        MPP_ASSERT_NOT_NULLm("resolve st_cfg:4:is_non_ref", fld);
-        rk_s32 ret = vla_read_s32(st_arr, st_cfg_arr->vla.elem_size, cfg->st_cfg_cnt,
-                                  fld, 4, &val);
-        MPP_ASSERTm("st_cfg:4:is_non_ref should fail", ret);
+        rk_s32 ret_seek = kmpp_obj_pos_seek(obj, &pos, "st_cfg", 4);
+        MPP_ASSERTm("pos_seek st_cfg 4 should fail (out of range)", ret_seek);
     }
 
     mpp_logi("test_obj_access success\n");
@@ -265,7 +221,7 @@ static rk_s32 test_vla_api(void)
     MppEncRefCfgImpl *cfg;
     MppEncRefStFrmCfg *st_arr;
     MppEncRefLtFrmCfg *lt_arr;
-    KmppEntry path[KMPP_VLA_MAX_DEPTH];
+    KmppObjPos pos;
     rk_s32 val;
 
     mpp_logi("test_vla_api start\n");
@@ -293,44 +249,45 @@ static rk_s32 test_vla_api(void)
     cfg->lt_cfg_cnt = 1;
 
     /* 1. get st_cfg:0:is_non_ref -> 0 */
-    _mpp_ret = kmpp_obj_vla_resolve(obj, "st_cfg:0:is_non_ref", path);
-    MPP_ASSERT_FALSEm("vla_resolve st_cfg:0:is_non_ref", _mpp_ret);
-    _mpp_ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
-    MPP_ASSERT_FALSEm("vla_get st_cfg:0:is_non_ref", _mpp_ret);
+    kmpp_obj_pos_init(&pos);
+    _mpp_ret = kmpp_obj_pos_seek(obj, &pos, "st_cfg", 0);
+    MPP_ASSERT_FALSEm("pos_seek st_cfg 0", _mpp_ret);
+    _mpp_ret = kmpp_obj_pos_get_s32(obj, &pos, "is_non_ref", &val);
+    MPP_ASSERT_FALSEm("pos_get st_cfg:0:is_non_ref", _mpp_ret);
     MPP_ASSERT_EQm("st_cfg:0:is_non_ref", 0, val);
 
     /* 2. get + set + readback st_cfg:1:is_non_ref */
-    _mpp_ret = kmpp_obj_vla_resolve(obj, "st_cfg:1:is_non_ref", path);
-    MPP_ASSERT_FALSEm("vla_resolve st_cfg:1:is_non_ref", _mpp_ret);
-    _mpp_ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
-    MPP_ASSERT_FALSEm("vla_get st_cfg:1:is_non_ref", _mpp_ret);
+    _mpp_ret = kmpp_obj_pos_seek(obj, &pos, NULL, 1);
+    MPP_ASSERT_FALSEm("pos_seek st_cfg 1", _mpp_ret);
+    _mpp_ret = kmpp_obj_pos_get_s32(obj, &pos, "is_non_ref", &val);
+    MPP_ASSERT_FALSEm("pos_get st_cfg:1:is_non_ref", _mpp_ret);
     MPP_ASSERT_EQm("st_cfg:1:is_non_ref", 1, val);
-    _mpp_ret = kmpp_obj_vla_tbl_set_s32(obj, path, 42);
-    MPP_ASSERT_FALSEm("vla_set st_cfg:1:is_non_ref", _mpp_ret);
-    _mpp_ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
-    MPP_ASSERT_FALSEm("vla_get after set", _mpp_ret);
+    _mpp_ret = kmpp_obj_pos_set_s32(obj, &pos, "is_non_ref", 42);
+    MPP_ASSERT_FALSEm("pos_set st_cfg:1:is_non_ref", _mpp_ret);
+    _mpp_ret = kmpp_obj_pos_get_s32(obj, &pos, "is_non_ref", &val);
+    MPP_ASSERT_FALSEm("pos_get after set", _mpp_ret);
     MPP_ASSERT_EQm("st_cfg:1:is_non_ref after set", 42, val);
 
     /* 3. st_cfg:2:temporal_id -> 1 */
-    _mpp_ret = kmpp_obj_vla_resolve(obj, "st_cfg:2:temporal_id", path);
-    MPP_ASSERT_FALSEm("vla_resolve st_cfg:2:temporal_id", _mpp_ret);
-    _mpp_ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
-    MPP_ASSERT_FALSEm("vla_get st_cfg:2:temporal_id", _mpp_ret);
+    _mpp_ret = kmpp_obj_pos_seek(obj, &pos, NULL, 2);
+    MPP_ASSERT_FALSEm("pos_seek st_cfg 2", _mpp_ret);
+    _mpp_ret = kmpp_obj_pos_get_s32(obj, &pos, "temporal_id", &val);
+    MPP_ASSERT_FALSEm("pos_get st_cfg:2:temporal_id", _mpp_ret);
     MPP_ASSERT_EQm("st_cfg:2:temporal_id", 1, val);
 
     /* 4. lt_cfg:0:lt_idx -> 5 */
-    _mpp_ret = kmpp_obj_vla_resolve(obj, "lt_cfg:0:lt_idx", path);
-    MPP_ASSERT_FALSEm("vla_resolve lt_cfg:0:lt_idx", _mpp_ret);
-    _mpp_ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
-    MPP_ASSERT_FALSEm("vla_get lt_cfg:0:lt_idx", _mpp_ret);
+    kmpp_obj_pos_init(&pos);
+    _mpp_ret = kmpp_obj_pos_seek(obj, &pos, "lt_cfg", 0);
+    MPP_ASSERT_FALSEm("pos_seek lt_cfg 0", _mpp_ret);
+    _mpp_ret = kmpp_obj_pos_get_s32(obj, &pos, "lt_idx", &val);
+    MPP_ASSERT_FALSEm("pos_get lt_cfg:0:lt_idx", _mpp_ret);
     MPP_ASSERT_EQm("lt_cfg:0:lt_idx", 5, val);
 
     /* 5. out of range: st_cfg:3:is_non_ref, cnt=3 (should fail) */
+    kmpp_obj_pos_init(&pos);
     {
-        rk_s32 ret = kmpp_obj_vla_resolve(obj, "st_cfg:3:is_non_ref", path);
-        MPP_ASSERT_FALSEm("vla_resolve st_cfg:3:is_non_ref", ret);
-        ret = kmpp_obj_vla_tbl_get_s32(obj, path, &val);
-        MPP_ASSERTm("vla_get st_cfg:3 should fail (out of range)", ret);
+        rk_s32 ret_seek = kmpp_obj_pos_seek(obj, &pos, "st_cfg", 3);
+        MPP_ASSERTm("pos_seek st_cfg 3 should fail (out of range)", ret_seek);
     }
 
     mpp_logi("test_vla_api success\n");
