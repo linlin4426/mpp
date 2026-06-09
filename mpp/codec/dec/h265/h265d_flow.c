@@ -231,10 +231,6 @@ static RK_S32 h265d_slice_head(H265dPrs *p)
         READ_ONEBIT(gb, &val_u32);
     }
 
-    if (IS_IRAP(type) && p->miss_ref_flag && slice->first_slice_in_pic_flag) {
-        p->max_ra     = INT_MAX;
-        p->miss_ref_flag = 0;
-    }
     READ_UE(gb, &pps_id);
 
     if (pps_id >= MAX_PPS_COUNT || !p->pps_list[pps_id]) {
