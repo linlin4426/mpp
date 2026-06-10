@@ -8,6 +8,7 @@
 
 #include "rk_venc_cmd.h"
 #include "mpp_device.h"
+#include "vepu51x_common.h"
 
 #define VEPU511A_CTL_OFFSET           (0 * sizeof(RK_U32))       /* 0x00000000 reg0    - 0x00000120 reg72 */
 #define VEPU511A_FRAME_OFFSET         (156 * sizeof(RK_U32))     /* 0x00000270 reg156  - 0x00000538 reg334 */
@@ -51,27 +52,6 @@
     vepu_hw_regs(dbg_ctx, (regs)->reg_scl, VEPU511A_SCL_OFFSET, "a+"); \
     vepu_hw_regs(dbg_ctx, st_reg, VEPU511A_STATUS_OFFSET, "a+"); \
 } while (0)
-
-typedef enum qbias_ofst_e {
-    IFRAME_THD0 = 0,
-    IFRAME_THD1,
-    IFRAME_THD2,
-    IFRAME_BIAS0,
-    IFRAME_BIAS1,
-    IFRAME_BIAS2,
-    IFRAME_BIAS3,
-    PFRAME_THD0,
-    PFRAME_THD1,
-    PFRAME_THD2,
-    PFRAME_IBLK_BIAS0,
-    PFRAME_IBLK_BIAS1,
-    PFRAME_IBLK_BIAS2,
-    PFRAME_IBLK_BIAS3,
-    PFRAME_PBLK_BIAS0,
-    PFRAME_PBLK_BIAS1,
-    PFRAME_PBLK_BIAS2,
-    PFRAME_PBLK_BIAS3
-} QbiasOfst;
 
 typedef struct Vepu511aOnline_t {
     /* 0x00000270 reg156 */

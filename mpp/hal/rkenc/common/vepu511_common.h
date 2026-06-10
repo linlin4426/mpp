@@ -8,6 +8,7 @@
 
 #include "rk_venc_cmd.h"
 #include "mpp_device.h"
+#include "vepu51x_common.h"
 
 #define VEPU511_CTL_OFFSET              (0 * sizeof(RK_U32))    /* 0x00000000 reg0000 - 0x00000060 reg0024 */
 #define VEPU511_FRAME_OFFSET            (156 * sizeof(RK_U32))  /* 0x00000270 reg0156 - 0x000003fc reg0255 */
@@ -64,27 +65,6 @@ typedef enum ref_type_e {
     LT_REF_TO_ST,
     LT_REF_TO_LT,
 } RefType;
-
-typedef enum qbias_ofst_e {
-    IFRAME_THD0 = 0,
-    IFRAME_THD1,
-    IFRAME_THD2,
-    IFRAME_BIAS0,
-    IFRAME_BIAS1,
-    IFRAME_BIAS2,
-    IFRAME_BIAS3,
-    PFRAME_THD0,
-    PFRAME_THD1,
-    PFRAME_THD2,
-    PFRAME_IBLK_BIAS0,
-    PFRAME_IBLK_BIAS1,
-    PFRAME_IBLK_BIAS2,
-    PFRAME_IBLK_BIAS3,
-    PFRAME_PBLK_BIAS0,
-    PFRAME_PBLK_BIAS1,
-    PFRAME_PBLK_BIAS2,
-    PFRAME_PBLK_BIAS3
-} QbiasOfst;
 
 typedef enum aq_rnge_ofst_e {
     AQ16_RNGE = 0,

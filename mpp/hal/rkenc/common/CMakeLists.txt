@@ -5,6 +5,7 @@ include_directories(.)
 add_library(hal_vepu5xx_common OBJECT
     vepu541_common.c
     vepu5xx_common.c
+    vepu51x_common.c
     vepu540c_common.c
     vepu580_tune.c
     vepu580_common.c

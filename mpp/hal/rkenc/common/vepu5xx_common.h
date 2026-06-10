@@ -106,6 +106,15 @@ typedef struct Vepu5xxOsdCfg_t {
     MppEncOSDData2      *osd_data2;
 } Vepu5xxOsdCfg;
 
+typedef struct Vepu5xxRoiH264BsCfg_t {
+    RK_U64 force_inter   : 42;
+    RK_U64 mode_mask     : 9;
+    RK_U64 reserved      : 10;
+    RK_U64 force_intra   : 1;
+    RK_U64 qp_adj_en     : 1;
+    RK_U64 amv_en        : 1;
+} Vepu5xxRoiH264BsCfg;
+
 typedef struct VepuRgb2YuvCoeffs_t {
     RK_S16 r_coeff;
     RK_S16 g_coeff;
@@ -136,6 +145,9 @@ MPP_RET copy2osd2(MppEncOSDData2* dst, MppEncOSDData *src1, MppEncOSDData2 *src2
 
 MPP_RET vepu5xx_set_fmt(VepuFmtCfg *cfg, MppFrameFormat format);
 
+MPP_RET vepu5xx_h264_set_one_roi(void *buf, MppEncROIRegion *region, RK_S32 w, RK_S32 h);
+
+extern const RK_U32 vepu5xx_h264e_lambda_default_58[58];
 extern const RK_U32 vepu580_540_h264_flat_scl_tab[576];
 
 extern const RK_U32 klut_weight[24];

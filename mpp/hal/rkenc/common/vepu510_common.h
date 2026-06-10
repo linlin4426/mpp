@@ -6,8 +6,8 @@
 #ifndef VEPU510_COMMON_H
 #define VEPU510_COMMON_H
 
-#include "rk_venc_cmd.h"
-#include "mpp_device.h"
+#include "vepu5xx_common.h"
+#include "vepu51x_common.h"
 
 #define VEPU510_CTL_OFFSET           (0 * sizeof(RK_U32))       /* 0x00000000 reg0    - 0x00000120 reg72 */
 #define VEPU510_FRAME_OFFSET         (156 * sizeof(RK_U32))     /* 0x00000270 reg156  - 0x000003f4 reg253 */
