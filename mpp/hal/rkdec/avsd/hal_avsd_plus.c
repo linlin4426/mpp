@@ -664,9 +664,11 @@ static MPP_RET hal_avsd_plus_gen_regs(void *decoder, HalTaskInfo *task)
         !p_hal->cfg->cfg->base.disable_error) {
         goto __RETURN;
     }
-    p_hal->data_offset = p_hal->syn.bitstream_offset;
 
     memcpy(&p_hal->syn, task->dec.syntax.data, sizeof(AvsdSyntax_t));
+
+    p_hal->data_offset = p_hal->syn.bitstream_offset;
+
     FUN_CHECK(ret = set_regs_parameters(p_hal, &task->dec));
 __RETURN:
     AVSD_HAL_TRACE("Out.");
