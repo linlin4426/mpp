@@ -834,50 +834,50 @@ static void vepu511a_h265_set_me_regs(H265eV511AHalContext *ctx, H265eSyntax_new
     s->me_sqi_comb.rime_prersu_en   = 0;
     s->me_sqi_comb.fme_lvl_mrg      = 1;
 
-    s->cime_mvd_th_comb.cime_mvd_th0     = 8;
-    s->cime_mvd_th_comb.cime_mvd_th1     = 20;
-    s->cime_mvd_th_comb.cime_mvd_th2     = 32;
-    s->cime_madp_th_comb.cime_madp_th    = 16;
-    s->cime_madp_th_comb.ratio_consi_cfg = 8;
-    s->cime_madp_th_comb.ratio_bmv_dist  = 8;
-    s->cime_multi_comb.cime_multi0 = 8;
-    s->cime_multi_comb.cime_multi1 = 12;
-    s->cime_multi_comb.cime_multi2 = 16;
-    s->cime_multi_comb.cime_multi3 = 20;
+    s->common.cime_mvd_th_comb.cime_mvd_th0     = 8;
+    s->common.cime_mvd_th_comb.cime_mvd_th1     = 20;
+    s->common.cime_mvd_th_comb.cime_mvd_th2     = 32;
+    s->common.cime_madp_th_comb.cime_madp_th    = 16;
+    s->common.cime_madp_th_comb.ratio_consi_cfg = 8;
+    s->common.cime_madp_th_comb.ratio_bmv_dist  = 8;
+    s->common.cime_multi_comb.cime_multi0 = 8;
+    s->common.cime_multi_comb.cime_multi1 = 12;
+    s->common.cime_multi_comb.cime_multi2 = 16;
+    s->common.cime_multi_comb.cime_multi3 = 20;
 
     /* RFME: 0x1770 - 0x177C */
-    s->rime_mvd_th_comb.rime_mvd_th0  = 1;
-    s->rime_mvd_th_comb.rime_mvd_th1  = 2;
-    s->rime_mvd_th_comb.fme_madp_th   = 10;
-    s->rime_madp_th_comb.rime_madp_th0 = 8;
-    s->rime_madp_th_comb.rime_madp_th1 = 16;
-    s->rime_multi_comb.rime_multi0 = 4;
-    s->rime_multi_comb.rime_multi1 = 8;
-    s->rime_multi_comb.rime_multi2 = 12;
-    s->cmv_st_th_comb.cmv_th0 = 64;
-    s->cmv_st_th_comb.cmv_th1 = 96;
-    s->cmv_st_th_comb.cmv_th2 = 128;
+    s->common.rime_mvd_th_comb.rime_mvd_th0  = 1;
+    s->common.rime_mvd_th_comb.rime_mvd_th1  = 2;
+    s->common.rime_mvd_th_comb.fme_madp_th   = 10;
+    s->common.rime_madp_th_comb.rime_madp_th0 = 8;
+    s->common.rime_madp_th_comb.rime_madp_th1 = 16;
+    s->common.rime_multi_comb.rime_multi0 = 4;
+    s->common.rime_multi_comb.rime_multi1 = 8;
+    s->common.rime_multi_comb.rime_multi2 = 12;
+    s->common.cmv_st_th_comb.cmv_th0 = 64;
+    s->common.cmv_st_th_comb.cmv_th1 = 96;
+    s->common.cmv_st_th_comb.cmv_th2 = 128;
 
     if (ctx->cfg->tune.scene_mode != MPP_ENC_SCENE_MODE_IPC) {
         s->me_sqi_comb.move_lambda = 8;
-        s->cime_madp_th_comb.cime_madp_th = 0;
-        s->rime_madp_th_comb.rime_madp_th0 = 0;
-        s->rime_madp_th_comb.rime_madp_th1 = 0;
-        s->cime_multi_comb.cime_multi0 = 4;
-        s->cime_multi_comb.cime_multi1 = 4;
-        s->cime_multi_comb.cime_multi2 = 4;
-        s->cime_multi_comb.cime_multi3 = 4;
-        s->rime_multi_comb.rime_multi0 = 4;
-        s->rime_multi_comb.rime_multi1 = 4;
-        s->rime_multi_comb.rime_multi2 = 4;
+        s->common.cime_madp_th_comb.cime_madp_th = 0;
+        s->common.rime_madp_th_comb.rime_madp_th0 = 0;
+        s->common.rime_madp_th_comb.rime_madp_th1 = 0;
+        s->common.cime_multi_comb.cime_multi0 = 4;
+        s->common.cime_multi_comb.cime_multi1 = 4;
+        s->common.cime_multi_comb.cime_multi2 = 4;
+        s->common.cime_multi_comb.cime_multi3 = 4;
+        s->common.rime_multi_comb.rime_multi0 = 4;
+        s->common.rime_multi_comb.rime_multi1 = 4;
+        s->common.rime_multi_comb.rime_multi2 = 4;
     } else if (ctx->smart_en) {
-        s->cime_multi_comb.cime_multi0 = 4;
-        s->cime_multi_comb.cime_multi1 = 6;
-        s->cime_multi_comb.cime_multi2 = 8;
-        s->cime_multi_comb.cime_multi3 = 12;
-        s->rime_multi_comb.rime_multi0 = 4;
-        s->rime_multi_comb.rime_multi1 = 4;
-        s->rime_multi_comb.rime_multi2 = 4;
+        s->common.cime_multi_comb.cime_multi0 = 4;
+        s->common.cime_multi_comb.cime_multi1 = 6;
+        s->common.cime_multi_comb.cime_multi2 = 8;
+        s->common.cime_multi_comb.cime_multi3 = 12;
+        s->common.rime_multi_comb.rime_multi0 = 4;
+        s->common.rime_multi_comb.rime_multi1 = 4;
+        s->common.rime_multi_comb.rime_multi2 = 4;
     }
 }
 
@@ -2086,9 +2086,9 @@ static void vepu511a_h265_global_cfg_set(H265eV511AHalContext *ctx, H265eV511ARe
     reg_frm->sao_cfg.sao_lambda_multi = ctx->cfg->h265.sao_cfg.sao_bit_ratio;
 
     if (ctx->frame_type == INTRA_FRAME) {
-        memcpy(&reg_param->pprd_lamb_satd_0_51[0], vepu511x_lambda_tbl_pre_intra, sizeof(vepu511x_lambda_tbl_pre_intra));
+        memcpy(&reg_param->common.pprd_lamb_satd_0_51[0], vepu511x_lambda_tbl_pre_intra, sizeof(vepu511x_lambda_tbl_pre_intra));
     } else {
-        memcpy(&reg_param->pprd_lamb_satd_0_51[0], vepu511x_lambda_tbl_pre_inter, sizeof(vepu511x_lambda_tbl_pre_inter));
+        memcpy(&reg_param->common.pprd_lamb_satd_0_51[0], vepu511x_lambda_tbl_pre_inter, sizeof(vepu511x_lambda_tbl_pre_inter));
     }
 
     {
@@ -2101,7 +2101,7 @@ static void vepu511a_h265_global_cfg_set(H265eV511AHalContext *ctx, H265eV511ARe
             lambda_tbl = &vepu51x_rdo_lambda_table_P[lambda_idx_p];
         }
 
-        memcpy(&reg_param->rdo_wgta_qp_grpa_0_51[0], lambda_tbl, H265E_LAMBDA_TAB_SIZE);
+        memcpy(&reg_param->common.rdo_wgta_qp_grpa_0_51[0], lambda_tbl, H265E_LAMBDA_TAB_SIZE);
     }
 
     /* 0x1064 */
@@ -2113,8 +2113,8 @@ static void vepu511a_h265_global_cfg_set(H265eV511AHalContext *ctx, H265eV511ARe
     regs->reg_rc_roi.madp_st_thd0.madp_th1 = 9 << 4;
     /* 0x106C */
     regs->reg_rc_roi.madp_st_thd1.madp_th2 = 15 << 4;
-    regs->reg_param.prmd_intra_lamb_ofst.lambda_luma_offset = 11;
-    regs->reg_param.prmd_intra_lamb_ofst.lambda_chroma_offset = 11;
+    regs->reg_param.common.prmd_intra_lamb_ofst.lambda_luma_offset = 11;
+    regs->reg_param.common.prmd_intra_lamb_ofst.lambda_chroma_offset = 11;
 
 }
 

@@ -906,6 +906,98 @@ typedef struct Vepu510RcRoi_t {
     Vepu510RoiCfg roi_cfg;
 } Vepu510RcRoi;
 
+/* Shared wgt registers: reg1496 (0x1760) ~ reg1651 (0x19cc) */
+typedef struct Vepu510WgtCommon_t {
+    /* 0x00001760 reg1496 */
+    struct {
+        RK_U32 cime_pmv_num      : 1;
+        RK_U32 cime_fuse         : 1;
+        RK_U32 itp_mode          : 1;
+        RK_U32 reserved          : 1;
+        RK_U32 move_lambda       : 4;
+        RK_U32 rime_lvl_mrg      : 2;
+        RK_U32 rime_prelvl_en    : 2;
+        RK_U32 rime_prersu_en    : 3;
+        RK_U32 reserved1         : 17;
+    } me_sqi_comb;
+
+    /* 0x00001764 reg1497 */
+    struct {
+        RK_U32 cime_mvd_th0    : 9;
+        RK_U32 reserved        : 1;
+        RK_U32 cime_mvd_th1    : 9;
+        RK_U32 reserved1       : 1;
+        RK_U32 cime_mvd_th2    : 9;
+        RK_U32 reserved2       : 3;
+    } cime_mvd_th_comb;
+
+    /* 0x00001768 reg1498 */
+    struct {
+        RK_U32 cime_madp_th    : 12;
+        RK_U32 reserved        : 20;
+    } cime_madp_th_comb;
+
+    /* 0x0000176c reg1499 */
+    struct {
+        RK_U32 cime_multi0    : 8;
+        RK_U32 cime_multi1    : 8;
+        RK_U32 cime_multi2    : 8;
+        RK_U32 cime_multi3    : 8;
+    } cime_multi_comb;
+
+    /* 0x00001770 reg1500 */
+    struct {
+        RK_U32 rime_mvd_th0    : 3;
+        RK_U32 reserved        : 1;
+        RK_U32 rime_mvd_th1    : 3;
+        RK_U32 reserved1       : 9;
+        RK_U32 fme_madp_th     : 12;
+        RK_U32 reserved2       : 4;
+    } rime_mvd_th_comb;
+
+    /* 0x00001774 reg1501 */
+    struct {
+        RK_U32 rime_madp_th0    : 12;
+        RK_U32 reserved         : 4;
+        RK_U32 rime_madp_th1    : 12;
+        RK_U32 reserved1        : 4;
+    } rime_madp_th_comb;
+
+    /* 0x00001778 reg1502 */
+    struct {
+        RK_U32 rime_multi0    : 10;
+        RK_U32 rime_multi1    : 10;
+        RK_U32 rime_multi2    : 10;
+        RK_U32 reserved       : 2;
+    } rime_multi_comb;
+
+    /* 0x0000177c reg1503 */
+    struct {
+        RK_U32 cmv_th0     : 8;
+        RK_U32 cmv_th1     : 8;
+        RK_U32 cmv_th2     : 8;
+        RK_U32 reserved    : 8;
+    } cmv_st_th_comb;
+
+    /* 0x1780 - 0x17fc */
+    RK_U32 reserved1504_1535[32];
+
+    /* 0x00001800 reg1536 - 0x000018cc reg1587 */
+    RK_U32 pprd_lamb_satd_0_51[52];
+
+    /* 0x000018d0 reg1588 */
+    struct {
+        RK_U32 lambda_satd_offset    : 5;
+        RK_U32 reserved              : 27;
+    } iprd_lamb_satd_ofst;
+
+    /* 0x18d4 - 0x18fc */
+    RK_U32 reserved1589_1599[11];
+
+    /* 0x00001900 reg1600 - 0x000019cc reg1651 */
+    RK_U32 rdo_wgta_qp_grpa_0_51[52];
+} Vepu510WgtCommon;
+
 /* class: scaling list  */
 /* 0x00002200 reg2176- 0x00002584 reg2401*/
 typedef struct Vepu510SclCfg_t {

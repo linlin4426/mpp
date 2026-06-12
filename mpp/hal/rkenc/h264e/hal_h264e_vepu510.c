@@ -1529,47 +1529,47 @@ static void setup_vepu510_me(HalH264eVepu510Ctx *ctx)
     reg_frm->common.me_cach.cime_zero_thre    = 64;
 
     /* CIME: 0x1760 - 0x176C */
-    reg_param->me_sqi_comb.cime_pmv_num = 1;
-    reg_param->me_sqi_comb.cime_fuse    = 1;
-    reg_param->me_sqi_comb.itp_mode     = 0;
-    reg_param->me_sqi_comb.move_lambda  = 0;
-    reg_param->me_sqi_comb.rime_lvl_mrg     = 1;
-    reg_param->me_sqi_comb.rime_prelvl_en   = 0;
-    reg_param->me_sqi_comb.rime_prersu_en   = 0;
-    reg_param->cime_mvd_th_comb.cime_mvd_th0 = 16;
-    reg_param->cime_mvd_th_comb.cime_mvd_th1 = 48;
-    reg_param->cime_mvd_th_comb.cime_mvd_th2 = 80;
-    reg_param->cime_madp_th_comb.cime_madp_th = 16;
-    reg_param->cime_multi_comb.cime_multi0 = 8;
-    reg_param->cime_multi_comb.cime_multi1 = 12;
-    reg_param->cime_multi_comb.cime_multi2 = 16;
-    reg_param->cime_multi_comb.cime_multi3 = 20;
+    reg_param->common.me_sqi_comb.cime_pmv_num = 1;
+    reg_param->common.me_sqi_comb.cime_fuse    = 1;
+    reg_param->common.me_sqi_comb.itp_mode     = 0;
+    reg_param->common.me_sqi_comb.move_lambda  = 0;
+    reg_param->common.me_sqi_comb.rime_lvl_mrg     = 1;
+    reg_param->common.me_sqi_comb.rime_prelvl_en   = 0;
+    reg_param->common.me_sqi_comb.rime_prersu_en   = 0;
+    reg_param->common.cime_mvd_th_comb.cime_mvd_th0 = 16;
+    reg_param->common.cime_mvd_th_comb.cime_mvd_th1 = 48;
+    reg_param->common.cime_mvd_th_comb.cime_mvd_th2 = 80;
+    reg_param->common.cime_madp_th_comb.cime_madp_th = 16;
+    reg_param->common.cime_multi_comb.cime_multi0 = 8;
+    reg_param->common.cime_multi_comb.cime_multi1 = 12;
+    reg_param->common.cime_multi_comb.cime_multi2 = 16;
+    reg_param->common.cime_multi_comb.cime_multi3 = 20;
 
     /* RFME: 0x1770 - 0x1778 */
-    reg_param->rime_mvd_th_comb.rime_mvd_th0  = 1;
-    reg_param->rime_mvd_th_comb.rime_mvd_th1  = 2;
-    reg_param->rime_mvd_th_comb.fme_madp_th   = 0;
-    reg_param->rime_madp_th_comb.rime_madp_th0 = 8;
-    reg_param->rime_madp_th_comb.rime_madp_th1 = 16;
-    reg_param->rime_multi_comb.rime_multi0 = 4;
-    reg_param->rime_multi_comb.rime_multi1 = 8;
-    reg_param->rime_multi_comb.rime_multi2 = 12;
-    reg_param->cmv_st_th_comb.cmv_th0 = 64;
-    reg_param->cmv_st_th_comb.cmv_th1 = 96;
-    reg_param->cmv_st_th_comb.cmv_th2 = 128;
+    reg_param->common.rime_mvd_th_comb.rime_mvd_th0  = 1;
+    reg_param->common.rime_mvd_th_comb.rime_mvd_th1  = 2;
+    reg_param->common.rime_mvd_th_comb.fme_madp_th   = 0;
+    reg_param->common.rime_madp_th_comb.rime_madp_th0 = 8;
+    reg_param->common.rime_madp_th_comb.rime_madp_th1 = 16;
+    reg_param->common.rime_multi_comb.rime_multi0 = 4;
+    reg_param->common.rime_multi_comb.rime_multi1 = 8;
+    reg_param->common.rime_multi_comb.rime_multi2 = 12;
+    reg_param->common.cmv_st_th_comb.cmv_th0 = 64;
+    reg_param->common.cmv_st_th_comb.cmv_th1 = 96;
+    reg_param->common.cmv_st_th_comb.cmv_th2 = 128;
 
     if (sm != MPP_ENC_SCENE_MODE_IPC) {
         /* disable subjective optimization */
-        reg_param->cime_madp_th_comb.cime_madp_th = 0;
-        reg_param->rime_madp_th_comb.rime_madp_th0 = 0;
-        reg_param->rime_madp_th_comb.rime_madp_th1 = 0;
-        reg_param->cime_multi_comb.cime_multi0 = 4;
-        reg_param->cime_multi_comb.cime_multi1 = 4;
-        reg_param->cime_multi_comb.cime_multi2 = 4;
-        reg_param->cime_multi_comb.cime_multi3 = 4;
-        reg_param->rime_multi_comb.rime_multi0 = 4;
-        reg_param->rime_multi_comb.rime_multi1 = 4;
-        reg_param->rime_multi_comb.rime_multi2 = 4;
+        reg_param->common.cime_madp_th_comb.cime_madp_th = 0;
+        reg_param->common.rime_madp_th_comb.rime_madp_th0 = 0;
+        reg_param->common.rime_madp_th_comb.rime_madp_th1 = 0;
+        reg_param->common.cime_multi_comb.cime_multi0 = 4;
+        reg_param->common.cime_multi_comb.cime_multi1 = 4;
+        reg_param->common.cime_multi_comb.cime_multi2 = 4;
+        reg_param->common.cime_multi_comb.cime_multi3 = 4;
+        reg_param->common.rime_multi_comb.rime_multi0 = 4;
+        reg_param->common.rime_multi_comb.rime_multi1 = 4;
+        reg_param->common.rime_multi_comb.rime_multi2 = 4;
     }
 
     /* 0x1064 */
@@ -1597,10 +1597,10 @@ setup_vepu510_l2(HalH264eVepu510Ctx *ctx, MppEncHwCfg *hw)
     hal_h264e_dbg_func("enter\n");
 
     if (sm == MPP_ENC_SCENE_MODE_IPC) {
-        memcpy(regs->reg_param.rdo_wgta_qp_grpa_0_51,
+        memcpy(regs->reg_param.common.rdo_wgta_qp_grpa_0_51,
                &vepu51x_h264e_lambda_default_60[lambda_idx], H264E_LAMBDA_TAB_SIZE);
     } else {
-        memcpy(regs->reg_param.rdo_wgta_qp_grpa_0_51,
+        memcpy(regs->reg_param.common.rdo_wgta_qp_grpa_0_51,
                &vepu51x_h264e_lambda_cvr_60[lambda_idx], H264E_LAMBDA_TAB_SIZE);
     }
 

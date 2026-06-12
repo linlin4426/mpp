@@ -374,71 +374,8 @@ typedef struct H264eVepu511aParam_t {
         RK_U32 reserved1         : 16;
     } me_sqi_comb;
 
-    /* 0x00001764 reg1497 */
-    struct {
-        RK_U32 cime_mvd_th0    : 9;
-        RK_U32 reserved        : 1;
-        RK_U32 cime_mvd_th1    : 9;
-        RK_U32 reserved1       : 1;
-        RK_U32 cime_mvd_th2    : 9;
-        RK_U32 reserved2       : 3;
-    }  cime_mvd_th_comb;
-
-    /* 0x00001768 reg1498 */
-    struct {
-        RK_U32 cime_madp_th       : 12;
-        RK_U32 ratio_consi_cfg    : 4;
-        RK_U32 ratio_bmv_dist     : 4;
-        RK_U32 reserved           : 12;
-    } cime_madp_th_comb;
-
-    /* 0x0000176c reg1499 */
-    struct {
-        RK_U32 cime_multi0    : 8;
-        RK_U32 cime_multi1    : 8;
-        RK_U32 cime_multi2    : 8;
-        RK_U32 cime_multi3    : 8;
-    } cime_multi_comb;
-
-    /* 0x00001770 reg1500 */
-    struct {
-        RK_U32 rime_mvd_th0    : 3;
-        RK_U32 reserved        : 1;
-        RK_U32 rime_mvd_th1    : 3;
-        RK_U32 reserved1       : 9;
-        RK_U32 fme_madp_th     : 12;
-        RK_U32 reserved2       : 4;
-    } rime_mvd_th_comb;
-
-    /* 0x00001774 reg1501 */
-    struct {
-        RK_U32 rime_madp_th0    : 12;
-        RK_U32 reserved         : 4;
-        RK_U32 rime_madp_th1    : 12;
-        RK_U32 reserved1        : 4;
-    } rime_madp_th_comb;
-
-    /* 0x00001778 reg1502 */
-    struct {
-        RK_U32 rime_multi0    : 10;
-        RK_U32 rime_multi1    : 10;
-        RK_U32 rime_multi2    : 10;
-        RK_U32 reserved       : 2;
-    } rime_multi_comb;
-
-    /* 0x0000177c reg1503 */
-    struct {
-        RK_U32 cmv_th0     : 8;
-        RK_U32 cmv_th1     : 8;
-        RK_U32 cmv_th2     : 8;
-        RK_U32 reserved    : 8;
-    } cmv_st_th_comb;
-
-    /* 0x1780 - 0x18fc */
-    RK_U32 reserved1504_1599[96];
-
-    /* 0x00001900 reg1600 - 0x000019cc reg1651*/
-    RK_U32 rdo_wgta_qp_grpa_0_51[52];
+    /* 0x00001764 reg1497 - 0x000019cc reg1651 */
+    Vepu511aWgtCommon common;
 } H264eVepu511aParam;
 
 /* class: rdo/q_i */
