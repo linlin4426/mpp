@@ -9,6 +9,7 @@
 #include "mpp_mem.h"
 #include "mpp_log.h"
 #include "mpp_common.h"
+#include "mpp_2str.h"
 #include "osal_2str.h"
 
 #include "mpp.h"
@@ -290,8 +291,9 @@ MPP_RET mpp_hal_init(MppHal *ctx, MppHalCfg *cfg)
 
 __DONE:
     if (ret) {
-        mpp_err_f("soc %s hal %s init failed ret %d\n",
-                  mpp_get_soc_name(), p->api->name, ret);
+        mpp_err_f("soc %s coding %s hal %s init failed ret %d\n",
+                  mpp_get_soc_name(), strof_coding_type(coding),
+                  (NULL == p->api) ? NULL : p->api->name, ret);
         mpp_free(p->ctx);
         mpp_free(p);
         return ret;
