@@ -155,10 +155,10 @@ static void vepu580_h264e_tune_reg_patch(void *p)
         regs->reg_base.rdo_cfg.atf_intra_e = 0;
         regs->reg_rdo.rdo_sqi_cfg.atf_pskip_en = 0;
         regs->reg_s3.ATR_THD1.atr_thdqp = 51;
-        regs->reg_s3.cime_sqi_cfg.cime_pmv_set_zero = 0;
-        regs->reg_s3.rime_sqi_thd.cime_sad_th0  = 0;
-        regs->reg_s3.fme_sqi_thd0.cime_sad_pu16_th = 0;
-        regs->reg_s3.fme_sqi_thd1.move_lambda = 8;
+        regs->reg_s3.common.cime_sqi_cfg.cime_pmv_set_zero = 0;
+        regs->reg_s3.common.rime_sqi_thd.cime_sad_th0  = 0;
+        regs->reg_s3.common.fme_sqi_thd0.cime_sad_pu16_th = 0;
+        regs->reg_s3.common.fme_sqi_thd1.move_lambda = 8;
     }
 
     regs->reg_rdo.rdo_intra_cime_thd0.atf_rdo_intra_cime_thd0 = 28;
@@ -207,14 +207,14 @@ static void vepu580_h264e_tune_reg_patch(void *p)
         regs->reg_s3.Lvl4_ATR_WGT.lvl4_atr_wgt2 = atr_wgt[scene_motion_flag][8];
     }
 
-    regs->reg_s3.cime_sqi_multi0.cime_multi0 = cime_multi[scene_motion_flag][0];
-    regs->reg_s3.cime_sqi_multi0.cime_multi1 = cime_multi[scene_motion_flag][1];
-    regs->reg_s3.cime_sqi_multi1.cime_multi2 = cime_multi[scene_motion_flag][2];
-    regs->reg_s3.cime_sqi_multi1.cime_multi3 = cime_multi[scene_motion_flag][3];
+    regs->reg_s3.common.cime_sqi_multi0.cime_multi0 = cime_multi[scene_motion_flag][0];
+    regs->reg_s3.common.cime_sqi_multi0.cime_multi1 = cime_multi[scene_motion_flag][1];
+    regs->reg_s3.common.cime_sqi_multi1.cime_multi2 = cime_multi[scene_motion_flag][2];
+    regs->reg_s3.common.cime_sqi_multi1.cime_multi3 = cime_multi[scene_motion_flag][3];
 
-    regs->reg_s3.rime_sqi_multi.rime_multi0 = rime_multi[scene_motion_flag][0];
-    regs->reg_s3.rime_sqi_multi.rime_multi1 = rime_multi[scene_motion_flag][1];
-    regs->reg_s3.rime_sqi_multi.rime_multi2 = rime_multi[scene_motion_flag][2];
+    regs->reg_s3.common.rime_sqi_multi.rime_multi0 = rime_multi[scene_motion_flag][0];
+    regs->reg_s3.common.rime_sqi_multi.rime_multi1 = rime_multi[scene_motion_flag][1];
+    regs->reg_s3.common.rime_sqi_multi.rime_multi2 = rime_multi[scene_motion_flag][2];
 
     if (hw->qbias_en) {
         regs->reg_s3.RDO_QUANT.quant_f_bias_I = (hw->qbias_i != 0) ? hw->qbias_i : 683;

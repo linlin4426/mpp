@@ -382,7 +382,7 @@ static void vepu580_h265e_tune_reg_patch(void *p)
     tune->ap_motion_flag = scene_mode;
     /* modify register here */
     H265eV580RegSet *regs = ctx->frm->regs_set[0];
-    hevc_vepu580_rc_klut *rc_regs =  &regs->reg_rc_klut;
+    Vepu580RcKlut *rc_regs =  &regs->reg_rc_klut;
     hevc_vepu580_wgt *reg_wgt = &regs->reg_wgt;
     vepu580_rdo_cfg  *reg_rdo = &regs->reg_rdo;
     RK_U32 scene_motion_flag = tune->ap_motion_flag * 2 + tune->curr_scene_motion_flag;
@@ -416,18 +416,18 @@ static void vepu580_h265e_tune_reg_patch(void *p)
     rc_regs->madi_thd.madi_thd1     = 9;
     rc_regs->madi_thd.madi_thd2     = 15;
 
-    reg_wgt->cime_sqi_cfg.cime_pmv_set_zero = !tune->curr_scene_motion_flag;
-    reg_wgt->cime_sqi_multi0.cime_multi0 = cime_multi[scene_motion_flag][0];
-    reg_wgt->cime_sqi_multi0.cime_multi1 = cime_multi[scene_motion_flag][1];
-    reg_wgt->cime_sqi_multi1.cime_multi2 = cime_multi[scene_motion_flag][2];
-    reg_wgt->cime_sqi_multi1.cime_multi3 = cime_multi[scene_motion_flag][3];
+    reg_wgt->common.cime_sqi_cfg.cime_pmv_set_zero = !tune->curr_scene_motion_flag;
+    reg_wgt->common.cime_sqi_multi0.cime_multi0 = cime_multi[scene_motion_flag][0];
+    reg_wgt->common.cime_sqi_multi0.cime_multi1 = cime_multi[scene_motion_flag][1];
+    reg_wgt->common.cime_sqi_multi1.cime_multi2 = cime_multi[scene_motion_flag][2];
+    reg_wgt->common.cime_sqi_multi1.cime_multi3 = cime_multi[scene_motion_flag][3];
 
-    reg_wgt->rime_sqi_multi.rime_multi0 = rime_multi[scene_motion_flag][0];
-    reg_wgt->rime_sqi_multi.rime_multi1 = rime_multi[scene_motion_flag][1];
-    reg_wgt->rime_sqi_multi.rime_multi2 = rime_multi[scene_motion_flag][2];
+    reg_wgt->common.rime_sqi_multi.rime_multi0 = rime_multi[scene_motion_flag][0];
+    reg_wgt->common.rime_sqi_multi.rime_multi1 = rime_multi[scene_motion_flag][1];
+    reg_wgt->common.rime_sqi_multi.rime_multi2 = rime_multi[scene_motion_flag][2];
 
     if (tune->curr_scene_motion_flag) {
-        reg_wgt->fme_sqi_thd1.move_lambda = 8;
+        reg_wgt->common.fme_sqi_thd1.move_lambda = 8;
     }
 
     reg_rdo->rdo_sqi_cfg.rdo_segment_en = (vmaf_opt != 0) ? 0 : !tune->curr_scene_motion_flag;
@@ -479,10 +479,10 @@ static void vepu580_h265e_tune_reg_patch(void *p)
         reg_wgt->reg1484_qnt_bias_comb.qnt_bias_p = qnt_bias_p[scene_motion_flag];
     }
 
-    reg_wgt->rime_sqi_thd.cime_sad_th0 = rime_sqi_cime_sad_th[scene_motion_flag];
-    reg_wgt->fme_sqi_thd0.cime_sad_pu16_th = fme_sqi_cime_sad_pu16_th[scene_motion_flag];
-    reg_wgt->fme_sqi_thd0.cime_sad_pu32_th = fme_sqi_cime_sad_pu32_th[scene_motion_flag];
-    reg_wgt->fme_sqi_thd1.cime_sad_pu64_th = fme_sqi_cime_sad_pu64_th[scene_motion_flag];
+    reg_wgt->common.rime_sqi_thd.cime_sad_th0 = rime_sqi_cime_sad_th[scene_motion_flag];
+    reg_wgt->common.fme_sqi_thd0.cime_sad_pu16_th = fme_sqi_cime_sad_pu16_th[scene_motion_flag];
+    reg_wgt->common.fme_sqi_thd0.cime_sad_pu32_th = fme_sqi_cime_sad_pu32_th[scene_motion_flag];
+    reg_wgt->common.fme_sqi_thd1.cime_sad_pu64_th = fme_sqi_cime_sad_pu64_th[scene_motion_flag];
     rc_regs->klut_ofst.chrm_klut_ofst = chrm_klut_ofst[scene_motion_flag];
 }
 

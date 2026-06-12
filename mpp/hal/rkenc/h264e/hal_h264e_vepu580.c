@@ -176,23 +176,23 @@ static RK_S32 h264_I_aq_step_default[16] = {
 
 static void hal_h264e_vepu580_dump_sw_regs(HalDbgCtx *dbg_ctx, HalVepu580RegSet *regs)
 {
-    vepu_sw_regs(dbg_ctx, regs->reg_ctl, VEPU580_CONTROL_CFG_OFFSET, "w+");
-    vepu_sw_regs(dbg_ctx, regs->reg_base, VEPU580_BASE_CFG_OFFSET, "a+");
-    vepu_sw_regs(dbg_ctx, regs->reg_rc_klut, VEPU580_RC_KLUT_CFG_OFFSET, "a+");
-    vepu_sw_regs(dbg_ctx, regs->reg_s3, VEPU580_SECTION_3_OFFSET, "a+");
-    vepu_sw_regs(dbg_ctx, regs->reg_rdo, VEPU580_RDO_CFG_OFFSET, "a+");
-    vepu_sw_regs(dbg_ctx, regs->reg_scl, VEPU580_SCL_CFG_OFFSET, "a+");
+    vepu_sw_regs(dbg_ctx, regs->reg_ctl, VEPU580_CTL_OFFSET, "w+");
+    vepu_sw_regs(dbg_ctx, regs->reg_base, VEPU580_BASE_OFFSET, "a+");
+    vepu_sw_regs(dbg_ctx, regs->reg_rc_klut, VEPU580_RCKLUT_OFFSET, "a+");
+    vepu_sw_regs(dbg_ctx, regs->reg_s3, VEPU580_PARAM_OFFSET, "a+");
+    vepu_sw_regs(dbg_ctx, regs->reg_rdo, VEPU580_RDO_OFFSET, "a+");
+    vepu_sw_regs(dbg_ctx, regs->reg_scl, VEPU580_SCL_OFFSET, "a+");
     vepu_sw_regs(dbg_ctx, regs->reg_osd, VEPU580_OSD_OFFSET, "a+");
 }
 
 static void hal_h264e_vepu580_dump_hw_regs(HalDbgCtx *dbg_ctx, HalVepu580RegSet *regs)
 {
-    vepu_hw_regs(dbg_ctx, regs->reg_ctl, VEPU580_CONTROL_CFG_OFFSET, "w+");
-    vepu_hw_regs(dbg_ctx, regs->reg_base, VEPU580_BASE_CFG_OFFSET, "a+");
-    vepu_hw_regs(dbg_ctx, regs->reg_rc_klut, VEPU580_RC_KLUT_CFG_OFFSET, "a+");
-    vepu_hw_regs(dbg_ctx, regs->reg_s3, VEPU580_SECTION_3_OFFSET, "a+");
-    vepu_hw_regs(dbg_ctx, regs->reg_rdo, VEPU580_RDO_CFG_OFFSET, "a+");
-    vepu_hw_regs(dbg_ctx, regs->reg_scl, VEPU580_SCL_CFG_OFFSET, "a+");
+    vepu_hw_regs(dbg_ctx, regs->reg_ctl, VEPU580_CTL_OFFSET, "w+");
+    vepu_hw_regs(dbg_ctx, regs->reg_base, VEPU580_BASE_OFFSET, "a+");
+    vepu_hw_regs(dbg_ctx, regs->reg_rc_klut, VEPU580_RCKLUT_OFFSET, "a+");
+    vepu_hw_regs(dbg_ctx, regs->reg_s3, VEPU580_PARAM_OFFSET, "a+");
+    vepu_hw_regs(dbg_ctx, regs->reg_rdo, VEPU580_RDO_OFFSET, "a+");
+    vepu_hw_regs(dbg_ctx, regs->reg_scl, VEPU580_SCL_OFFSET, "a+");
     vepu_hw_regs(dbg_ctx, regs->reg_osd, VEPU580_OSD_OFFSET, "a+");
     vepu_hw_regs(dbg_ctx, regs->reg_st, VEPU580_STATUS_OFFSET, "a+");
 }
@@ -670,55 +670,55 @@ static void setup_vepu580_normal(HalVepu580RegSet *regs)
     hal_h264e_dbg_func("enter\n");
 
     /* reg001 ENC_STRT */
-    regs->reg_ctl.enc_strt.lkt_num           = 0;
-    regs->reg_ctl.enc_strt.vepu_cmd          = 1;
-    regs->reg_ctl.func_en.cke                = 1;
-    regs->reg_ctl.func_en.resetn_hw_en       = 1;
-    regs->reg_ctl.func_en.enc_done_tmvp_en   = 1;
+    regs->reg_ctl.common.enc_strt.lkt_num           = 0;
+    regs->reg_ctl.common.enc_strt.vepu_cmd          = 1;
+    regs->reg_ctl.common.func_en.cke                = 1;
+    regs->reg_ctl.common.func_en.resetn_hw_en       = 1;
+    regs->reg_ctl.common.func_en.enc_done_tmvp_en   = 1;
 
     /* reg002 ENC_CLR */
-    regs->reg_ctl.enc_clr.safe_clr           = 0;
-    regs->reg_ctl.enc_clr.force_clr          = 0;
+    regs->reg_ctl.common.enc_clr.safe_clr           = 0;
+    regs->reg_ctl.common.enc_clr.force_clr          = 0;
 
     /* reg004 INT_EN */
-    regs->reg_ctl.int_en.enc_done_en         = 1;
-    regs->reg_ctl.int_en.lkt_node_done_en    = 1;
-    regs->reg_ctl.int_en.sclr_done_en        = 1;
-    regs->reg_ctl.int_en.slc_done_en         = 0;
-    regs->reg_ctl.int_en.bsf_oflw_en         = 1;
-    regs->reg_ctl.int_en.brsp_otsd_en        = 1;
-    regs->reg_ctl.int_en.wbus_err_en         = 1;
-    regs->reg_ctl.int_en.rbus_err_en         = 1;
-    regs->reg_ctl.int_en.wdg_en              = 1;
+    regs->reg_ctl.common.int_en.enc_done_en         = 1;
+    regs->reg_ctl.common.int_en.lkt_node_done_en    = 1;
+    regs->reg_ctl.common.int_en.sclr_done_en        = 1;
+    regs->reg_ctl.common.int_en.slc_done_en         = 0;
+    regs->reg_ctl.common.int_en.bsf_oflw_en         = 1;
+    regs->reg_ctl.common.int_en.brsp_otsd_en        = 1;
+    regs->reg_ctl.common.int_en.wbus_err_en         = 1;
+    regs->reg_ctl.common.int_en.rbus_err_en         = 1;
+    regs->reg_ctl.common.int_en.wdg_en              = 1;
 
     /* reg005 INT_MSK */
-    regs->reg_ctl.int_msk.enc_done_msk       = 0;
-    regs->reg_ctl.int_msk.lkt_node_done_msk  = 0;
-    regs->reg_ctl.int_msk.sclr_done_msk      = 0;
-    regs->reg_ctl.int_msk.slc_done_msk       = 0;
-    regs->reg_ctl.int_msk.bsf_oflw_msk       = 0;
-    regs->reg_ctl.int_msk.brsp_otsd_msk      = 0;
-    regs->reg_ctl.int_msk.wbus_err_msk       = 0;
-    regs->reg_ctl.int_msk.rbus_err_msk       = 0;
-    regs->reg_ctl.int_msk.wdg_msk            = 0;
+    regs->reg_ctl.common.int_msk.enc_done_msk       = 0;
+    regs->reg_ctl.common.int_msk.lkt_node_done_msk  = 0;
+    regs->reg_ctl.common.int_msk.sclr_done_msk      = 0;
+    regs->reg_ctl.common.int_msk.slc_done_msk       = 0;
+    regs->reg_ctl.common.int_msk.bsf_oflw_msk       = 0;
+    regs->reg_ctl.common.int_msk.brsp_otsd_msk      = 0;
+    regs->reg_ctl.common.int_msk.wbus_err_msk       = 0;
+    regs->reg_ctl.common.int_msk.rbus_err_msk       = 0;
+    regs->reg_ctl.common.int_msk.wdg_msk            = 0;
 
-    regs->reg_ctl.enc_wdg.vs_load_thd        = 0x1fffff;
-    regs->reg_ctl.enc_wdg.rfp_load_thd       = 0;
+    regs->reg_ctl.common.enc_wdg.vs_load_thd        = 0x1fffff;
+    regs->reg_ctl.common.enc_wdg.rfp_load_thd       = 0;
 
     /* reg015 DTRNS_MAP */
-    regs->reg_ctl.dtrns_map.cmvw_bus_ordr      = 0;
-    regs->reg_ctl.dtrns_map.dspw_bus_ordr      = 0;
-    regs->reg_ctl.dtrns_map.rfpw_bus_ordr      = 0;
-    regs->reg_ctl.dtrns_map.src_bus_edin       = 0;
-    regs->reg_ctl.dtrns_map.meiw_bus_edin      = 0;
-    regs->reg_ctl.dtrns_map.bsw_bus_edin       = 7;
-    regs->reg_ctl.dtrns_map.lktr_bus_edin      = 0;
-    regs->reg_ctl.dtrns_map.roir_bus_edin      = 0;
-    regs->reg_ctl.dtrns_map.lktw_bus_edin      = 0;
-    regs->reg_ctl.dtrns_map.afbc_bsize         = 1;
+    regs->reg_ctl.common.dtrns_map.cmvw_bus_ordr      = 0;
+    regs->reg_ctl.common.dtrns_map.dspw_bus_ordr      = 0;
+    regs->reg_ctl.common.dtrns_map.rfpw_bus_ordr      = 0;
+    regs->reg_ctl.common.dtrns_map.src_bus_edin       = 0;
+    regs->reg_ctl.common.dtrns_map.meiw_bus_edin      = 0;
+    regs->reg_ctl.common.dtrns_map.bsw_bus_edin       = 7;
+    regs->reg_ctl.common.dtrns_map.lktr_bus_edin      = 0;
+    regs->reg_ctl.common.dtrns_map.roir_bus_edin      = 0;
+    regs->reg_ctl.common.dtrns_map.lktw_bus_edin      = 0;
+    regs->reg_ctl.common.dtrns_map.afbc_bsize         = 1;
 
-    regs->reg_ctl.dtrns_cfg.axi_brsp_cke   = 0;
-    regs->reg_ctl.dtrns_cfg.dspr_otsd      = 1;
+    regs->reg_ctl.common.dtrns_cfg.axi_brsp_cke   = 0;
+    regs->reg_ctl.common.dtrns_cfg.dspr_otsd      = 1;
     hal_h264e_dbg_func("leave\n");
 }
 
@@ -738,22 +738,22 @@ static MPP_RET setup_vepu580_prep(HalVepu580RegSet *regs, MppEncPrepCfg *prep,
     if (ret)
         return ret;
 
-    regs->reg_base.enc_rsl.pic_wd8_m1 = MPP_ALIGN(prep->width, 16) / 8 - 1;
-    regs->reg_base.src_fill.pic_wfill = MPP_ALIGN(prep->width, 16) - prep->width;
-    regs->reg_base.enc_rsl.pic_hd8_m1 = MPP_ALIGN(prep->height, 16) / 8 - 1;
-    regs->reg_base.src_fill.pic_hfill = MPP_ALIGN(prep->height, 16) - prep->height;
+    regs->reg_base.common.enc_rsl.pic_wd8_m1 = MPP_ALIGN(prep->width, 16) / 8 - 1;
+    regs->reg_base.common.src_fill.pic_wfill = MPP_ALIGN(prep->width, 16) - prep->width;
+    regs->reg_base.common.enc_rsl.pic_hd8_m1 = MPP_ALIGN(prep->height, 16) / 8 - 1;
+    regs->reg_base.common.src_fill.pic_hfill = MPP_ALIGN(prep->height, 16) - prep->height;
 
-    regs->reg_ctl.dtrns_map.src_bus_edin = cfg.src_endian;
+    regs->reg_ctl.common.dtrns_map.src_bus_edin = cfg.src_endian;
 
-    regs->reg_base.src_fmt.src_cfmt   = hw_fmt;
-    regs->reg_base.src_fmt.alpha_swap = cfg.alpha_swap;
-    regs->reg_base.src_fmt.rbuv_swap  = cfg.rbuv_swap;
-    regs->reg_base.src_fmt.out_fmt    = (hw_fmt == VEPU5xx_FMT_YUV400) ? 0 : 1;
+    regs->reg_base.common.src_fmt.src_cfmt   = hw_fmt;
+    regs->reg_base.common.src_fmt.alpha_swap = cfg.alpha_swap;
+    regs->reg_base.common.src_fmt.rbuv_swap  = cfg.rbuv_swap;
+    regs->reg_base.common.src_fmt.out_fmt    = (hw_fmt == VEPU5xx_FMT_YUV400) ? 0 : 1;
 
     if (MPP_FRAME_FMT_IS_YUV(fmt))
-        regs->reg_base.src_fmt.src_range  = 1;
+        regs->reg_base.common.src_fmt.src_range  = 1;
     else
-        regs->reg_base.src_fmt.src_range  = (prep->range == MPP_FRAME_RANGE_JPEG) ? 1 : 0;
+        regs->reg_base.common.src_fmt.src_range  = (prep->range == MPP_FRAME_RANGE_JPEG) ? 1 : 0;
 
     if (MPP_FRAME_FMT_IS_FBC(fmt)) {
         y_stride = mpp_frame_get_fbc_hdr_stride(task->frame);
@@ -793,53 +793,53 @@ static MPP_RET setup_vepu580_prep(HalVepu580RegSet *regs, MppEncPrepCfg *prep,
 
         hal_h264e_dbg_flow("input color range %d colorspace %d", prep->range, prep->color);
 
-        regs->reg_base.src_udfy.csc_wgt_b2y = cfg_coeffs->_2y.b_coeff;
-        regs->reg_base.src_udfy.csc_wgt_g2y = cfg_coeffs->_2y.g_coeff;
-        regs->reg_base.src_udfy.csc_wgt_r2y = cfg_coeffs->_2y.r_coeff;
+        regs->reg_base.common.src_udfy.csc_wgt_b2y = cfg_coeffs->_2y.b_coeff;
+        regs->reg_base.common.src_udfy.csc_wgt_g2y = cfg_coeffs->_2y.g_coeff;
+        regs->reg_base.common.src_udfy.csc_wgt_r2y = cfg_coeffs->_2y.r_coeff;
 
-        regs->reg_base.src_udfu.csc_wgt_b2u = cfg_coeffs->_2u.b_coeff;
-        regs->reg_base.src_udfu.csc_wgt_g2u = cfg_coeffs->_2u.g_coeff;
-        regs->reg_base.src_udfu.csc_wgt_r2u = cfg_coeffs->_2u.r_coeff;
+        regs->reg_base.common.src_udfu.csc_wgt_b2u = cfg_coeffs->_2u.b_coeff;
+        regs->reg_base.common.src_udfu.csc_wgt_g2u = cfg_coeffs->_2u.g_coeff;
+        regs->reg_base.common.src_udfu.csc_wgt_r2u = cfg_coeffs->_2u.r_coeff;
 
-        regs->reg_base.src_udfv.csc_wgt_b2v = cfg_coeffs->_2v.b_coeff;
-        regs->reg_base.src_udfv.csc_wgt_g2v = cfg_coeffs->_2v.g_coeff;
-        regs->reg_base.src_udfv.csc_wgt_r2v = cfg_coeffs->_2v.r_coeff;
+        regs->reg_base.common.src_udfv.csc_wgt_b2v = cfg_coeffs->_2v.b_coeff;
+        regs->reg_base.common.src_udfv.csc_wgt_g2v = cfg_coeffs->_2v.g_coeff;
+        regs->reg_base.common.src_udfv.csc_wgt_r2v = cfg_coeffs->_2v.r_coeff;
 
-        regs->reg_base.src_udfo.csc_ofst_y  = cfg_coeffs->_2y.offset;
-        regs->reg_base.src_udfo.csc_ofst_u  = cfg_coeffs->_2u.offset;
-        regs->reg_base.src_udfo.csc_ofst_v  = cfg_coeffs->_2v.offset;
+        regs->reg_base.common.src_udfo.csc_ofst_y  = cfg_coeffs->_2y.offset;
+        regs->reg_base.common.src_udfo.csc_ofst_u  = cfg_coeffs->_2u.offset;
+        regs->reg_base.common.src_udfo.csc_ofst_v  = cfg_coeffs->_2v.offset;
 
         hal_h264e_dbg_flow("use color range %d colorspace %d", cfg_coeffs->dst_range, cfg_coeffs->color);
     } else {
-        regs->reg_base.src_udfy.csc_wgt_b2y = cfg.weight[0];
-        regs->reg_base.src_udfy.csc_wgt_g2y = cfg.weight[1];
-        regs->reg_base.src_udfy.csc_wgt_r2y = cfg.weight[2];
+        regs->reg_base.common.src_udfy.csc_wgt_b2y = cfg.weight[0];
+        regs->reg_base.common.src_udfy.csc_wgt_g2y = cfg.weight[1];
+        regs->reg_base.common.src_udfy.csc_wgt_r2y = cfg.weight[2];
 
-        regs->reg_base.src_udfu.csc_wgt_b2u = cfg.weight[3];
-        regs->reg_base.src_udfu.csc_wgt_g2u = cfg.weight[4];
-        regs->reg_base.src_udfu.csc_wgt_r2u = cfg.weight[5];
+        regs->reg_base.common.src_udfu.csc_wgt_b2u = cfg.weight[3];
+        regs->reg_base.common.src_udfu.csc_wgt_g2u = cfg.weight[4];
+        regs->reg_base.common.src_udfu.csc_wgt_r2u = cfg.weight[5];
 
-        regs->reg_base.src_udfv.csc_wgt_b2v = cfg.weight[6];
-        regs->reg_base.src_udfv.csc_wgt_g2v = cfg.weight[7];
-        regs->reg_base.src_udfv.csc_wgt_r2v = cfg.weight[8];
+        regs->reg_base.common.src_udfv.csc_wgt_b2v = cfg.weight[6];
+        regs->reg_base.common.src_udfv.csc_wgt_g2v = cfg.weight[7];
+        regs->reg_base.common.src_udfv.csc_wgt_r2v = cfg.weight[8];
 
-        regs->reg_base.src_udfo.csc_ofst_y  = cfg.offset[0];
-        regs->reg_base.src_udfo.csc_ofst_u  = cfg.offset[1];
-        regs->reg_base.src_udfo.csc_ofst_v  = cfg.offset[2];
+        regs->reg_base.common.src_udfo.csc_ofst_y  = cfg.offset[0];
+        regs->reg_base.common.src_udfo.csc_ofst_u  = cfg.offset[1];
+        regs->reg_base.common.src_udfo.csc_ofst_v  = cfg.offset[2];
     }
 
-    regs->reg_base.src_proc.afbcd_en   = (MPP_FRAME_FMT_IS_FBC(fmt) != 0) ? 1 : 0;
-    regs->reg_base.src_strd0.src_strd0 = y_stride;
-    regs->reg_base.src_strd1.src_strd1 = c_stride;
+    regs->reg_base.common.src_proc.afbcd_en   = (MPP_FRAME_FMT_IS_FBC(fmt) != 0) ? 1 : 0;
+    regs->reg_base.common.src_strd0.src_strd0 = y_stride;
+    regs->reg_base.common.src_strd1.src_strd1 = c_stride;
 
-    regs->reg_base.src_proc.src_mirr   = prep->mirroring > 0;
-    regs->reg_base.src_proc.src_rot    = prep->rotation;
-    regs->reg_base.src_proc.txa_en     = 0;
+    regs->reg_base.common.src_proc.src_mirr   = prep->mirroring > 0;
+    regs->reg_base.common.src_proc.src_rot    = prep->rotation;
+    regs->reg_base.common.src_proc.txa_en     = 0;
 
     regs->reg_base.sli_cfg.sli_crs_en  = 1;
 
-    regs->reg_base.pic_ofst.pic_ofst_y = 0;
-    regs->reg_base.pic_ofst.pic_ofst_x = 0;
+    regs->reg_base.common.pic_ofst.pic_ofst_y = 0;
+    regs->reg_base.common.pic_ofst.pic_ofst_x = 0;
 
     hal_h264e_dbg_func("leave\n");
 
@@ -859,16 +859,16 @@ static MPP_RET vepu580_h264e_save_pass1_patch(HalVepu580RegSet *regs, HalH264eVe
         }
     }
 
-    regs->reg_base.enc_pic.cur_frm_ref = 1;
-    regs->reg_base.rfpw_h_addr = mpp_buffer_get_fd(ctx->buf_pass1);
-    regs->reg_base.rfpw_b_addr = regs->reg_base.rfpw_h_addr;
-    regs->reg_base.enc_pic.rec_fbc_dis = 1;
+    regs->reg_base.common.enc_pic.cur_frm_ref = 1;
+    regs->reg_base.common.rfpw_h_addr = mpp_buffer_get_fd(ctx->buf_pass1);
+    regs->reg_base.common.rfpw_b_addr = regs->reg_base.common.rfpw_h_addr;
+    regs->reg_base.common.enc_pic.rec_fbc_dis = 1;
 
     mpp_dev_multi_offset_update(ctx->offsets, 164, width_align * height_align);
 
     /* NOTE: disable split to avoid lowdelay slice output */
-    regs->reg_base.sli_splt.sli_splt = 0;
-    regs->reg_base.enc_pic.slen_fifo = 0;
+    regs->reg_base.common.sli_splt.sli_splt = 0;
+    regs->reg_base.common.enc_pic.slen_fifo = 0;
 
     return MPP_OK;
 }
@@ -883,26 +883,26 @@ static MPP_RET vepu580_h264e_use_pass1_patch(HalVepu580RegSet *regs, HalH264eVep
 
     hal_h264e_dbg_func("enter\n");
 
-    regs->reg_base.src_fmt.src_cfmt   = VEPU5xx_FMT_YUV420SP;
-    regs->reg_base.src_fmt.alpha_swap = 0;
-    regs->reg_base.src_fmt.rbuv_swap  = 0;
-    regs->reg_base.src_fmt.out_fmt    = 1;
+    regs->reg_base.common.src_fmt.src_cfmt   = VEPU5xx_FMT_YUV420SP;
+    regs->reg_base.common.src_fmt.alpha_swap = 0;
+    regs->reg_base.common.src_fmt.rbuv_swap  = 0;
+    regs->reg_base.common.src_fmt.out_fmt    = 1;
 
-    regs->reg_base.src_proc.afbcd_en   =  0;
-    regs->reg_base.src_strd0.src_strd0  = hor_stride;
-    regs->reg_base.src_strd1.src_strd1  = hor_stride;
+    regs->reg_base.common.src_proc.afbcd_en   =  0;
+    regs->reg_base.common.src_strd0.src_strd0  = hor_stride;
+    regs->reg_base.common.src_strd1.src_strd1  = hor_stride;
 
-    regs->reg_base.src_proc.src_mirr   = 0;
-    regs->reg_base.src_proc.src_rot    = 0;
-    regs->reg_base.src_proc.txa_en     = 0;
+    regs->reg_base.common.src_proc.src_mirr   = 0;
+    regs->reg_base.common.src_proc.src_rot    = 0;
+    regs->reg_base.common.src_proc.txa_en     = 0;
 
-    regs->reg_base.pic_ofst.pic_ofst_y = 0;
-    regs->reg_base.pic_ofst.pic_ofst_x = 0;
+    regs->reg_base.common.pic_ofst.pic_ofst_y = 0;
+    regs->reg_base.common.pic_ofst.pic_ofst_x = 0;
 
 
-    regs->reg_base.adr_src0   = fd_in;
-    regs->reg_base.adr_src1   = fd_in;
-    regs->reg_base.adr_src2   = fd_in;
+    regs->reg_base.common.adr_src0   = fd_in;
+    regs->reg_base.common.adr_src1   = fd_in;
+    regs->reg_base.common.adr_src2   = fd_in;
 
     mpp_dev_multi_offset_update(ctx->offsets, 161, frame_size);
     mpp_dev_multi_offset_update(ctx->offsets, 162, frame_size);
@@ -916,9 +916,9 @@ static void setup_vepu580_codec(HalVepu580RegSet *regs, H264eSps *sps,
 {
     hal_h264e_dbg_func("enter\n");
 
-    regs->reg_base.enc_pic.enc_stnd       = 0;
-    regs->reg_base.enc_pic.cur_frm_ref    = slice->nal_reference_idc > 0;
-    regs->reg_base.enc_pic.bs_scp         = 1;
+    regs->reg_base.common.enc_pic.enc_stnd       = 0;
+    regs->reg_base.common.enc_pic.cur_frm_ref    = slice->nal_reference_idc > 0;
+    regs->reg_base.common.enc_pic.bs_scp         = 1;
 
     regs->reg_base.synt_nal.nal_ref_idc    = slice->nal_reference_idc;
     regs->reg_base.synt_nal.nal_unit_type  = slice->nalu_type;
@@ -1309,9 +1309,9 @@ static void setup_vepu580_rc_base(HalVepu580RegSet *regs, HalH264eVepu580Ctx *ct
     regs->reg_rc_klut.roi_qthd3.qpmap_mode     = qpmap_mode;
 
     if (rc->rc_mode == MPP_ENC_RC_MODE_FIXQP) {
-        regs->reg_base.enc_pic.pic_qp    = qp_target;
-        regs->reg_base.rc_qp.rc_max_qp   = qp_target;
-        regs->reg_base.rc_qp.rc_min_qp   = qp_target;
+        regs->reg_base.common.enc_pic.pic_qp    = qp_target;
+        regs->reg_base.common.rc_qp.rc_max_qp   = qp_target;
+        regs->reg_base.common.rc_qp.rc_min_qp   = qp_target;
 
         return;
     }
@@ -1323,16 +1323,16 @@ static void setup_vepu580_rc_base(HalVepu580RegSet *regs, HalH264eVepu580Ctx *ct
     negative_bits_thd = 0 - 5 * mb_target_bits / 16;
     positive_bits_thd = 5 * mb_target_bits / 16;
 
-    regs->reg_base.enc_pic.pic_qp       = qp_target;
-    regs->reg_base.rc_cfg.rc_en         = 1;
-    regs->reg_base.rc_cfg.aq_en         = 1;
-    regs->reg_base.rc_cfg.aq_mode       = 0;
-    regs->reg_base.rc_cfg.rc_ctu_num    = mb_w;
-    regs->reg_base.rc_qp.rc_qp_range    = (slice->slice_type == H264_I_SLICE) ?
-                                          hw->qp_delta_row_i : hw->qp_delta_row;
-    regs->reg_base.rc_qp.rc_max_qp      = qp_max;
-    regs->reg_base.rc_qp.rc_min_qp      = qp_min;
-    regs->reg_base.rc_tgt.ctu_ebit      = mb_target_bits_mul_16;
+    regs->reg_base.common.enc_pic.pic_qp       = qp_target;
+    regs->reg_base.common.rc_cfg.rc_en         = 1;
+    regs->reg_base.common.rc_cfg.aq_en         = 1;
+    regs->reg_base.common.rc_cfg.aq_mode       = 0;
+    regs->reg_base.common.rc_cfg.rc_ctu_num    = mb_w;
+    regs->reg_base.common.rc_qp.rc_qp_range    = (slice->slice_type == H264_I_SLICE) ?
+                                                 hw->qp_delta_row_i : hw->qp_delta_row;
+    regs->reg_base.common.rc_qp.rc_max_qp      = qp_max;
+    regs->reg_base.common.rc_qp.rc_min_qp      = qp_min;
+    regs->reg_base.common.rc_tgt.ctu_ebit      = mb_target_bits_mul_16;
 
     regs->reg_rc_klut.rc_adj0.qp_adj0   = -2;
     regs->reg_rc_klut.rc_adj0.qp_adj1   = -1;
@@ -1366,7 +1366,7 @@ static void setup_vepu580_rc_base(HalVepu580RegSet *regs, HalH264eVepu580Ctx *ct
     }
 
     if (cfg->rc.rc_mode == MPP_ENC_RC_MODE_SMTRC) {
-        regs->reg_base.rc_qp.rc_qp_range = 0;
+        regs->reg_base.common.rc_qp.rc_qp_range = 0;
     }
 
     hal_h264e_dbg_func("leave\n");
@@ -1390,14 +1390,14 @@ static void setup_vepu580_io_buf(HalVepu580RegSet *regs, MppDevRegOffCfgs *offse
 
     hal_h264e_dbg_func("enter\n");
 
-    regs->reg_base.adr_src0   = fd_in;
-    regs->reg_base.adr_src1   = fd_in;
-    regs->reg_base.adr_src2   = fd_in;
+    regs->reg_base.common.adr_src0   = fd_in;
+    regs->reg_base.common.adr_src1   = fd_in;
+    regs->reg_base.common.adr_src2   = fd_in;
 
-    regs->reg_base.bsbb_addr  = fd_out;
-    regs->reg_base.bsbr_addr  = fd_out;
-    regs->reg_base.adr_bsbs   = fd_out;
-    regs->reg_base.bsbt_addr  = fd_out;
+    regs->reg_base.common.bsbb_addr  = fd_out;
+    regs->reg_base.common.bsbr_addr  = fd_out;
+    regs->reg_base.common.adr_bsbs   = fd_out;
+    regs->reg_base.common.bsbt_addr  = fd_out;
 
     if (MPP_FRAME_FMT_IS_FBC(fmt)) {
         off_in[0] = mpp_frame_get_fbc_offset(frm);;
@@ -1514,7 +1514,7 @@ static MPP_RET setup_vepu580_intra_refresh(HalVepu580RegSet *regs, HalH264eVepu5
             region->y = refresh_idx * 16 * refresh_num;
             region->h = 16 * refresh_num;
         }
-        regs->reg_base.me_rnge.cme_srch_v = 1;
+        regs->reg_base.common.me_rnge.cme_srch_v = 1;
     } else if (ctx->cfg->rc.refresh_mode == MPP_ENC_RC_INTRA_REFRESH_COL) {
         region->y = 0;
         region->h = h;
@@ -1525,7 +1525,7 @@ static MPP_RET setup_vepu580_intra_refresh(HalVepu580RegSet *regs, HalH264eVepu5
             region->x = refresh_idx * 16 * refresh_num;
             region->w = 16 * refresh_num;
         }
-        regs->reg_base.me_rnge.cme_srch_h = 1;
+        regs->reg_base.common.me_rnge.cme_srch_h = 1;
     }
 
     region->intra = 1;
@@ -1535,8 +1535,8 @@ static MPP_RET setup_vepu580_intra_refresh(HalVepu580RegSet *regs, HalH264eVepu5
     region->qp_area_idx = 1;
     region->abs_qp_en = 0;
 
-    regs->reg_base.enc_pic.roi_en = 1;
-    regs->reg_base.roi_addr = base_cfg_fd;
+    regs->reg_base.common.enc_pic.roi_en = 1;
+    regs->reg_base.common.roi_addr = base_cfg_fd;
     vepu5xx_h264_set_one_roi(base_cfg_buf, region, w, h);
     mpp_free(region);
     mpp_buffer_sync_end(ctx->roi_base_cfg_buf);
@@ -1562,15 +1562,15 @@ static void setup_vepu580_roi(HalVepu580RegSet *regs, HalH264eVepu580Ctx *ctx)
         MppEncROICfg2 *cfg   = (MppEncROICfg2 *)ctx->roi_data;
 
         if (mpp_buffer_get_size(cfg->base_cfg_buf) >= base_cfg_size) {
-            regs->reg_base.enc_pic.roi_en = 1;
-            regs->reg_base.roi_addr = mpp_buffer_get_fd(cfg->base_cfg_buf);
+            regs->reg_base.common.enc_pic.roi_en = 1;
+            regs->reg_base.common.roi_addr = mpp_buffer_get_fd(cfg->base_cfg_buf);
         } else {
             mpp_err("roi base cfg buf not enough, roi is invalid");
         }
 
         if (cfg->roi_qp_en) {
             if (mpp_buffer_get_size(cfg->qp_cfg_buf) >= qp_cfg_size) {
-                regs->reg_base.roi_qp_addr  =  mpp_buffer_get_fd(cfg->qp_cfg_buf);
+                regs->reg_base.common.roi_qp_addr  =  mpp_buffer_get_fd(cfg->qp_cfg_buf);
                 regs->reg_base.roi_en.roi_qp_en = 1;
             } else {
                 mpp_err("roi qp cfg buf not enough, roi is invalid");
@@ -1579,7 +1579,7 @@ static void setup_vepu580_roi(HalVepu580RegSet *regs, HalH264eVepu580Ctx *ctx)
 
         if (cfg->roi_amv_en) {
             if (mpp_buffer_get_size(cfg->amv_cfg_buf) >= amv_cfg_size) {
-                regs->reg_base.qoi_amv_addr =  mpp_buffer_get_fd(cfg->amv_cfg_buf);
+                regs->reg_base.common.roi_amv_addr =  mpp_buffer_get_fd(cfg->amv_cfg_buf);
                 regs->reg_base.roi_en.roi_amv_en = 1;
             } else {
                 mpp_err("roi amv cfg buf not enough, roi is invalid");
@@ -1588,7 +1588,7 @@ static void setup_vepu580_roi(HalVepu580RegSet *regs, HalH264eVepu580Ctx *ctx)
 
         if (cfg->roi_mv_en) {
             if (mpp_buffer_get_size(cfg->mv_cfg_buf) >= mv_cfg_size) {
-                regs->reg_base.qoi_mv_addr =  mpp_buffer_get_fd(cfg->mv_cfg_buf);
+                regs->reg_base.common.roi_mv_addr =  mpp_buffer_get_fd(cfg->mv_cfg_buf);
                 regs->reg_base.roi_en.roi_mv_en = 1;
             } else {
                 mpp_err("roi mv cfg buf not enough, roi is invalid");
@@ -1618,9 +1618,9 @@ static void setup_vepu580_recn_refr(HalH264eVepu580Ctx *ctx, HalVepu580RegSet *r
         mpp_assert(buf_pixel);
         mpp_assert(buf_thumb);
 
-        regs->reg_base.rfpw_h_addr = fd;
-        regs->reg_base.rfpw_b_addr = fd;
-        regs->reg_base.dspw_addr = mpp_buffer_get_fd(buf_thumb);
+        regs->reg_base.common.rfpw_h_addr = fd;
+        regs->reg_base.common.rfpw_b_addr = fd;
+        regs->reg_base.common.dspw_addr = mpp_buffer_get_fd(buf_thumb);
     }
 
     if (refr && refr->cnt) {
@@ -1631,9 +1631,9 @@ static void setup_vepu580_recn_refr(HalH264eVepu580Ctx *ctx, HalVepu580RegSet *r
         mpp_assert(buf_pixel);
         mpp_assert(buf_thumb);
 
-        regs->reg_base.rfpr_h_addr = fd;
-        regs->reg_base.rfpr_b_addr = fd;
-        regs->reg_base.dspr_addr = mpp_buffer_get_fd(buf_thumb);
+        regs->reg_base.common.rfpr_h_addr = fd;
+        regs->reg_base.common.rfpr_b_addr = fd;
+        regs->reg_base.common.dspr_addr = mpp_buffer_get_fd(buf_thumb);
     }
 
     mpp_dev_multi_offset_update(ctx->offsets, 164, fbc_hdr_size);
@@ -1650,46 +1650,46 @@ static void setup_vepu580_split(HalVepu580RegSet *regs, MppEncCfgSet *enc_cfg)
 
     switch (cfg->split_mode) {
     case MPP_ENC_SPLIT_NONE : {
-        regs->reg_base.sli_splt.sli_splt = 0;
-        regs->reg_base.sli_splt.sli_splt_mode = 0;
-        regs->reg_base.sli_splt.sli_splt_cpst = 0;
-        regs->reg_base.sli_splt.sli_max_num_m1 = 0;
-        regs->reg_base.sli_splt.sli_flsh = 0;
-        regs->reg_base.sli_cnum.sli_splt_cnum_m1 = 0;
+        regs->reg_base.common.sli_splt.sli_splt = 0;
+        regs->reg_base.common.sli_splt.sli_splt_mode = 0;
+        regs->reg_base.common.sli_splt.sli_splt_cpst = 0;
+        regs->reg_base.common.sli_splt.sli_max_num_m1 = 0;
+        regs->reg_base.common.sli_splt.sli_flsh = 0;
+        regs->reg_base.common.sli_cnum.sli_splt_cnum_m1 = 0;
 
-        regs->reg_base.sli_byte.sli_splt_byte = 0;
-        regs->reg_base.enc_pic.slen_fifo = 0;
+        regs->reg_base.common.sli_byte.sli_splt_byte = 0;
+        regs->reg_base.common.enc_pic.slen_fifo = 0;
     } break;
     case MPP_ENC_SPLIT_BY_BYTE : {
-        regs->reg_base.sli_splt.sli_splt = 1;
-        regs->reg_base.sli_splt.sli_splt_mode = 0;
-        regs->reg_base.sli_splt.sli_splt_cpst = 0;
-        regs->reg_base.sli_splt.sli_max_num_m1 = 500;
-        regs->reg_base.sli_splt.sli_flsh = 1;
-        regs->reg_base.sli_cnum.sli_splt_cnum_m1 = 0;
+        regs->reg_base.common.sli_splt.sli_splt = 1;
+        regs->reg_base.common.sli_splt.sli_splt_mode = 0;
+        regs->reg_base.common.sli_splt.sli_splt_cpst = 0;
+        regs->reg_base.common.sli_splt.sli_max_num_m1 = 500;
+        regs->reg_base.common.sli_splt.sli_flsh = 1;
+        regs->reg_base.common.sli_cnum.sli_splt_cnum_m1 = 0;
 
-        regs->reg_base.sli_byte.sli_splt_byte = cfg->split_arg;
-        regs->reg_base.enc_pic.slen_fifo = (cfg->split_out != 0) ? 1 : 0;
-        regs->reg_ctl.int_en.slc_done_en = regs->reg_base.enc_pic.slen_fifo;
+        regs->reg_base.common.sli_byte.sli_splt_byte = cfg->split_arg;
+        regs->reg_base.common.enc_pic.slen_fifo = (cfg->split_out != 0) ? 1 : 0;
+        regs->reg_ctl.common.int_en.slc_done_en = regs->reg_base.common.enc_pic.slen_fifo;
     } break;
     case MPP_ENC_SPLIT_BY_CTU : {
         RK_U32 mb_w = MPP_ALIGN(enc_cfg->prep.width, 16) / 16;
         RK_U32 mb_h = MPP_ALIGN(enc_cfg->prep.height, 16) / 16;
         RK_U32 slice_num = (mb_w * mb_h + cfg->split_arg - 1) / cfg->split_arg;
 
-        regs->reg_base.sli_splt.sli_splt = 1;
-        regs->reg_base.sli_splt.sli_splt_mode = 1;
-        regs->reg_base.sli_splt.sli_splt_cpst = 0;
-        regs->reg_base.sli_splt.sli_max_num_m1 = 500;
-        regs->reg_base.sli_splt.sli_flsh = 1;
-        regs->reg_base.sli_cnum.sli_splt_cnum_m1 = cfg->split_arg - 1;
+        regs->reg_base.common.sli_splt.sli_splt = 1;
+        regs->reg_base.common.sli_splt.sli_splt_mode = 1;
+        regs->reg_base.common.sli_splt.sli_splt_cpst = 0;
+        regs->reg_base.common.sli_splt.sli_max_num_m1 = 500;
+        regs->reg_base.common.sli_splt.sli_flsh = 1;
+        regs->reg_base.common.sli_cnum.sli_splt_cnum_m1 = cfg->split_arg - 1;
 
-        regs->reg_base.sli_byte.sli_splt_byte = 0;
-        regs->reg_base.enc_pic.slen_fifo = (cfg->split_out != 0) ? 1 : 0;
+        regs->reg_base.common.sli_byte.sli_splt_byte = 0;
+        regs->reg_base.common.enc_pic.slen_fifo = (cfg->split_out != 0) ? 1 : 0;
 
         if ((cfg->split_out & MPP_ENC_SPLIT_OUT_LOWDELAY) ||
-            (regs->reg_base.enc_pic.slen_fifo && (slice_num > VEPU580_SLICE_FIFO_LEN)))
-            regs->reg_ctl.int_en.slc_done_en = 1;
+            (regs->reg_base.common.enc_pic.slen_fifo && (slice_num > VEPU580_SLICE_FIFO_LEN)))
+            regs->reg_ctl.common.int_en.slc_done_en = 1;
 
     } break;
     default : {
@@ -1705,8 +1705,8 @@ static void calc_cime_parameter(HalVepu580RegSet *regs, H264eSps *sps)
     Vepu580BaseCfg *base_regs = &regs->reg_base;
     RK_S32 x_gmv = base_regs->gmv.gmv_x;
     RK_S32 y_gmv = base_regs->gmv.gmv_y;
-    RK_S32 srch_w = base_regs->me_rnge.cme_srch_h * 4;
-    RK_S32 srch_h = base_regs->me_rnge.cme_srch_v * 4;
+    RK_S32 srch_w = base_regs->common.me_rnge.cme_srch_h * 4;
+    RK_S32 srch_h = base_regs->common.me_rnge.cme_srch_v * 4;
     RK_S32 frm_sta = 0, frm_end = 0, pic_w = 0;
     RK_S32 pic_wd64 = MPP_ALIGN(sps->pic_width_in_mbs * 16, 64) / 64;
 
@@ -1831,11 +1831,11 @@ static void setup_vepu580_me(HalVepu580RegSet *regs, H264eSps *sps,
     if (cime_blk_h_max / 4 > MPP_ALIGN(sps->pic_height_in_mbs * 16, 64) / 128 * 4)
         cime_blk_h_max = MPP_ALIGN(sps->pic_height_in_mbs * 16, 64) / 128 * 16;
 
-    regs->reg_base.me_rnge.cme_srch_h     = cime_blk_w_max / 4;
-    regs->reg_base.me_rnge.cme_srch_v     = cime_blk_h_max / 4;
-    regs->reg_base.me_rnge.rme_srch_h     = 7;
-    regs->reg_base.me_rnge.rme_srch_v     = 5;
-    regs->reg_base.me_rnge.dlt_frm_num    = 0;
+    regs->reg_base.common.me_rnge.cme_srch_h     = cime_blk_w_max / 4;
+    regs->reg_base.common.me_rnge.cme_srch_v     = cime_blk_h_max / 4;
+    regs->reg_base.common.me_rnge.rme_srch_h     = 7;
+    regs->reg_base.common.me_rnge.rme_srch_v     = 5;
+    regs->reg_base.common.me_rnge.dlt_frm_num    = 0;
 
     if (slice->slice_type == H264_I_SLICE) {
         regs->reg_base.me_cfg.pmv_mdst_h = 0;
@@ -1863,16 +1863,16 @@ static void setup_vepu580_l2(HalVepu580RegSet *regs, H264eSlice *slice, MppEncHw
 
     hal_h264e_dbg_func("enter\n");
 
-    regs->reg_s3.iprd_wgt_qp_hevc_0_51[0] = 0;
+    regs->reg_s3.common.iprd_wgt_qp_hevc_0_51[0] = 0;
     /* ~ */
-    regs->reg_s3.iprd_wgt_qp_hevc_0_51[51] = 0;
+    regs->reg_s3.common.iprd_wgt_qp_hevc_0_51[51] = 0;
 
     if (slice->slice_type == H264_I_SLICE) {
-        memcpy(regs->reg_s3.rdo_wgta_qp_grpa_0_51, &vepu5xx_h264e_lambda_default_58[6], H264E_LAMBDA_TAB_SIZE);
+        memcpy(regs->reg_s3.common.rdo_wgta_qp_grpa_0_51, &vepu5xx_h264e_lambda_default_58[6], H264E_LAMBDA_TAB_SIZE);
     } else {
-        memcpy(regs->reg_s3.rdo_wgta_qp_grpa_0_51, &vepu5xx_h264e_lambda_default_58[6], H264E_LAMBDA_TAB_SIZE);
+        memcpy(regs->reg_s3.common.rdo_wgta_qp_grpa_0_51, &vepu5xx_h264e_lambda_default_58[6], H264E_LAMBDA_TAB_SIZE);
     }
-    memset(regs->reg_s3.iprd_wgt_qp_hevc_0_51, 0, H264E_LAMBDA_TAB_SIZE);
+    memset(regs->reg_s3.common.iprd_wgt_qp_hevc_0_51, 0, H264E_LAMBDA_TAB_SIZE);
 
     regs->reg_rc_klut.madi_cfg.madi_mode = 0;
     regs->reg_rc_klut.madi_cfg.madi_thd  = 25;
@@ -1956,38 +1956,38 @@ static void setup_vepu580_l2(HalVepu580RegSet *regs, H264eSlice *slice, MppEncHw
     /* CIME */
     {
         /* 0x1760 */
-        regs->reg_s3.cime_sqi_cfg.cime_sad_mod_sel = 0;
-        regs->reg_s3.cime_sqi_cfg.cime_sad_use_big_block = 1;
-        regs->reg_s3.cime_sqi_cfg.cime_pmv_set_zero = 1;
-        regs->reg_s3.cime_sqi_cfg.cime_pmv_num = 3;
+        regs->reg_s3.common.cime_sqi_cfg.cime_sad_mod_sel = 0;
+        regs->reg_s3.common.cime_sqi_cfg.cime_sad_use_big_block = 1;
+        regs->reg_s3.common.cime_sqi_cfg.cime_pmv_set_zero = 1;
+        regs->reg_s3.common.cime_sqi_cfg.cime_pmv_num = 3;
 
         /* 0x1764 */
-        regs->reg_s3.cime_sqi_thd.cime_mvd_th0 = 32;
-        regs->reg_s3.cime_sqi_thd.cime_mvd_th1 = 80;
-        regs->reg_s3.cime_sqi_thd.cime_mvd_th2 = 128;
+        regs->reg_s3.common.cime_sqi_thd.cime_mvd_th0 = 32;
+        regs->reg_s3.common.cime_sqi_thd.cime_mvd_th1 = 80;
+        regs->reg_s3.common.cime_sqi_thd.cime_mvd_th2 = 128;
 
         /* 0x1768 */
-        regs->reg_s3.cime_sqi_multi0.cime_multi0 = 4;
-        regs->reg_s3.cime_sqi_multi0.cime_multi1 = 8;
-        regs->reg_s3.cime_sqi_multi1.cime_multi2 = 24;
-        regs->reg_s3.cime_sqi_multi1.cime_multi3 = 24;
+        regs->reg_s3.common.cime_sqi_multi0.cime_multi0 = 4;
+        regs->reg_s3.common.cime_sqi_multi0.cime_multi1 = 8;
+        regs->reg_s3.common.cime_sqi_multi1.cime_multi2 = 24;
+        regs->reg_s3.common.cime_sqi_multi1.cime_multi3 = 24;
     }
 
     /* RIME && FME */
     {
         /* 0x1770 */
-        regs->reg_s3.rime_sqi_thd.cime_sad_th0  = 50;
-        regs->reg_s3.rime_sqi_thd.rime_mvd_th0  = 3;
-        regs->reg_s3.rime_sqi_thd.rime_mvd_th1  = 8;
-        regs->reg_s3.rime_sqi_multi.rime_multi0 = 4;
-        regs->reg_s3.rime_sqi_multi.rime_multi1 = 32;
-        regs->reg_s3.rime_sqi_multi.rime_multi2 = 128;
+        regs->reg_s3.common.rime_sqi_thd.cime_sad_th0  = 50;
+        regs->reg_s3.common.rime_sqi_thd.rime_mvd_th0  = 3;
+        regs->reg_s3.common.rime_sqi_thd.rime_mvd_th1  = 8;
+        regs->reg_s3.common.rime_sqi_multi.rime_multi0 = 4;
+        regs->reg_s3.common.rime_sqi_multi.rime_multi1 = 32;
+        regs->reg_s3.common.rime_sqi_multi.rime_multi2 = 128;
 
         /* 0x1778 */
-        regs->reg_s3.fme_sqi_thd0.cime_sad_pu16_th = 2;
+        regs->reg_s3.common.fme_sqi_thd0.cime_sad_pu16_th = 2;
 
         /* 0x177C */
-        regs->reg_s3.fme_sqi_thd1.move_lambda = 1;
+        regs->reg_s3.common.fme_sqi_thd1.move_lambda = 1;
     }
 
     if (slice->slice_type == H264_I_SLICE) {
@@ -2011,16 +2011,16 @@ static void setup_vepu580_ext_line_buf(HalVepu580RegSet *regs, HalH264eVepu580Ct
     RK_S32 fd;
 
     if (!ctx->ext_line_buf) {
-        regs->reg_base.ebufb_addr = 0;
-        regs->reg_base.ebufb_addr = 0;
+        regs->reg_base.common.ebuft_addr = 0;
+        regs->reg_base.common.ebufb_addr = 0;
         return;
     }
 
     fd = mpp_buffer_get_fd(ctx->ext_line_buf);
     offset = ctx->ext_line_buf_size;
 
-    regs->reg_base.ebuft_addr = fd;
-    regs->reg_base.ebufb_addr = fd;
+    regs->reg_base.common.ebuft_addr = fd;
+    regs->reg_base.common.ebufb_addr = fd;
 
     mpp_dev_multi_offset_update(ctx->offsets, 182, offset);
 
@@ -2067,16 +2067,16 @@ static MPP_RET setup_vepu580_dual_core(HalH264eVepu580Ctx *ctx, H264SliceType sl
         rxid = ctx->slot_to_dchs_txid[refr_slot];
     }
 
-    if (!reg_base->enc_pic.cur_frm_ref)
+    if (!reg_base->common.enc_pic.cur_frm_ref)
         dchs_txe = 0;
 
     ctx->slot_to_dchs_txid[curr_slot] = ctx->curr_idx;
 
-    reg_base->dual_core.dchs_txid = ctx->curr_idx;
-    reg_base->dual_core.dchs_rxid = rxid;
-    reg_base->dual_core.dchs_txe = dchs_txe;
-    reg_base->dual_core.dchs_rxe = dchs_rxe;
-    reg_base->dual_core.dchs_ofst = dchs_ofst;
+    reg_base->common.dual_core.dchs_txid = ctx->curr_idx;
+    reg_base->common.dual_core.dchs_rxid = rxid;
+    reg_base->common.dual_core.dchs_txe = dchs_txe;
+    reg_base->common.dual_core.dchs_rxe = dchs_rxe;
+    reg_base->common.dual_core.dchs_ofst = dchs_ofst;
 
     ctx->prev_idx = ctx->curr_idx++;
     if (ctx->curr_idx > 3)
@@ -2124,10 +2124,10 @@ static MPP_RET hal_h264e_vepu580_gen_regs(void *hal, HalEncTask *task)
     setup_vepu580_roi(regs, ctx);
     setup_vepu580_recn_refr(ctx, regs);
 
-    regs->reg_base.meiw_addr = task->md_info ? mpp_buffer_get_fd(task->md_info) : 0;
-    regs->reg_base.enc_pic.mei_stor = task->md_info ? 1 : 0;
-    regs->reg_base.pic_ofst.pic_ofst_y = mpp_frame_get_offset_y(task->frame);
-    regs->reg_base.pic_ofst.pic_ofst_x = mpp_frame_get_offset_x(task->frame);
+    regs->reg_base.common.meiw_addr = task->md_info ? mpp_buffer_get_fd(task->md_info) : 0;
+    regs->reg_base.common.enc_pic.mei_stor = task->md_info ? 1 : 0;
+    regs->reg_base.common.pic_ofst.pic_ofst_y = mpp_frame_get_offset_y(task->frame);
+    regs->reg_base.common.pic_ofst.pic_ofst_x = mpp_frame_get_offset_x(task->frame);
 
     setup_vepu580_split(regs, cfg);
     setup_vepu580_me(regs, sps, slice);
@@ -2176,7 +2176,7 @@ static MPP_RET hal_h264e_vepu580_start(void *hal, HalEncTask *task)
 
         wr_cfg.reg = &regs->reg_ctl;
         wr_cfg.size = sizeof(regs->reg_ctl);
-        wr_cfg.offset = VEPU580_CONTROL_CFG_OFFSET;
+        wr_cfg.offset = VEPU580_CTL_OFFSET;
         hal_h264e_vepu580_dump_sw_regs(ctx->dbg_ctx, regs);
         ret = mpp_dev_ioctl(ctx->dev, MPP_DEV_REG_WR, &wr_cfg);
         if (ret) {
@@ -2185,7 +2185,7 @@ static MPP_RET hal_h264e_vepu580_start(void *hal, HalEncTask *task)
         }
         wr_cfg.reg = &regs->reg_base;
         wr_cfg.size = sizeof(regs->reg_base);
-        wr_cfg.offset = VEPU580_BASE_CFG_OFFSET;
+        wr_cfg.offset = VEPU580_BASE_OFFSET;
 
         ret = mpp_dev_ioctl(ctx->dev, MPP_DEV_REG_WR, &wr_cfg);
         if (ret) {
@@ -2194,7 +2194,7 @@ static MPP_RET hal_h264e_vepu580_start(void *hal, HalEncTask *task)
         }
         wr_cfg.reg = &regs->reg_rc_klut;
         wr_cfg.size = sizeof(regs->reg_rc_klut);
-        wr_cfg.offset = VEPU580_RC_KLUT_CFG_OFFSET;
+        wr_cfg.offset = VEPU580_RCKLUT_OFFSET;
 
         ret = mpp_dev_ioctl(ctx->dev, MPP_DEV_REG_WR, &wr_cfg);
         if (ret) {
@@ -2203,7 +2203,7 @@ static MPP_RET hal_h264e_vepu580_start(void *hal, HalEncTask *task)
         }
         wr_cfg.reg = &regs->reg_s3;
         wr_cfg.size = sizeof(regs->reg_s3);
-        wr_cfg.offset = VEPU580_SECTION_3_OFFSET;
+        wr_cfg.offset = VEPU580_PARAM_OFFSET;
 
         ret = mpp_dev_ioctl(ctx->dev, MPP_DEV_REG_WR, &wr_cfg);
         if (ret) {
@@ -2212,7 +2212,7 @@ static MPP_RET hal_h264e_vepu580_start(void *hal, HalEncTask *task)
         }
         wr_cfg.reg = &regs->reg_rdo;
         wr_cfg.size = sizeof(regs->reg_rdo);
-        wr_cfg.offset = VEPU580_RDO_CFG_OFFSET;
+        wr_cfg.offset = VEPU580_RDO_OFFSET;
 
         ret = mpp_dev_ioctl(ctx->dev, MPP_DEV_REG_WR, &wr_cfg);
         if (ret) {
@@ -2222,7 +2222,7 @@ static MPP_RET hal_h264e_vepu580_start(void *hal, HalEncTask *task)
 
         wr_cfg.reg = &regs->reg_scl;
         wr_cfg.size = sizeof(regs->reg_scl);
-        wr_cfg.offset = VEPU580_SCL_CFG_OFFSET;
+        wr_cfg.offset = VEPU580_SCL_OFFSET;
 
         ret = mpp_dev_ioctl(ctx->dev, MPP_DEV_REG_WR, &wr_cfg);
         if (ret) {
@@ -2248,7 +2248,7 @@ static MPP_RET hal_h264e_vepu580_start(void *hal, HalEncTask *task)
 
         /* read int_sta only when debug GET_REG is off (reg_ctl read covers it) */
         if (!hal_dbg_flag_en(ctx->dbg_ctx, HAL_DBG_GET_REG)) {
-            rd_cfg.reg = &regs->reg_ctl.int_sta;
+            rd_cfg.reg = &regs->reg_ctl.common.int_sta;
             rd_cfg.size = sizeof(RK_U32);
             rd_cfg.offset = VEPU580_REG_BASE_HW_STATUS;
 
@@ -2293,39 +2293,39 @@ static MPP_RET hal_h264e_vepu580_status_check(HalVepu580RegSet *regs)
 {
     MPP_RET ret = MPP_OK;
 
-    if (regs->reg_ctl.int_sta.lkt_node_done_sta)
+    if (regs->reg_ctl.common.int_sta.lkt_node_done_sta)
         hal_h264e_dbg_detail("lkt_done finish");
 
-    if (regs->reg_ctl.int_sta.enc_done_sta)
+    if (regs->reg_ctl.common.int_sta.enc_done_sta)
         hal_h264e_dbg_detail("enc_done finish");
 
-    if (regs->reg_ctl.int_sta.slc_done_sta)
+    if (regs->reg_ctl.common.int_sta.slc_done_sta)
         hal_h264e_dbg_detail("enc_slice finsh");
 
-    if (regs->reg_ctl.int_sta.sclr_done_sta)
+    if (regs->reg_ctl.common.int_sta.sclr_done_sta)
         hal_h264e_dbg_detail("safe clear finsh");
 
-    if (regs->reg_ctl.int_sta.bsf_oflw_sta) {
+    if (regs->reg_ctl.common.int_sta.bsf_oflw_sta) {
         mpp_err_f("bit stream overflow");
         ret = MPP_NOK;
     }
 
-    if (regs->reg_ctl.int_sta.brsp_otsd_sta) {
+    if (regs->reg_ctl.common.int_sta.brsp_otsd_sta) {
         mpp_err_f("bus write full");
         ret = MPP_NOK;
     }
 
-    if (regs->reg_ctl.int_sta.wbus_err_sta) {
+    if (regs->reg_ctl.common.int_sta.wbus_err_sta) {
         mpp_err_f("bus write error");
         ret = MPP_NOK;
     }
 
-    if (regs->reg_ctl.int_sta.rbus_err_sta) {
+    if (regs->reg_ctl.common.int_sta.rbus_err_sta) {
         mpp_err_f("bus read error");
         ret = MPP_NOK;
     }
 
-    if (regs->reg_ctl.int_sta.wdg_sta) {
+    if (regs->reg_ctl.common.int_sta.wdg_sta) {
         ret = MPP_NOK;
         mpp_err_f("wdg timeout");
     }
