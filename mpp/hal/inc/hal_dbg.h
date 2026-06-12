@@ -53,6 +53,9 @@ typedef struct HalDbgCtx_t {
 
     RK_U32       cur_frm_idx;
     RK_U32       target_frm_idx;  /* dump only this frame */
+
+    char         load_fname[256]; /* track current loading file name */
+    RK_U32       load_offset;     /* track loaded offset for appending */
 } HalDbgCtx;
 
 MPP_RET hal_dbg_init(HalDbgCtx **ctx, const char *dump_sub_dir);
@@ -64,6 +67,7 @@ MPP_RET hal_dbg_dump_data(HalDbgCtx *ctx, char *fname, void *data,
                           RK_U32 big_end, const char *mode);
 MPP_RET hal_dbg_dump_regs(HalDbgCtx *ctx, RK_U32 *regs, RK_U32 reg_cnt,
                           RK_U32 base_idx, const char *fname, const char *mode);
-MPP_RET hal_dbg_load_data(HalDbgCtx *ctx, const char *fname, void *buf, RK_U32 buf_size);
+MPP_RET hal_dbg_load_data(HalDbgCtx *ctx, const char *fname, void *buf,
+                          RK_U32 buf_size, const char *mode);
 
 #endif /* HAL_DBG_H */
