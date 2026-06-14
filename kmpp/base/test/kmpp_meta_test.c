@@ -5,116 +5,129 @@
 
 #define MODULE_TAG "kmpp_meta_test"
 
-#include <pthread.h>
+#include <stdlib.h>
+#include <string.h>
 
+#include "mpp_mem.h"
 #include "mpp_time.h"
 #include "mpp_debug.h"
+#include "mpp_thread.h"
 #include "kmpp_meta_impl.h"
 
-#define TEST_MAX    1
-#define LOOP_MAX    10
+#define THRD_DEFAULT    4
+#define LOOP_DEFAULT    10
+
+typedef struct {
+    MppThread       *thread;
+    RK_S32          loop_cnt;
+    RK_S64          time_avg;
+} MetaTestCtx;
+
+static MPP_RET meta_set(KmppMeta meta)
+{
+    KmppShmPtr zero = {0};
+    MPP_RET ret = MPP_OK;
+
+    ret |= kmpp_meta_set_shm(meta, KEY_INPUT_FRAME, &zero);
+    ret |= kmpp_meta_set_shm(meta, KEY_INPUT_PACKET, &zero);
+    ret |= kmpp_meta_set_shm(meta, KEY_OUTPUT_FRAME, &zero);
+    ret |= kmpp_meta_set_shm(meta, KEY_OUTPUT_PACKET, &zero);
+
+    ret |= kmpp_meta_set_shm(meta, KEY_MOTION_INFO, &zero);
+    ret |= kmpp_meta_set_shm(meta, KEY_HDR_INFO, &zero);
+
+    ret |= kmpp_meta_set_s32(meta, KEY_INPUT_BLOCK, 0);
+    ret |= kmpp_meta_set_s32(meta, KEY_OUTPUT_BLOCK, 0);
+    ret |= kmpp_meta_set_s32(meta, KEY_INPUT_IDR_REQ, 0);
+    ret |= kmpp_meta_set_s32(meta, KEY_OUTPUT_INTRA, 0);
+
+    ret |= kmpp_meta_set_s32(meta, KEY_TEMPORAL_ID, 0);
+    ret |= kmpp_meta_set_s32(meta, KEY_LONG_REF_IDX, 0);
+    ret |= kmpp_meta_set_s32(meta, KEY_ENC_AVERAGE_QP, 0);
+
+    //ret |= kmpp_meta_set_shm(meta, KEY_ROI_DATA, NULL);
+    ret |= kmpp_meta_set_shm(meta, KEY_OSD_DATA, NULL);
+    ret |= kmpp_meta_set_shm(meta, KEY_OSD_DATA2, NULL);
+    ret |= kmpp_meta_set_shm(meta, KEY_USER_DATA, NULL);
+    ret |= kmpp_meta_set_shm(meta, KEY_USER_DATAS, NULL);
+
+    ret |= kmpp_meta_set_shm(meta, KEY_QPMAP0, NULL);
+    ret |= kmpp_meta_set_shm(meta, KEY_NPU_SOBJ_FLAG, NULL);
+    ret |= kmpp_meta_set_ptr(meta, KEY_NPU_UOBJ_FLAG, NULL);
+
+    ret |= kmpp_meta_set_s32(meta, KEY_ENC_MARK_LTR, 0);
+    ret |= kmpp_meta_set_s32(meta, KEY_ENC_USE_LTR, 0);
+    ret |= kmpp_meta_set_s32(meta, KEY_ENC_FRAME_QP, 0);
+    ret |= kmpp_meta_set_s32(meta, KEY_ENC_BASE_LAYER_PID, 0);
+
+    return ret;
+}
+
+static MPP_RET meta_get(KmppMeta meta)
+{
+    KmppShmPtr shm;
+    void *ptr;
+    RK_S32 val;
+    MPP_RET ret = MPP_OK;
+
+    ret |= kmpp_meta_get_shm(meta, KEY_INPUT_FRAME, &shm);
+    ret |= kmpp_meta_get_shm(meta, KEY_INPUT_PACKET, &shm);
+    ret |= kmpp_meta_get_shm(meta, KEY_OUTPUT_FRAME, &shm);
+    ret |= kmpp_meta_get_shm(meta, KEY_OUTPUT_PACKET, &shm);
+
+    ret |= kmpp_meta_get_shm(meta, KEY_MOTION_INFO, &shm);
+    ret |= kmpp_meta_get_shm(meta, KEY_HDR_INFO, &shm);
+
+    ret |= kmpp_meta_get_s32(meta, KEY_INPUT_BLOCK, &val);
+    ret |= kmpp_meta_get_s32(meta, KEY_OUTPUT_BLOCK, &val);
+    ret |= kmpp_meta_get_s32(meta, KEY_INPUT_IDR_REQ, &val);
+    ret |= kmpp_meta_get_s32(meta, KEY_OUTPUT_INTRA, &val);
+
+    ret |= kmpp_meta_get_s32(meta, KEY_TEMPORAL_ID, &val);
+    ret |= kmpp_meta_get_s32(meta, KEY_LONG_REF_IDX, &val);
+    ret |= kmpp_meta_get_s32(meta, KEY_ENC_AVERAGE_QP, &val);
+
+    //ret |= kmpp_meta_get_shm(meta, KEY_ROI_DATA, &shm);
+    ret |= kmpp_meta_get_shm(meta, KEY_OSD_DATA, &shm);
+    ret |= kmpp_meta_get_shm(meta, KEY_OSD_DATA2, &shm);
+    ret |= kmpp_meta_get_shm(meta, KEY_USER_DATA, &shm);
+    ret |= kmpp_meta_get_shm(meta, KEY_USER_DATAS, &shm);
+
+    ret |= kmpp_meta_get_shm(meta, KEY_QPMAP0, &shm);
+    ret |= kmpp_meta_get_shm(meta, KEY_NPU_SOBJ_FLAG, &shm);
+    ret |= kmpp_meta_get_ptr(meta, KEY_NPU_UOBJ_FLAG, &ptr);
+
+    ret |= kmpp_meta_get_s32(meta, KEY_ENC_MARK_LTR, &val);
+    ret |= kmpp_meta_get_s32(meta, KEY_ENC_USE_LTR, &val);
+    ret |= kmpp_meta_get_s32(meta, KEY_ENC_FRAME_QP, &val);
+    ret |= kmpp_meta_get_s32(meta, KEY_ENC_BASE_LAYER_PID, &val);
+
+    return ret;
+}
 
 void *meta_test(void *param)
 {
-    RK_S32 loop_max = LOOP_MAX;
+    MetaTestCtx *ctx = (MetaTestCtx *)param;
+    RK_S32 loop_max = ctx->loop_cnt;
     RK_S64 time_start;
     RK_S64 time_end;
-    MppMeta meta[LOOP_MAX];
     MPP_RET ret = MPP_OK;
-    KmppShmPtr frame;
-    KmppShmPtr packet;
-    KmppShmPtr buffer;
-    KmppShmPtr sptr;
-    void *ptr;
-    RK_S32 val;
     RK_S32 i;
 
     time_start = mpp_time();
 
-    frame.uaddr = 0;
-    frame.kaddr = 0;
-    packet.uaddr = 0;
-    packet.kaddr = 0;
-    buffer.uaddr = 0;
-    buffer.kaddr = 0;
-    sptr.uaddr = 0;
-    sptr.kaddr = 0;
-
     for (i = 0; i < loop_max; i++) {
-        ret |= kmpp_meta_get_f(&meta[i]);
-        mpp_assert(meta[i]);
-    }
+        KmppMeta meta = NULL;
 
-    for (i = 0; i < loop_max; i++) {
+        ret |= kmpp_meta_get_f(&meta);
+        mpp_assert(meta);
+
         /* set */
-        ret |= kmpp_meta_set_shm(meta[i], KEY_INPUT_FRAME, &frame);
-        ret |= kmpp_meta_set_shm(meta[i], KEY_INPUT_PACKET, &packet);
-        ret |= kmpp_meta_set_shm(meta[i], KEY_OUTPUT_FRAME, &frame);
-        ret |= kmpp_meta_set_shm(meta[i], KEY_OUTPUT_PACKET, &packet);
-
-        ret |= kmpp_meta_set_shm(meta[i], KEY_MOTION_INFO, &sptr);
-        ret |= kmpp_meta_set_shm(meta[i], KEY_HDR_INFO, &sptr);
-
-        ret |= kmpp_meta_set_s32(meta[i], KEY_INPUT_BLOCK, 0);
-        ret |= kmpp_meta_set_s32(meta[i], KEY_OUTPUT_BLOCK, 0);
-        ret |= kmpp_meta_set_s32(meta[i], KEY_INPUT_IDR_REQ, 0);
-        ret |= kmpp_meta_set_s32(meta[i], KEY_OUTPUT_INTRA, 0);
-
-        ret |= kmpp_meta_set_s32(meta[i], KEY_TEMPORAL_ID, 0);
-        ret |= kmpp_meta_set_s32(meta[i], KEY_LONG_REF_IDX, 0);
-        ret |= kmpp_meta_set_s32(meta[i], KEY_ENC_AVERAGE_QP, 0);
-
-        //ret |= kmpp_meta_set_shm(meta[i], KEY_ROI_DATA, NULL);
-        ret |= kmpp_meta_set_shm(meta[i], KEY_OSD_DATA, NULL);
-        ret |= kmpp_meta_set_shm(meta[i], KEY_OSD_DATA2, NULL);
-        ret |= kmpp_meta_set_shm(meta[i], KEY_USER_DATA, NULL);
-        ret |= kmpp_meta_set_shm(meta[i], KEY_USER_DATAS, NULL);
-
-        ret |= kmpp_meta_set_shm(meta[i], KEY_QPMAP0, NULL);
-        ret |= kmpp_meta_set_shm(meta[i], KEY_NPU_SOBJ_FLAG, NULL);
-        ret |= kmpp_meta_set_ptr(meta[i], KEY_NPU_UOBJ_FLAG, NULL);
-
-        ret |= kmpp_meta_set_s32(meta[i], KEY_ENC_MARK_LTR, 0);
-        ret |= kmpp_meta_set_s32(meta[i], KEY_ENC_USE_LTR, 0);
-        ret |= kmpp_meta_set_s32(meta[i], KEY_ENC_FRAME_QP, 0);
-        ret |= kmpp_meta_set_s32(meta[i], KEY_ENC_BASE_LAYER_PID, 0);
-
+        ret |= meta_set(meta);
         /* get */
-        ret |= kmpp_meta_get_shm(meta[i], KEY_INPUT_FRAME, &frame);
-        ret |= kmpp_meta_get_shm(meta[i], KEY_INPUT_PACKET, &packet);
-        ret |= kmpp_meta_get_shm(meta[i], KEY_OUTPUT_FRAME, &frame);
-        ret |= kmpp_meta_get_shm(meta[i], KEY_OUTPUT_PACKET, &packet);
+        ret |= meta_get(meta);
 
-        ret |= kmpp_meta_get_shm(meta[i], KEY_MOTION_INFO, &buffer);
-        ret |= kmpp_meta_get_shm(meta[i], KEY_HDR_INFO, &buffer);
-
-        ret |= kmpp_meta_get_s32(meta[i], KEY_INPUT_BLOCK, &val);
-        ret |= kmpp_meta_get_s32(meta[i], KEY_OUTPUT_BLOCK, &val);
-        ret |= kmpp_meta_get_s32(meta[i], KEY_INPUT_IDR_REQ, &val);
-        ret |= kmpp_meta_get_s32(meta[i], KEY_OUTPUT_INTRA, &val);
-
-        ret |= kmpp_meta_get_s32(meta[i], KEY_TEMPORAL_ID, &val);
-        ret |= kmpp_meta_get_s32(meta[i], KEY_LONG_REF_IDX, &val);
-        ret |= kmpp_meta_get_s32(meta[i], KEY_ENC_AVERAGE_QP, &val);
-
-        //ret |= kmpp_meta_get_shm(meta[i], KEY_ROI_DATA, &sptr);
-        ret |= kmpp_meta_get_shm(meta[i], KEY_OSD_DATA, &sptr);
-        ret |= kmpp_meta_get_shm(meta[i], KEY_OSD_DATA2, &sptr);
-        ret |= kmpp_meta_get_shm(meta[i], KEY_USER_DATA, &sptr);
-        ret |= kmpp_meta_get_shm(meta[i], KEY_USER_DATAS, &sptr);
-
-        ret |= kmpp_meta_get_shm(meta[i], KEY_QPMAP0, &buffer);
-        ret |= kmpp_meta_get_shm(meta[i], KEY_NPU_SOBJ_FLAG, &sptr);
-        ret |= kmpp_meta_get_ptr(meta[i], KEY_NPU_UOBJ_FLAG, &ptr);
-
-        ret |= kmpp_meta_get_s32(meta[i], KEY_ENC_MARK_LTR, &val);
-        ret |= kmpp_meta_get_s32(meta[i], KEY_ENC_USE_LTR, &val);
-        ret |= kmpp_meta_get_s32(meta[i], KEY_ENC_FRAME_QP, &val);
-        ret |= kmpp_meta_get_s32(meta[i], KEY_ENC_BASE_LAYER_PID, &val);
-    }
-
-    for (i = 0; i < loop_max; i++) {
-        ret |= kmpp_meta_put_f(meta[i]);
+        ret |= kmpp_meta_put_f(meta);
     }
 
     time_end = mpp_time();
@@ -122,38 +135,70 @@ void *meta_test(void *param)
     if (ret)
         mpp_log("meta setting and getting, ret %d\n", ret);
 
-    *((RK_S64 *)param) = (time_end - time_start) / loop_max;
+    ctx->time_avg = (time_end - time_start) / loop_max;
 
     return NULL;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
-    pthread_t thds[TEST_MAX];
-    RK_S64 times[TEST_MAX];
-    RK_S32 thd_cnt = TEST_MAX;
+    MetaTestCtx *ctxs = NULL;
+    RK_S32 loop_cnt = 0;
+    RK_S32 thd_cnt = 0;
+    RK_S32 created = 0;
     RK_S64 avg_time = 0;
-    pthread_attr_t attr;
+    MPP_RET ret = MPP_OK;
     RK_S32 i;
 
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+    for (i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "-loop") && i + 1 < argc)
+            loop_cnt = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "-threads") && i + 1 < argc)
+            thd_cnt = atoi(argv[++i]);
+    }
 
-    mpp_log(MODULE_TAG " start\n");
+    if (loop_cnt <= 0)
+        loop_cnt = LOOP_DEFAULT;
+    if (thd_cnt <= 0)
+        thd_cnt = THRD_DEFAULT;
 
-    for (i = 0; i < thd_cnt; i++)
-        pthread_create(&thds[i], &attr, meta_test, &times[i]);
+    ctxs = mpp_calloc(MetaTestCtx, thd_cnt);
+    if (!ctxs) {
+        mpp_log(MODULE_TAG " alloc failed\n");
+        ret = MPP_NOK;
+        goto done;
+    }
 
-    for (i = 0; i < thd_cnt; i++)
-        pthread_join(thds[i], NULL);
+    mpp_log(MODULE_TAG " start threads %d loop %d\n", thd_cnt, loop_cnt);
 
-    for (i = 0; i < thd_cnt; i++)
-        avg_time += times[i];
+    for (i = 0; i < thd_cnt; i++) {
+        ctxs[i].loop_cnt = loop_cnt;
+        ctxs[i].thread = mpp_thread_create(meta_test, &ctxs[i], "meta_test");
+        if (!ctxs[i].thread) {
+            mpp_log(MODULE_TAG " thread %d create failed\n", i);
+            ret = MPP_NOK;
+            goto done;
+        }
+        mpp_thread_start(ctxs[i].thread);
+        created++;
+    }
 
-    mpp_log(MODULE_TAG " %d threads %d loop config avg %lld us",
-            thd_cnt, LOOP_MAX, avg_time / thd_cnt);
+done:
+    /* join + destroy all successfully created threads */
+    for (i = 0; i < created; i++) {
+        mpp_thread_destroy(ctxs[i].thread);
+        ctxs[i].thread = NULL;
+    }
 
-    mpp_log(MODULE_TAG " done\n");
+    if (ret == MPP_OK) {
+        for (i = 0; i < created; i++)
+            avg_time += ctxs[i].time_avg;
+        mpp_log(MODULE_TAG " %d threads %d loop config avg %lld us",
+                created, loop_cnt, created > 0 ? avg_time / created : 0);
+        mpp_log(MODULE_TAG " done\n");
+    }
 
-    return 0;
+    MPP_FREE(ctxs);
+
+    return ret;
 }

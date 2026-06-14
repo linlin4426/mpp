@@ -5,14 +5,23 @@
 
 #define MODULE_TAG "mpp_meta_test"
 
-#include <pthread.h>
+#include <stdlib.h>
+#include <string.h>
 
+#include "mpp_mem.h"
 #include "mpp_time.h"
 #include "mpp_debug.h"
+#include "mpp_thread.h"
 #include "mpp_meta_impl.h"
 
-#define TEST_MAX    200
-#define LOOP_MAX    100000
+#define THRD_DEFAULT    4
+#define LOOP_DEFAULT    1000
+
+typedef struct {
+    MppThread       *thread;
+    RK_S32          loop_cnt;
+    RK_S64          time_avg;
+} MetaTestCtx;
 
 static MPP_RET meta_set(MppMeta meta)
 {
@@ -97,7 +106,8 @@ static MPP_RET meta_get(MppMeta meta)
 
 void *meta_test(void *param)
 {
-    RK_S32 loop_max = LOOP_MAX;
+    MetaTestCtx *ctx = (MetaTestCtx *)param;
+    RK_S32 loop_max = ctx->loop_cnt;
     RK_S64 time_start;
     RK_S64 time_end;
     MPP_RET ret = MPP_OK;
@@ -124,25 +134,42 @@ void *meta_test(void *param)
     if (ret)
         mpp_log("meta setting and getting, ret %d\n", ret);
 
-    *((RK_S64 *)param) = (time_end - time_start) / loop_max;
+    ctx->time_avg = (time_end - time_start) / loop_max;
 
     return NULL;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
-    pthread_t thds[TEST_MAX];
-    RK_S64 times[TEST_MAX];
-    RK_S32 thd_cnt = TEST_MAX;
+    MetaTestCtx *ctxs = NULL;
+    RK_S32 loop_cnt = 0;
+    RK_S32 thd_cnt = 0;
+    RK_S32 created = 0;
     RK_S64 avg_time = 0;
-    pthread_attr_t attr;
     MppMeta meta = NULL;
+    MPP_RET ret = MPP_OK;
     RK_S32 i;
 
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+    for (i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "-loop") && i + 1 < argc)
+            loop_cnt = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "-threads") && i + 1 < argc)
+            thd_cnt = atoi(argv[++i]);
+    }
 
-    mpp_log("mpp_meta_test start\n");
+    if (loop_cnt <= 0)
+        loop_cnt = LOOP_DEFAULT;
+    if (thd_cnt <= 0)
+        thd_cnt = THRD_DEFAULT;
+
+    ctxs = mpp_calloc(MetaTestCtx, thd_cnt);
+    if (!ctxs) {
+        mpp_log("mpp_meta_test alloc failed\n");
+        ret = MPP_NOK;
+        goto done;
+    }
+
+    mpp_log("mpp_meta_test start threads %d loop %d\n", thd_cnt, loop_cnt);
 
     mpp_meta_get(&meta);
     if (meta) {
@@ -151,19 +178,33 @@ int main(void)
         mpp_meta_put(meta);
     }
 
-    for (i = 0; i < thd_cnt; i++)
-        pthread_create(&thds[i], &attr, meta_test, &times[i]);
+    for (i = 0; i < thd_cnt; i++) {
+        ctxs[i].loop_cnt = loop_cnt;
+        ctxs[i].thread = mpp_thread_create(meta_test, &ctxs[i], "meta_test");
+        if (!ctxs[i].thread) {
+            mpp_log("mpp_meta_test thread %d create failed\n", i);
+            ret = MPP_NOK;
+            goto done;
+        }
+        mpp_thread_start(ctxs[i].thread);
+        created++;
+    }
 
-    for (i = 0; i < thd_cnt; i++)
-        pthread_join(thds[i], NULL);
+done:
+    for (i = 0; i < created; i++) {
+        mpp_thread_destroy(ctxs[i].thread);
+        ctxs[i].thread = NULL;
+    }
 
-    for (i = 0; i < thd_cnt; i++)
-        avg_time += times[i];
+    if (ret == MPP_OK) {
+        for (i = 0; i < created; i++)
+            avg_time += ctxs[i].time_avg;
+        mpp_log("mpp_meta_test %d threads %d loop config avg %lld us",
+                created, loop_cnt, created > 0 ? avg_time / created : 0);
+        mpp_log("mpp_meta_test done\n");
+    }
 
-    mpp_log("mpp_meta_test %d threads %d loop config avg %lld us",
-            thd_cnt, LOOP_MAX, avg_time / thd_cnt);
+    MPP_FREE(ctxs);
 
-    mpp_log("mpp_meta_test done\n");
-
-    return 0;
+    return ret;
 }
