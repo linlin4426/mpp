@@ -4183,7 +4183,8 @@ static rk_u32 vla_read_base(void *st, struct KmppEntryVLAInfo *vla)
         }
         return *(rk_u32 *)((rk_u8 *)st + vla->base_off);
     }
-    return 0;
+
+    return vla->base_off;
 }
 
 static void vla_write_count(void *st, struct KmppEntryVLAInfo *vla, rk_s32 val)
@@ -4250,6 +4251,8 @@ static void write_struct(MppCfgIoImpl *obj, MppTrie trie, MppCfgStrBuf *str,
     /* VLA array: copy raw data from VLA buffer back to struct */
     if (obj->type == MPP_CFG_TYPE_ARRAY && IS_VLA_SIMPLE_TYPE(obj->array_type) &&
         tbl->tbl.elem_type == ELEM_TYPE_arr) {
+        rk_u32 base = (type && type->vla.vla.type == ENTRY_TYPE_VLA_INFO) ?
+                      vla_read_base(st, &type->vla.vla) : tbl->tbl.elem_offset;
         rk_s32 src_esz = sizeof_type(obj->array_type);
         rk_s32 dst_esz = (type && type->vla.vla.type == ENTRY_TYPE_VLA_INFO) ?
                          (rk_s32)type->vla.vla.elem_size : src_esz;
@@ -4257,7 +4260,7 @@ static void write_struct(MppCfgIoImpl *obj, MppTrie trie, MppCfgStrBuf *str,
         if (src_esz == dst_esz) {
             rk_s32 cpy_size = MPP_MIN((rk_s32)tbl->tbl.elem_size, (rk_s32)obj->raw_size);
 
-            memcpy((rk_u8 *)st + tbl->tbl.elem_offset, obj->raw, cpy_size);
+            memcpy((rk_u8 *)st + base, obj->raw, cpy_size);
             if (tbl->tbl.flag_offset && cpy_size > 0)
                 mpp_cfg_set_flag(st, tbl->tbl.flag_offset);
         } else {
@@ -4271,7 +4274,7 @@ static void write_struct(MppCfgIoImpl *obj, MppTrie trie, MppCfgStrBuf *str,
 
             for (i = 0; i < cnt; i++) {
                 void *src = (rk_u8 *)obj->raw + i * src_esz;
-                void *dst = (rk_u8 *)st + tbl->tbl.elem_offset + i * dst_esz;
+                void *dst = (rk_u8 *)st + base + i * dst_esz;
 
                 if (!src || !dst) {
                     mpp_loge_f("VLA elem index %d : src or dst is NULL\n", i);
@@ -4367,10 +4370,13 @@ static void write_struct(MppCfgIoImpl *obj, MppTrie trie, MppCfgStrBuf *str,
             mpp_cfg_set_flag(st, tbl->tbl.flag_offset);
     }
 
-    /* Complex VLA array: write elements back to struct */
+    /* Complex VLA array: write elements back to struct.
+     * Use type's vla info (cfg_root definition) — obj->vla.vla is only set by
+     * read_struct (from_struct path); nodes built by from_json leave it zero,
+     * causing vla_read_base to read the wrong field as base. */
     if (obj->type == MPP_CFG_TYPE_ARRAY && IS_VLA_COMPLEX_TYPE(obj->array_type) &&
-        obj->vla.vla.type == ENTRY_TYPE_VLA_INFO && obj->elems) {
-        struct KmppEntryVLAInfo *vla = &obj->vla.vla;
+        type && type->vla.vla.type == ENTRY_TYPE_VLA_INFO && obj->elems) {
+        struct KmppEntryVLAInfo *vla = &type->vla.vla;
         rk_s32 cnt;
         rk_u32 base;
         rk_s32 idx;
