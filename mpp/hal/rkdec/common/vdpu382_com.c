@@ -73,7 +73,7 @@ RK_S32 vdpu382_get_rcb_buf_size(VdpuRcbInfo *info, RK_S32 width, RK_S32 height)
     return offset;
 }
 
-void vdpu382_setup_rcb(Vdpu382RegCommonAddr *reg, MppDev dev, MppBuffer buf, VdpuRcbInfo *info)
+void vdpu382_setup_rcb(Vdpu382RegCommAddr *reg, MppDev dev, MppBuffer buf, VdpuRcbInfo *info)
 {
     RK_S32 fd = mpp_buffer_get_fd(buf);
 
@@ -166,7 +166,7 @@ RK_S32 vdpu382_set_rcbinfo(MppDev dev, VdpuRcbInfo *rcb_info)
     return 0;
 }
 
-void vdpu382_setup_statistic(Vdpu382RegCommon *com, Vdpu382RegStatistic *sta)
+void vdpu382_setup_statistic(Vdpu382RegComm *com, Vdpu382RegStatistic *sta)
 {
     com->reg011.pix_range_detection_e = 1;
 
@@ -187,7 +187,7 @@ void vdpu382_setup_statistic(Vdpu382RegCommon *com, Vdpu382RegStatistic *sta)
     sta->reg271_wr_wait_cycle_qos = 0;
 }
 
-void vdpu382_setup_down_scale(MppFrame frame, MppDev dev, Vdpu382RegCommon *com)
+void vdpu382_setup_down_scale(MppFrame frame, MppDev dev, Vdpu382RegComm *com)
 {
     RK_U32 ver_stride = mpp_frame_get_ver_stride(frame);
     RK_U32 hor_stride = mpp_frame_get_hor_stride(frame);
