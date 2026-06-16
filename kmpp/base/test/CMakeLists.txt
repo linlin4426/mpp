@@ -22,6 +22,9 @@ endmacro()
 # kmpp object unit test
 add_kmpp_base_test(kmpp_obj)
 
+# kmpp object helper macro unit test
+add_kmpp_base_test(kmpp_obj_helper)
+
 # kmpp frame unit test
 add_kmpp_base_test(kmpp_frame)
 
