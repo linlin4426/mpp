@@ -1778,7 +1778,24 @@ rk_s32 kmpp_obj_set_st(KmppObj obj, const char *name, void *val)
         if (info) {
             KmppEntry *tbl = (KmppEntry *)mpp_trie_info_ctx(info);
 
-            if (tbl->tbl.elem_type == ELEM_TYPE_arr)
+            if (tbl->type == ENTRY_TYPE_VLA_INFO) {
+                /* simple VLA: seek to array base via pos, then bulk copy */
+                KmppObjPos pos;
+
+                kmpp_obj_pos_init(&pos);
+                ret = kmpp_obj_pos_seek(obj, &pos, name, -1);
+                if (!ret) {
+                    rk_u8 *base = (rk_u8 *)impl->entry;
+                    rk_s32 cnt = tbl->vla.flex_count ?
+                                 *(rk_s32 *)(base + tbl->vla.count_off) :
+                                 tbl->vla.elem_count;
+
+                    if (cnt < 0)
+                        ret = rk_nok;
+                    else
+                        memcpy(base + pos.offset, val, (size_t)cnt * tbl->vla.elem_size);
+                }
+            } else if (tbl->tbl.elem_type == ELEM_TYPE_arr)
                 ret = kmpp_obj_impl_set_arr(tbl, impl->entry, val);
             else
                 ret = kmpp_obj_impl_set_st(tbl, impl->entry, val);
@@ -1803,7 +1820,24 @@ rk_s32 kmpp_obj_get_st(KmppObj obj, const char *name, void *val)
         if (info) {
             KmppEntry *tbl = (KmppEntry *)mpp_trie_info_ctx(info);
 
-            if (tbl->tbl.elem_type == ELEM_TYPE_arr)
+            if (tbl->type == ENTRY_TYPE_VLA_INFO) {
+                /* simple VLA: seek to array base via pos, then bulk copy */
+                KmppObjPos pos;
+
+                kmpp_obj_pos_init(&pos);
+                ret = kmpp_obj_pos_seek(obj, &pos, name, -1);
+                if (!ret) {
+                    rk_u8 *base = (rk_u8 *)impl->entry;
+                    rk_s32 cnt = tbl->vla.flex_count ?
+                                 *(rk_s32 *)(base + tbl->vla.count_off) :
+                                 tbl->vla.elem_count;
+
+                    if (cnt < 0)
+                        ret = rk_nok;
+                    else
+                        memcpy(val, base + pos.offset, (size_t)cnt * tbl->vla.elem_size);
+                }
+            } else if (tbl->tbl.elem_type == ELEM_TYPE_arr)
                 ret = kmpp_obj_impl_get_arr(tbl, impl->entry, val);
             else
                 ret = kmpp_obj_impl_get_st(tbl, impl->entry, val);

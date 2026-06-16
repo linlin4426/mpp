@@ -4174,17 +4174,23 @@ static rk_s32 vla_read_count(void *st, struct KmppEntryVLAInfo *vla)
     return (rk_s32)vla->elem_count;
 }
 
-static rk_u32 vla_read_base(void *st, struct KmppEntryVLAInfo *vla)
+static rk_u32 vla_read_base(void *st, MppCfgIoImpl *type, KmppEntry *tbl)
 {
-    if (vla->flex_base) {
-        if (vla->base_off & 0x3) {
-            mpp_loge_f("vla base_off %d not aligned\n", vla->base_off);
-            return 0;
+    if (type && type->vla.vla.type == ENTRY_TYPE_VLA_INFO) {
+        struct KmppEntryVLAInfo *vla = &type->vla.vla;
+
+        if (vla->flex_base) {
+            if (vla->base_off & 0x3) {
+                mpp_loge_f("vla base_off %d not aligned\n", vla->base_off);
+                return 0;
+            }
+            return *(rk_u32 *)((rk_u8 *)st + vla->base_off);
         }
-        return *(rk_u32 *)((rk_u8 *)st + vla->base_off);
+
+        return vla->base_off;
     }
 
-    return vla->base_off;
+    return tbl ? tbl->tbl.elem_offset : 0;
 }
 
 static void vla_write_count(void *st, struct KmppEntryVLAInfo *vla, rk_s32 val)
@@ -4249,19 +4255,22 @@ static void write_struct(MppCfgIoImpl *obj, MppTrie trie, MppCfgStrBuf *str,
     }
 
     /* VLA array: copy raw data from VLA buffer back to struct */
-    if (obj->type == MPP_CFG_TYPE_ARRAY && IS_VLA_SIMPLE_TYPE(obj->array_type) &&
-        tbl->tbl.elem_type == ELEM_TYPE_arr) {
-        rk_u32 base = (type && type->vla.vla.type == ENTRY_TYPE_VLA_INFO) ?
-                      vla_read_base(st, &type->vla.vla) : tbl->tbl.elem_offset;
+    if (obj->type == MPP_CFG_TYPE_ARRAY &&
+        (IS_VLA_SIMPLE_TYPE(obj->array_type) || tbl->tbl.elem_type == ELEM_TYPE_arr)) {
+        rk_u32 base = vla_read_base(st, type, tbl);
         rk_s32 src_esz = sizeof_type(obj->array_type);
         rk_s32 dst_esz = (type && type->vla.vla.type == ENTRY_TYPE_VLA_INFO) ?
                          (rk_s32)type->vla.vla.elem_size : src_esz;
+        rk_s32 is_vla = (type && type->vla.vla.type == ENTRY_TYPE_VLA_INFO);
 
         if (src_esz == dst_esz) {
-            rk_s32 cpy_size = MPP_MIN((rk_s32)tbl->tbl.elem_size, (rk_s32)obj->raw_size);
+            rk_s32 dst_total = is_vla ?
+                               (rk_s32)type->vla.vla.elem_count * type->vla.vla.elem_size :
+                               (rk_s32)tbl->tbl.elem_size;
+            rk_s32 cpy_size = MPP_MIN(dst_total, (rk_s32)obj->raw_size);
 
             memcpy((rk_u8 *)st + base, obj->raw, cpy_size);
-            if (tbl->tbl.flag_offset && cpy_size > 0)
+            if (!is_vla && tbl->tbl.flag_offset && cpy_size > 0)
                 mpp_cfg_set_flag(st, tbl->tbl.flag_offset);
         } else {
             rk_s32 src_cnt = obj->raw_count;
@@ -4390,7 +4399,7 @@ static void write_struct(MppCfgIoImpl *obj, MppTrie trie, MppCfgStrBuf *str,
             if (!elem)
                 continue;
 
-            base = vla_read_base(st, vla);
+            base = vla_read_base(st, type, tbl);
 
             if (vla_elem_off_overflow(base, idx, vla->elem_size)) {
                 mpp_loge_f("vla elem offset overflow base %u idx %d esz %d\n",
@@ -4419,7 +4428,7 @@ static void write_struct(MppCfgIoImpl *obj, MppTrie trie, MppCfgStrBuf *str,
         rk_u32 base;
         rk_s32 idx = 0;
 
-        base = vla_read_base(st, vla);
+        base = vla_read_base(st, type, tbl);
 
         list_for_each_entry_safe(pos, n, &obj->child, MppCfgIoImpl, list) {
             void *elem_st;
@@ -4636,7 +4645,7 @@ static MppCfgObj read_struct(MppCfgIoImpl *impl, MppCfgObj parent, void *st)
 
         cnt = vla_read_count(st, vla);
 
-        base = vla_read_base(st, vla);
+        base = vla_read_base(st, impl, entry);
 
         if (cnt <= 0 || cnt > 16384) {
             mpp_loge_f("vla %-16s invalid count %d\n", impl->name, cnt);

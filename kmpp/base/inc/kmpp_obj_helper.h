@@ -108,6 +108,7 @@
                 _vla.vla.type = ENTRY_TYPE_VLA_INFO; \
                 _vla.vla.elem_size = sizeof(_etype); \
                 _vla.vla.elem_count = (rk_s32)(tbl.tbl.elem_size / sizeof(_etype)); \
+                _vla.vla.base_off = (rk_u16)tbl.tbl.elem_offset; \
                 mpp_cfg_set_vla(CONCAT_US(obj, name), &_vla, \
                     mpp_cfg_type_from_elem_type(KMPP_TYPE_TO_ELEM_TYPE(_etype))); \
                 mpp_cfg_set_entry(CONCAT_US(obj, name), &tbl); \
@@ -362,6 +363,7 @@ KMPP_OBJ_ENTRY_TABLE(KMPP_OBJ_NAME, VAL_ENTRY_TBL, VAL_ENTRY_TBL,
         rk_s32 __subroot __maybe_unused = 0; \
         MppCfgObj __parent __maybe_unused = NULL; \
         MppCfgObj root = NULL; \
+        typedef KMPP_OBJ_IMPL_TYPE _array_elem_t __maybe_unused; \
         if (once) { \
             mpp_cfg_get_object(&root, TO_STR(KMPP_OBJ_NAME), MPP_CFG_TYPE_OBJECT, NULL); \
             __parent = root; \
@@ -404,6 +406,44 @@ KMPP_OBJ_ENTRY_TABLE(KMPP_OBJ_NAME, VAL_ENTRY_TBL, VAL_ENTRY_TBL,
 #define ENTRY_TO_NAME_END(...) \
     str_buf[str_pos] = '\0';
 
+#define ARRAY_START(name, etype, flag, ...) \
+    { \
+        rk_s32 CONCAT_US(pos, name, root) = str_pos; \
+        rk_s32 CONCAT_US(saved, name, sub) = __subroot; \
+        rk_s32 __subroot = CONCAT_US(saved, name, sub); \
+        MppCfgObj CONCAT_US(obj, name) = NULL; \
+        MppCfgObj CONCAT_US(__parent, name) = __parent; \
+        if (once) { \
+            KmppEntry _vla = { .val = 0 }; \
+            _vla.vla.type = ENTRY_TYPE_VLA_INFO; \
+            _vla.vla.elem_size = (rk_u16)sizeof(etype); \
+            _vla.vla.elem_count = (rk_u16)(sizeof(((_array_elem_t *)0)->CONCAT_DOT(__VA_ARGS__)) / sizeof(etype)); \
+            _vla.vla.flex_count = 0; \
+            _vla.vla.flex_base = 0; \
+            _vla.vla.base_off = (rk_u16)((size_t)&(((_array_elem_t *)0)->CONCAT_DOT(__VA_ARGS__))); \
+            str_pos += snprintf(str_buf + str_pos, str_size - str_pos, \
+                                str_pos ? ":%s" : "%s", TO_STR(name)); \
+            { \
+                rk_s32 _ret = kmpp_objdef_add_entry(KMPP_OBJ_DEF(KMPP_OBJ_NAME), __subroot, \
+                                                    __subroot ? TO_STR(name) : str_buf, &_vla); \
+                if (_ret >= 0) __subroot = _ret; \
+            } \
+            mpp_cfg_get_array(&CONCAT_US(obj, name), TO_STR(name)); \
+            mpp_cfg_set_vla(CONCAT_US(obj, name), &_vla, \
+                mpp_cfg_type_from_elem_type(KMPP_TYPE_TO_ELEM_TYPE(etype))); \
+            { \
+                KmppEntry _tbl = { .val = 0 }; \
+                _tbl.tbl.type = ENTRY_TYPE_LOC_TBL; \
+                _tbl.tbl.elem_type = ELEM_TYPE_arr; \
+                _tbl.tbl.elem_size = (rk_u16)(_vla.vla.elem_count * _vla.vla.elem_size); \
+                _tbl.tbl.elem_offset = _vla.vla.base_off; \
+                mpp_cfg_set_entry(CONCAT_US(obj, name), &_tbl); \
+            } \
+            mpp_cfg_add_detail(CONCAT_US(__parent, name), CONCAT_US(obj, name)); \
+            __parent = CONCAT_US(obj, name); \
+        } \
+        typedef etype _array_elem_t __maybe_unused;
+
 #define ARRAY_START_FLEX_CNT_OFF(name, etype, flag, count_fld, base_fld) \
     { \
         typedef etype _array_elem_t; \
@@ -423,8 +463,8 @@ KMPP_OBJ_ENTRY_TABLE(KMPP_OBJ_NAME, VAL_ENTRY_TBL, VAL_ENTRY_TBL,
             str_pos += snprintf(str_buf + str_pos, str_size - str_pos, \
                                 str_pos ? ":%s" : "%s", TO_STR(name)); \
             { \
-                rk_s32 _ret = kmpp_objdef_add_entry(KMPP_OBJ_DEF(KMPP_OBJ_NAME), \
-                                                    __subroot, TO_STR(name), &_vla); \
+                rk_s32 _ret = kmpp_objdef_add_entry(KMPP_OBJ_DEF(KMPP_OBJ_NAME), __subroot, \
+                                                    __subroot ? TO_STR(name) : str_buf, &_vla); \
                 if (_ret >= 0) __subroot = _ret; \
             } \
             mpp_cfg_get_array(&CONCAT_US(obj, name), TO_STR(name)); \
