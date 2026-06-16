@@ -30,7 +30,7 @@
 
 #include "hal_h264d_global.h"
 #include "hal_h264d_vdpu34x.h"
-#include "vdpu34x_h264d.h"
+#include "vdpu34x_com.h"
 #include "mpp_dec_cb_param.h"
 #include "vdpu_com.h"
 #include "hal_h264d_ctx.h"
@@ -68,22 +68,22 @@
 #define SET_REF_INFO(regs, index, field, value)\
     do{ \
         switch(index){\
-        case 0: regs.reg99.ref0_##field = value; break;\
-        case 1: regs.reg99.ref1_##field = value; break;\
-        case 2: regs.reg99.ref2_##field = value; break;\
-        case 3: regs.reg99.ref3_##field = value; break;\
-        case 4: regs.reg100.ref4_##field = value; break;\
-        case 5: regs.reg100.ref5_##field = value; break;\
-        case 6: regs.reg100.ref6_##field = value; break;\
-        case 7: regs.reg100.ref7_##field = value; break;\
-        case 8: regs.reg101.ref8_##field = value; break;\
-        case 9: regs.reg101.ref9_##field = value; break;\
-        case 10: regs.reg101.ref10_##field = value; break;\
-        case 11: regs.reg101.ref11_##field = value; break;\
-        case 12: regs.reg102.ref12_##field = value; break;\
-        case 13: regs.reg102.ref13_##field = value; break;\
-        case 14: regs.reg102.ref14_##field = value; break;\
-        case 15: regs.reg102.ref15_##field = value; break;\
+        case 0: regs.reg99.h264_ref0_##field = value; break;\
+        case 1: regs.reg99.h264_ref1_##field = value; break;\
+        case 2: regs.reg99.h264_ref2_##field = value; break;\
+        case 3: regs.reg99.h264_ref3_##field = value; break;\
+        case 4: regs.reg100.h264_ref4_##field = value; break;\
+        case 5: regs.reg100.h264_ref5_##field = value; break;\
+        case 6: regs.reg100.h264_ref6_##field = value; break;\
+        case 7: regs.reg100.h264_ref7_##field = value; break;\
+        case 8: regs.reg101.h264_ref8_##field = value; break;\
+        case 9: regs.reg101.h264_ref9_##field = value; break;\
+        case 10: regs.reg101.h264_ref10_##field = value; break;\
+        case 11: regs.reg101.h264_ref11_##field = value; break;\
+        case 12: regs.reg102.h264_ref12_##field = value; break;\
+        case 13: regs.reg102.h264_ref13_##field = value; break;\
+        case 14: regs.reg102.h264_ref14_##field = value; break;\
+        case 15: regs.reg102.h264_ref15_##field = value; break;\
         default: break;}\
     }while(0)
 
@@ -309,19 +309,19 @@ static MPP_RET prepare_scanlist(H264dHalCtx_t *p_hal, RK_U8 *data, RK_U32 len)
     return MPP_OK;
 }
 
-static MPP_RET set_registers(H264dHalCtx_t *p_hal, Vdpu34xH264dRegSet *regs, HalTaskInfo *task)
+static MPP_RET set_registers(H264dHalCtx_t *p_hal, Vdpu34xRegSet *regs, HalTaskInfo *task)
 {
     DXVA_PicParams_H264_MVC *pp = p_hal->pp;
-    Vdpu34xRegCommon *common = &regs->common;
+    Vdpu34xRegComm *comm_gen = &regs->comm_gen;
     MppBufSlots frm_slots = p_hal->cfg->frame_slots;
     HalBuf *mv_buf = NULL;
 
-    // memset(regs, 0, sizeof(Vdpu34xH264dRegSet));
-    memset(&regs->h264d_highpoc, 0, sizeof(regs->h264d_highpoc));
-    common->reg016_str_len = p_hal->strm_len;
-    common->reg013.cur_pic_is_idr = p_hal->slice_long->idr_flag;
-    common->reg012.colmv_compress_en = (pp->frame_mbs_only_flag != 0) ? 1 : 0;
-    common->reg028.sw_poc_arb_flag = 0;
+    // memset(regs, 0, sizeof(Vdpu34xRegSet));
+    memset(&regs->h2645_highpoc, 0, sizeof(regs->h2645_highpoc));
+    comm_gen->reg016_str_len = p_hal->strm_len;
+    comm_gen->reg013.cur_pic_is_idr = p_hal->slice_long->idr_flag;
+    comm_gen->reg012.colmv_compress_en = (pp->frame_mbs_only_flag != 0) ? 1 : 0;
+    comm_gen->reg028.sw_poc_arb_flag = 0;
 
     /* caculate the yuv_frame_size */
     {
@@ -339,15 +339,15 @@ static MPP_RET set_registers(H264dHalCtx_t *p_hal, Vdpu34xH264dRegSet *regs, Hal
             RK_U32 fbc_hdr_stride = mpp_frame_get_fbc_hdr_stride(mframe);
             RK_U32 fbd_offset = MPP_ALIGN(fbc_hdr_stride * (ver_virstride + 16) / 16, SZ_4K);
 
-            common->reg012.fbc_e = 1;
-            common->reg018.y_hor_virstride = fbc_hdr_stride / 16;
-            common->reg019.uv_hor_virstride = fbc_hdr_stride / 16;
-            common->reg020_fbc_payload_off.payload_st_offset = fbd_offset >> 4;
+            comm_gen->reg012.fbc_e = 1;
+            comm_gen->reg018.y_hor_virstride = fbc_hdr_stride / 16;
+            comm_gen->reg019.uv_hor_virstride = fbc_hdr_stride / 16;
+            comm_gen->reg020_fbc_payload_off.payload_st_offset = fbd_offset >> 4;
         } else {
-            common->reg012.fbc_e = 0;
-            common->reg018.y_hor_virstride = hor_virstride / 16;
-            common->reg019.uv_hor_virstride = hor_virstride / 16;
-            common->reg020_y_virstride.y_virstride = y_virstride / 16;
+            comm_gen->reg012.fbc_e = 0;
+            comm_gen->reg018.y_hor_virstride = hor_virstride / 16;
+            comm_gen->reg019.uv_hor_virstride = hor_virstride / 16;
+            comm_gen->reg020_y_virstride.y_virstride = y_virstride / 16;
         }
     }
     /* set current frame info */
@@ -355,25 +355,25 @@ static MPP_RET set_registers(H264dHalCtx_t *p_hal, Vdpu34xH264dRegSet *regs, Hal
         MppBuffer mbuffer = NULL;
         RK_S32 fd = -1;
 
-        regs->h264d_param.reg65.cur_top_poc = pp->CurrFieldOrderCnt[0];
-        regs->h264d_param.reg66.cur_bot_poc = pp->CurrFieldOrderCnt[1];
+        regs->comm_paras.reg65_cur_top_poc = pp->CurrFieldOrderCnt[0];
+        regs->comm_paras.reg66_cur_bot_poc = pp->CurrFieldOrderCnt[1];
         mpp_buf_slot_get_prop(frm_slots, pp->CurrPic.Index7Bits, SLOT_BUFFER, &mbuffer);
         fd = mpp_buffer_get_fd(mbuffer);
-        regs->common_addr.reg130_decout_base = fd;
+        regs->comm_addr.reg130_decout_base = fd;
 
         //colmv_cur_base
         mv_buf = hal_bufs_get_buf(p_hal->cmv_bufs, pp->CurrPic.Index7Bits);
-        regs->common_addr.reg131_colmv_cur_base = mpp_buffer_get_fd(mv_buf->buf[0]);
-        regs->common_addr.reg132_error_ref_base = fd;
+        regs->comm_addr.reg131_colmv_cur_base = mpp_buffer_get_fd(mv_buf->buf[0]);
+        regs->comm_addr.reg132_error_ref_base = fd;
         /*
          * poc_hight bit[0] :
          *  0 -> top field or frame
          *  1 -> bot field
          */
         if (pp->field_pic_flag)
-            regs->h264d_highpoc.reg204.cur_poc_highbit = pp->CurrPic.AssociatedFlag;
+            regs->h2645_highpoc.reg204.cur_poc_highbit = pp->CurrPic.AssociatedFlag;
         else
-            regs->h264d_highpoc.reg204.cur_poc_highbit = 0;
+            regs->h2645_highpoc.reg204.cur_poc_highbit = 0;
     }
     /* set reference info */
     {
@@ -389,12 +389,12 @@ static MPP_RET set_registers(H264dHalCtx_t *p_hal, Vdpu34xH264dRegSet *regs, Hal
             RK_U32 top_used = (pp->UsedForReferenceFlags >> (2 * i + 0)) & 0x01;
             RK_U32 bot_used = (pp->UsedForReferenceFlags >> (2 * i + 1)) & 0x01;
 
-            regs->h264d_param.reg67_98_ref_poc[2 * i] = pp->FieldOrderCntList[i][0];
-            regs->h264d_param.reg67_98_ref_poc[2 * i + 1] = pp->FieldOrderCntList[i][1];
-            SET_REF_INFO(regs->h264d_param, i, field, field_flag);
-            SET_REF_INFO(regs->h264d_param, i, topfield_used, top_used);
-            SET_REF_INFO(regs->h264d_param, i, botfield_used, bot_used);
-            SET_REF_INFO(regs->h264d_param, i, colmv_use_flag, (pp->RefPicColmvUsedFlags >> i) & 0x01);
+            regs->comm_paras.reg67_98_ref_poc[2 * i] = pp->FieldOrderCntList[i][0];
+            regs->comm_paras.reg67_98_ref_poc[2 * i + 1] = pp->FieldOrderCntList[i][1];
+            SET_REF_INFO(regs->comm_paras, i, field, field_flag);
+            SET_REF_INFO(regs->comm_paras, i, topfield_used, top_used);
+            SET_REF_INFO(regs->comm_paras, i, botfield_used, bot_used);
+            SET_REF_INFO(regs->comm_paras, i, colmv_use_flag, (pp->RefPicColmvUsedFlags >> i) & 0x01);
 
             if (pp->RefFrameList[i].bPicEntry != 0xff) {
                 ref_index = pp->RefFrameList[i].Index7Bits;
@@ -404,11 +404,11 @@ static MPP_RET set_registers(H264dHalCtx_t *p_hal, Vdpu34xH264dRegSet *regs, Hal
             }
 
             if (pp->field_pic_flag) {
-                SET_POC_HIGNBIT_INFO(regs->h264d_highpoc, 2 * i, poc_highbit, 0);
-                SET_POC_HIGNBIT_INFO(regs->h264d_highpoc, 2 * i + 1, poc_highbit, 1);
+                SET_POC_HIGNBIT_INFO(regs->h2645_highpoc, 2 * i, poc_highbit, 0);
+                SET_POC_HIGNBIT_INFO(regs->h2645_highpoc, 2 * i + 1, poc_highbit, 1);
             } else if (ref_index == pp->CurrPic.Index7Bits) {
-                SET_POC_HIGNBIT_INFO(regs->h264d_highpoc, 2 * i, poc_highbit, 3);
-                SET_POC_HIGNBIT_INFO(regs->h264d_highpoc, 2 * i + 1, poc_highbit, 3);
+                SET_POC_HIGNBIT_INFO(regs->h2645_highpoc, 2 * i, poc_highbit, 3);
+                SET_POC_HIGNBIT_INFO(regs->h2645_highpoc, 2 * i + 1, poc_highbit, 3);
             }
 
             mpp_buf_slot_get_prop(frm_slots, ref_index, SLOT_BUFFER, &mbuffer);
@@ -418,14 +418,14 @@ static MPP_RET set_registers(H264dHalCtx_t *p_hal, Vdpu34xH264dRegSet *regs, Hal
                 pp->FrameNumList[i] > min_frame_num &&
                 (!mpp_frame_get_errinfo(mframe))) {
                 min_frame_num = pp->FrameNumList[i];
-                regs->common_addr.reg132_error_ref_base =  mpp_buffer_get_fd(mbuffer);
+                regs->comm_addr.reg132_error_ref_base =  mpp_buffer_get_fd(mbuffer);
                 if (!pp->weighted_pred_flag)
-                    common->reg021.error_intra_mode = 0;
+                    comm_gen->reg021.error_intra_mode = 0;
             }
 
-            regs->h264d_addr.ref_base[i] = mpp_buffer_get_fd(mbuffer);
+            regs->comm_addr.reg164_179_ref_base[i] = mpp_buffer_get_fd(mbuffer);
             mv_buf = hal_bufs_get_buf(p_hal->cmv_bufs, ref_index);
-            regs->h264d_addr.colmv_base[i] = mpp_buffer_get_fd(mv_buf->buf[0]);
+            regs->comm_addr.reg181_196_ref_colmv_base[i] = mpp_buffer_get_fd(mv_buf->buf[0]);
         }
     }
     /* set input */
@@ -434,54 +434,54 @@ static MPP_RET set_registers(H264dHalCtx_t *p_hal, Vdpu34xH264dRegSet *regs, Hal
         Vdpu3xxH264dRegCtx *reg_ctx = (Vdpu3xxH264dRegCtx *)p_hal->reg_ctx;
 
         mpp_buf_slot_get_prop(p_hal->cfg->packet_slots, task->dec.input, SLOT_BUFFER, &mbuffer);
-        regs->common_addr.reg128_rlc_base = mpp_buffer_get_fd(mbuffer);
-        regs->common_addr.reg129_rlcwrite_base = regs->common_addr.reg128_rlc_base;
+        regs->comm_addr.reg128_rlc_base = mpp_buffer_get_fd(mbuffer);
+        regs->comm_addr.reg129_rlcwrite_base = regs->comm_addr.reg128_rlc_base;
 
-        regs->h264d_addr.cabactbl_base = reg_ctx->bufs_fd;
+        regs->comm_addr.reg197_cabactbl_base = reg_ctx->bufs_fd;
         mpp_dev_set_reg_offset(p_hal->cfg->dev, 197, reg_ctx->offset_cabac);
     }
 
     return MPP_OK;
 }
 
-static MPP_RET init_common_regs(Vdpu34xH264dRegSet *regs)
+static MPP_RET init_common_regs(Vdpu34xRegSet *regs)
 {
-    Vdpu34xRegCommon *common = &regs->common;
+    Vdpu34xRegComm *comm_gen = &regs->comm_gen;
 
-    common->reg009.dec_mode = 1;  //!< h264
-    common->reg015.rlc_mode = 0;
+    comm_gen->reg009.dec_mode = 1;  //!< h264
+    comm_gen->reg015.rlc_mode = 0;
 
-    common->reg011.buf_empty_en = 1;
-    common->reg011.dec_timeout_e = 1;
+    comm_gen->reg011.buf_empty_en = 1;
+    comm_gen->reg011.dec_timeout_e = 1;
 
-    common->reg010.dec_e = 1;
-    common->reg017.slice_num = 0x3fff;
+    comm_gen->reg010.dec_e = 1;
+    comm_gen->reg017.slice_num = 0x3fff;
 
-    common->reg012.wait_reset_en = 1;
-    common->reg013.h26x_error_mode = 1;
-    common->reg013.colmv_error_mode = 1;
-    common->reg013.h26x_streamd_error_mode = 1;
-    common->reg021.error_deb_en = 1;
-    common->reg021.inter_error_prc_mode = 0;
-    common->reg021.error_intra_mode = 1;
+    comm_gen->reg012.wait_reset_en = 1;
+    comm_gen->reg013.h26x_error_mode = 1;
+    comm_gen->reg013.colmv_error_mode = 1;
+    comm_gen->reg013.h26x_streamd_error_mode = 1;
+    comm_gen->reg021.error_deb_en = 1;
+    comm_gen->reg021.inter_error_prc_mode = 0;
+    comm_gen->reg021.error_intra_mode = 1;
 
     if (mpp_get_soc_type() == ROCKCHIP_SOC_RK3588) {
-        common->reg024.cabac_err_en_lowbits = 0;
-        common->reg025.cabac_err_en_highbits = 0;
-        common->reg026.swreg_block_gating_e = 0xfffef;
+        comm_gen->reg024.cabac_err_en_lowbits = 0;
+        comm_gen->reg025.cabac_err_en_highbits = 0;
+        comm_gen->reg026.swreg_block_gating_e = 0xfffef;
     } else {
-        common->reg024.cabac_err_en_lowbits = 0xffffffff;
-        common->reg025.cabac_err_en_highbits = 0x3ff3ffff;
-        common->reg026.swreg_block_gating_e = 0xfffff;
+        comm_gen->reg024.cabac_err_en_lowbits = 0xffffffff;
+        comm_gen->reg025.cabac_err_en_highbits = 0x3ff3ffff;
+        comm_gen->reg026.swreg_block_gating_e = 0xfffff;
     }
-    common->reg026.reg_cfg_gating_en = 1;
-    common->reg032_timeout_threshold = 0x3ffff;
+    comm_gen->reg026.reg_cfg_gating_en = 1;
+    comm_gen->reg032_timeout_threshold = 0x3ffff;
 
-    common->reg011.dec_clkgate_e = 1;
-    common->reg011.dec_e_strmd_clkgate_dis = 0;
-    common->reg011.dec_timeout_e = 1;
+    comm_gen->reg011.dec_clkgate_e = 1;
+    comm_gen->reg011.dec_e_strmd_clkgate_dis = 0;
+    comm_gen->reg011.dec_timeout_e = 1;
 
-    common->reg013.timeout_mode = 1;
+    comm_gen->reg013.timeout_mode = 1;
 
     return MPP_OK;
 }
@@ -515,7 +515,7 @@ MPP_RET vdpu34x_h264d_init(void *hal, MppHalCfg *cfg)
     reg_ctx->offset_cabac = VDPU34X_CABAC_TAB_OFFSET;
     reg_ctx->offset_errinfo = VDPU34X_ERROR_INFO_OFFSET;
     for (i = 0; i < max_cnt; i++) {
-        reg_ctx->reg_buf[i].regs = mpp_calloc(Vdpu34xH264dRegSet, 1);
+        reg_ctx->reg_buf[i].regs = mpp_calloc(Vdpu34xRegSet, 1);
         init_common_regs(reg_ctx->reg_buf[i].regs);
         reg_ctx->offset_spspps[i] = VDPU34X_SPSPPS_OFFSET(i);
         reg_ctx->offset_rps[i] = VDPU34X_RPS_OFFSET(i);
@@ -586,7 +586,7 @@ MPP_RET vdpu34x_h264d_deinit(void *hal)
 }
 
 static void h264d_refine_rcb_size(H264dHalCtx_t *p_hal, VdpuRcbInfo *rcb_info,
-                                  Vdpu34xH264dRegSet *regs,
+                                  Vdpu34xRegSet *regs,
                                   RK_S32 width, RK_S32 height)
 {
     RK_U32 rcb_bits = 0;
@@ -628,7 +628,7 @@ static void h264d_refine_rcb_size(H264dHalCtx_t *p_hal, VdpuRcbInfo *rcb_info,
     /* RCB_SAO_ROW */
     rcb_info[RCB_SAO_ROW].size = 0;
     /* RCB_FBC_ROW */
-    if (regs->common.reg012.fbc_e) {
+    if (regs->comm_gen.reg012.fbc_e) {
         rcb_bits = (chroma_format_idc > 1) ? (2 * width * bit_depth) : 0;
     } else
         rcb_bits = 0;
@@ -637,7 +637,7 @@ static void h264d_refine_rcb_size(H264dHalCtx_t *p_hal, VdpuRcbInfo *rcb_info,
     rcb_info[RCB_FILT_COL].size = 0;
 }
 
-static void hal_h264d_rcb_info_update(void *hal, Vdpu34xH264dRegSet *regs)
+static void hal_h264d_rcb_info_update(void *hal, Vdpu34xRegSet *regs)
 {
     H264dHalCtx_t *p_hal = (H264dHalCtx_t*)hal;
     RK_U32 mbaff = p_hal->pp->MbaffFrameFlag;
@@ -720,7 +720,7 @@ MPP_RET vdpu34x_h264d_gen_regs(void *hal, HalTaskInfo *task)
     RK_S32 width;
     RK_S32 height;
     Vdpu3xxH264dRegCtx *ctx = (Vdpu3xxH264dRegCtx *)p_hal->reg_ctx;
-    Vdpu34xH264dRegSet *regs = ctx->regs;
+    Vdpu34xRegSet *regs = ctx->regs;
     MppHalCfg *cfg = p_hal->cfg;
 
     INP_CHECK(ret, NULL == p_hal);
@@ -776,27 +776,27 @@ MPP_RET vdpu34x_h264d_gen_regs(void *hal, HalTaskInfo *task)
         }
     }
 
-    regs->h264d_addr.pps_base = ctx->bufs_fd;
+    regs->comm_addr.reg161_pps_head_base = ctx->bufs_fd;
     mpp_dev_set_reg_offset(cfg->dev, 161, ctx->spspps_offset);
 
     memcpy((char *)ctx->bufs_ptr + ctx->rps_offset, (void *)ctx->rps, VDPU34X_RPS_SIZE);
-    regs->h264d_addr.rps_base = ctx->bufs_fd;
+    regs->comm_addr.reg163_rps_base = ctx->bufs_fd;
     mpp_dev_set_reg_offset(cfg->dev, 163, ctx->rps_offset);
 
-    regs->common.reg012.scanlist_addr_valid_en = 1;
+    regs->comm_gen.reg012.scanlist_addr_valid_en = 1;
     if (p_hal->pp->scaleing_list_enable_flag) {
         memcpy((char *)ctx->bufs_ptr + ctx->sclst_offset, (void *)ctx->sclst, VDPU34X_SCALING_LIST_SIZE);
-        regs->h264d_addr.scanlist_addr = ctx->bufs_fd;
+        regs->comm_addr.reg180_scanlist_base = ctx->bufs_fd;
         mpp_dev_set_reg_offset(cfg->dev, 180, ctx->sclst_offset);
     } else {
-        regs->h264d_addr.scanlist_addr = 0;
+        regs->comm_addr.reg180_scanlist_base = 0;
     }
 
     hal_h264d_rcb_info_update(p_hal, regs);
-    vdpu34x_setup_rcb(&regs->common_addr, cfg->dev, (p_hal->fast_mode != 0) ?
+    vdpu34x_setup_rcb(&regs->comm_addr, cfg->dev, (p_hal->fast_mode != 0) ?
                       ctx->rcb_buf[task->dec.reg_index] : ctx->rcb_buf[0],
                       ctx->rcb_info);
-    vdpu34x_setup_statistic(&regs->common, &regs->statistic);
+    vdpu34x_setup_statistic(&regs->comm_gen, &regs->statistic);
     mpp_buffer_sync_end(ctx->bufs);
 
 __RETURN:
@@ -815,17 +815,17 @@ MPP_RET vdpu34x_h264d_start(void *hal, HalTaskInfo *task)
     }
 
     Vdpu3xxH264dRegCtx *reg_ctx = (Vdpu3xxH264dRegCtx *)p_hal->reg_ctx;
-    Vdpu34xH264dRegSet *regs = (p_hal->fast_mode != 0) ?
-                               reg_ctx->reg_buf[task->dec.reg_index].regs :
-                               reg_ctx->regs;
+    Vdpu34xRegSet *regs = (p_hal->fast_mode != 0) ?
+                          reg_ctx->reg_buf[task->dec.reg_index].regs :
+                          reg_ctx->regs;
     MppDev dev = p_hal->cfg->dev;
 
     do {
         MppDevRegWrCfg wr_cfg;
         MppDevRegRdCfg rd_cfg;
 
-        wr_cfg.reg = &regs->common;
-        wr_cfg.size = sizeof(regs->common);
+        wr_cfg.reg = &regs->comm_gen;
+        wr_cfg.size = sizeof(regs->comm_gen);
         wr_cfg.offset = VDPU34X_OFF_COMMON_REGS;
 
         ret = mpp_dev_ioctl(dev, MPP_DEV_REG_WR, &wr_cfg);
@@ -834,8 +834,8 @@ MPP_RET vdpu34x_h264d_start(void *hal, HalTaskInfo *task)
             break;
         }
 
-        wr_cfg.reg = &regs->h264d_param;
-        wr_cfg.size = sizeof(regs->h264d_param);
+        wr_cfg.reg = &regs->comm_paras;
+        wr_cfg.size = sizeof(regs->comm_paras);
         wr_cfg.offset = VDPU34X_OFF_CODEC_PARAMS_REGS;
 
         ret = mpp_dev_ioctl(dev, MPP_DEV_REG_WR, &wr_cfg);
@@ -844,8 +844,8 @@ MPP_RET vdpu34x_h264d_start(void *hal, HalTaskInfo *task)
             break;
         }
 
-        wr_cfg.reg = &regs->common_addr;
-        wr_cfg.size = sizeof(regs->common_addr);
+        wr_cfg.reg = &regs->comm_addr;
+        wr_cfg.size = sizeof(regs->comm_addr);
         wr_cfg.offset = VDPU34X_OFF_COMMON_ADDR_REGS;
 
         ret = mpp_dev_ioctl(dev, MPP_DEV_REG_WR, &wr_cfg);
@@ -854,19 +854,9 @@ MPP_RET vdpu34x_h264d_start(void *hal, HalTaskInfo *task)
             break;
         }
 
-        wr_cfg.reg = &regs->h264d_addr;
-        wr_cfg.size = sizeof(regs->h264d_addr);
-        wr_cfg.offset = VDPU34X_OFF_CODEC_ADDR_REGS;
-
-        ret = mpp_dev_ioctl(dev, MPP_DEV_REG_WR, &wr_cfg);
-        if (ret) {
-            mpp_err_f("set register write failed %d\n", ret);
-            break;
-        }
-
         if (mpp_get_soc_type() == ROCKCHIP_SOC_RK3588) {
-            wr_cfg.reg = &regs->h264d_highpoc;
-            wr_cfg.size = sizeof(regs->h264d_highpoc);
+            wr_cfg.reg = &regs->h2645_highpoc;
+            wr_cfg.size = sizeof(regs->h2645_highpoc);
             wr_cfg.offset = VDPU34X_OFF_POC_HIGHBIT_REGS;
             ret = mpp_dev_ioctl(dev, MPP_DEV_REG_WR, &wr_cfg);
             if (ret) {
@@ -917,9 +907,9 @@ MPP_RET vdpu34x_h264d_wait(void *hal, HalTaskInfo *task)
 
     INP_CHECK(ret, NULL == p_hal);
     Vdpu3xxH264dRegCtx *reg_ctx = (Vdpu3xxH264dRegCtx *)p_hal->reg_ctx;
-    Vdpu34xH264dRegSet *p_regs = (p_hal->fast_mode != 0) ?
-                                 reg_ctx->reg_buf[task->dec.reg_index].regs :
-                                 reg_ctx->regs;
+    Vdpu34xRegSet *p_regs = (p_hal->fast_mode != 0) ?
+                            reg_ctx->reg_buf[task->dec.reg_index].regs :
+                            reg_ctx->regs;
 
     if (task->dec.flags.parse_err ||
         (task->dec.flags.ref_err && !p_hal->cfg->cfg->base.disable_error)) {

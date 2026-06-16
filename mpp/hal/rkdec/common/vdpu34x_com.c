@@ -73,7 +73,7 @@ RK_S32 vdpu34x_get_rcb_buf_size(VdpuRcbInfo *info, RK_S32 width, RK_S32 height)
     return offset;
 }
 
-void vdpu34x_setup_rcb(Vdpu34xRegCommonAddr *reg, MppDev dev, MppBuffer buf, VdpuRcbInfo *info)
+void vdpu34x_setup_rcb(Vdpu34xRegCommAddr *reg, MppDev dev, MppBuffer buf, VdpuRcbInfo *info)
 {
     RK_S32 fd = mpp_buffer_get_fd(buf);
 
@@ -174,7 +174,7 @@ RK_S32 vdpu34x_set_rcbinfo(MppDev dev, VdpuRcbInfo *rcb_info)
     return 0;
 }
 
-void vdpu34x_setup_statistic(Vdpu34xRegCommon *com, Vdpu34xRegStatistic *sta)
+void vdpu34x_setup_statistic(Vdpu34xRegComm *com, Vdpu34xRegStatistic *sta)
 {
     com->reg011.pix_range_detection_e = 1;
 
