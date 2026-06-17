@@ -2039,7 +2039,8 @@ rk_s32 kmpp_obj_update(KmppObj dst, KmppObj src)
             continue;
 
         e = (KmppEntry *)mpp_trie_info_ctx(info);
-        if (e->tbl.flag_offset && ENTRY_TEST_FLAG(e, src_impl->entry)) {
+        if (e->type == ENTRY_TYPE_LOC_TBL && e->tbl.flag_offset &&
+            ENTRY_TEST_FLAG(e, src_impl->entry)) {
             rk_s32 offset = e->tbl.elem_offset;
             rk_s32 size = e->tbl.elem_size;
 
@@ -2091,7 +2092,8 @@ rk_s32 kmpp_obj_update_entry(void *entry, KmppObj src)
             continue;
 
         e = (KmppEntry *)mpp_trie_info_ctx(info);
-        if (e->tbl.flag_offset && ENTRY_TEST_FLAG(e, src_impl->entry)) {
+        if (e->type == ENTRY_TYPE_LOC_TBL && e->tbl.flag_offset &&
+            ENTRY_TEST_FLAG(e, src_impl->entry)) {
             rk_s32 offset = e->tbl.elem_offset;
             rk_s32 size = e->tbl.elem_size;
 
