@@ -6,6 +6,8 @@
 #define MODULE_TAG "mpp_rt"
 
 #include <fcntl.h>
+#include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "mpp_env.h"
@@ -15,6 +17,15 @@
 #include "mpp_singleton.h"
 
 #include "mpp_runtime.h"
+
+/* debug bit flags for mpp_rt_debug (env: mpp_rt_debug=<bits>) */
+#define MPP_RT_DBG_CAP         (0x00000001)  /* kmpp capability check */
+#define MPP_RT_DBG_RW_PATH     (0x00000002)  /* read-write path probing */
+#define MPP_RT_DBG_ALLOC       (0x00000004)  /* allocator detection */
+
+#define rt_dbg_kmpp(fmt, ...)  mpp_dbg(mpp_rt_debug, MPP_RT_DBG_CAP, fmt, ## __VA_ARGS__)
+#define rt_dbg_path(fmt, ...)  mpp_dbg(mpp_rt_debug, MPP_RT_DBG_RW_PATH, fmt, ## __VA_ARGS__)
+#define rt_dbg_heap(fmt, ...)  mpp_dbg(mpp_rt_debug, MPP_RT_DBG_ALLOC, fmt, ## __VA_ARGS__)
 
 #define MAX_DTS_PATH_LEN        256
 
@@ -48,8 +59,6 @@ static const char *mpp_vpu_names[] = {
     //"vpu_combo",
 };
 
-#define mpp_rt_dbg(fmt, ...)    do { if (mpp_rt_debug) mpp_log(fmt, ## __VA_ARGS__); } while (0)
-
 static const char *mpp_vpu_address[] = {
     "",                 /* old kernel   */
     "@10108000",        /* rk3036       */
@@ -72,6 +81,56 @@ static const char *mpp_rw_candidate_paths[] = {
     "/userdata",      /* Linux */
     "/sdcard",        /* Android external storage */
 };
+
+#define PROC_KMPP_PATH_LEN      64
+#define PROC_KMPP_LINE_LEN      128
+
+/* read /proc/kmpp/<module>/<kind>, match the leading name before the colon */
+rk_s32 mpp_rt_kmpp_cap_check(const char *module, const char *kind, const char *name)
+{
+    char path[PROC_KMPP_PATH_LEN];
+    char line[PROC_KMPP_LINE_LEN];
+    FILE *fp;
+    size_t name_len;
+    rk_s32 ret = rk_nok;
+
+    if (!module || !kind || !name)
+        return rk_nok;
+
+    name_len = strlen(name);
+    rt_dbg_kmpp("kmpp cap check %s/%s :: %s\n", module, kind, name);
+
+    snprintf(path, sizeof(path), "/proc/kmpp/%s/%s", module, kind);
+
+    fp = fopen(path, "r");
+    if (!fp) {
+        rt_dbg_kmpp("kmpp cap %s not available\n", path);
+        return rk_nok;
+    }
+
+    while (fgets(line, sizeof(line), fp)) {
+        char *p = line;
+        size_t len;
+
+        while (*p == ' ' || *p == '\t')
+            p++;
+
+        len = strcspn(p, ":\n\r");
+        while (len > 0 && (p[len - 1] == ' ' || p[len - 1] == '\t'))
+            len--;
+
+        if (len == name_len && !strncmp(p, name, name_len)) {
+            ret = rk_ok;
+            break;
+        }
+    }
+
+    fclose(fp);
+
+    rt_dbg_kmpp("kmpp cap %s %s in %s\n", name, ret ? "not found" : "found", path);
+
+    return ret;
+}
 
 static void mpp_rt_srv_init()
 {
@@ -99,7 +158,7 @@ static void mpp_rt_srv_init()
 
         if (env_rw_path && access(env_rw_path, R_OK | W_OK) == 0) {
             srv->rw_path = env_rw_path;
-            mpp_rt_dbg("using env rw path: %s\n", env_rw_path);
+            rt_dbg_path("using env rw path: %s\n", env_rw_path);
         } else {
             if (env_rw_path)
                 mpp_loge("env mpp_rw_path %s is not accessible\n", env_rw_path);
@@ -108,7 +167,7 @@ static void mpp_rt_srv_init()
                 const char *path = mpp_rw_candidate_paths[i];
 
                 if (access(path, R_OK | W_OK) == 0) {
-                    mpp_rt_dbg("found rw path: %s\n", path);
+                    rt_dbg_path("found rw path: %s\n", path);
                     srv->rw_path = path;
                     break;
                 }
@@ -131,24 +190,24 @@ static void mpp_rt_srv_init()
     }
 
     if (srv->allocator_valid[MPP_BUFFER_TYPE_DMA_HEAP]) {
-        mpp_rt_dbg("use dma heap allocator\n");
+        rt_dbg_heap("usedma heap allocator\n");
         return;
     }
 
     if (srv->allocator_valid[MPP_BUFFER_TYPE_ION] && !srv->allocator_valid[MPP_BUFFER_TYPE_DRM]) {
-        mpp_rt_dbg("use ion allocator\n");
+        rt_dbg_heap("useion allocator\n");
         return;
     }
 
     if (!srv->allocator_valid[MPP_BUFFER_TYPE_ION] && srv->allocator_valid[MPP_BUFFER_TYPE_DRM]) {
-        mpp_rt_dbg("use drm allocator\n");
+        rt_dbg_heap("usedrm allocator\n");
         return;
     }
 
     if (!access("/dev/mpp_service", F_OK | R_OK | W_OK)) {
         srv->allocator_valid[MPP_BUFFER_TYPE_ION] = 0;
 
-        mpp_rt_dbg("use drm allocator for mpp_service\n");
+        rt_dbg_heap("usedrm allocator for mpp_service\n");
         return;
     }
 
@@ -189,10 +248,10 @@ static void mpp_rt_srv_init()
 
                             if (val == 0) {
                                 srv->allocator_valid[MPP_BUFFER_TYPE_DRM] = 0;
-                                mpp_rt_dbg("found ion allocator in dts\n");
+                                rt_dbg_heap("found ion allocator in dts\n");
                             } else {
                                 srv->allocator_valid[MPP_BUFFER_TYPE_ION] = 0;
-                                mpp_rt_dbg("found drm allocator in dts\n");
+                                rt_dbg_heap("found drm allocator in dts\n");
                             }
                             allocator_found = 1;
                         }
