@@ -54,6 +54,21 @@ void mpp_thread_dump_status(MppThread *thread)
             thread->thd_status[THREAD_OUTPUT], thread->thd_status[THREAD_CONTROL]);
 }
 
+/*
+ * Thread entry wrapper: setname runs in the new thread's own context, so it
+ * never races with the thread exiting. The previous code setname'd from the
+ * parent right after pthread_create, which returned ESRCH for short-lived
+ * threads.
+ */
+static void *mpp_thread_wrapper(void *arg)
+{
+    MppThread *thread = (MppThread *)arg;
+
+    pthread_setname_np(pthread_self(), thread->name);
+
+    return thread->func(thread->ctx);
+}
+
 void mpp_thread_start(MppThread *thread)
 {
     pthread_attr_t attr;
@@ -63,11 +78,7 @@ void mpp_thread_start(MppThread *thread)
 
     if (mpp_thread_get_status(thread, THREAD_WORK) == MPP_THREAD_UNINITED) {
         mpp_thread_set_status(thread, MPP_THREAD_RUNNING, THREAD_WORK);
-        if (0 == pthread_create(&thread->thd, &attr, thread->func, thread->ctx)) {
-            int ret = pthread_setname_np(thread->thd, thread->name);
-            if (ret) {
-                mpp_err("thread %p setname %s failed\n", thread->func, thread->name);
-            }
+        if (0 == pthread_create(&thread->thd, &attr, mpp_thread_wrapper, thread)) {
             thread_dbg(THREAD_DBG_FUNC, "thread %s %p context %p create success\n",
                        thread->name, thread->func, thread->ctx);
         } else {
