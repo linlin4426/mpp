@@ -6,6 +6,7 @@
 add_library(kmpp_base OBJECT
     kmpp_ioc.c
     kmpp_obj.c
+    kmpp_info.c
     kmpp_meta.c
     kmpp_frame.c
     kmpp_buffer.c
