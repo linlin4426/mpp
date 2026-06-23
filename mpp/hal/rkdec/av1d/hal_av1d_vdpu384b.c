@@ -791,6 +791,8 @@ MPP_RET vdpu384b_av1d_wait(void *hal, HalTaskInfo *task)
         hal_buf_tmp = hal_bufs_get_buf(reg_ctx->cdf_segid_bufs, dxva->CurrPic.Index7Bits);
         hal_dbg_dumpf_buf(reg_ctx->dbg_ctx, "cabac_cdf_out.dat", hal_buf_tmp->buf[0],
                           0, NON_COEF_CDF_SIZE + COEF_CDF_SIZE, 128, "w+");
+        hal_dbg_dumpf_buf(reg_ctx->dbg_ctx, "cabac_segid_out.dat", hal_buf_tmp->buf[0],
+                          ALL_CDF_SIZE, reg_ctx->cdf_segid_size - ALL_CDF_SIZE, 128, "w+");
     }
 
     if (task->dec.flags.parse_err ||

@@ -1525,6 +1525,10 @@ void vdpu38x_av1d_set_cdf_segid(Av1dHalCtx *p_hal, DXVA_PicParams_AV1 *dxva,
         hal_dbg_dumpf_buf(reg_ctx->dbg_ctx, "cabac_cdf_in.dat", buf_tmp,
                           NON_COEF_CDF_SIZE + COEF_CDF_SIZE * coeff_cdf_idx,
                           COEF_CDF_SIZE, 128, "a+");
+        if (buf_tmp != reg_ctx->cdf_rd_def_base)
+            hal_dbg_dumpf_buf(reg_ctx->dbg_ctx, "cabac_segid_in.dat", buf_tmp,
+                              ALL_CDF_SIZE, reg_ctx->cdf_segid_size - ALL_CDF_SIZE,
+                              128, "w+");
     }
     cdf_buf = hal_bufs_get_buf(reg_ctx->cdf_segid_bufs, dxva->CurrPic.Index7Bits);
     *noncoef_wr_base = mpp_buffer_get_fd(cdf_buf->buf[0]);

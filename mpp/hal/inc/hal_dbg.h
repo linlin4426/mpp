@@ -27,7 +27,7 @@
 #define hal_dbg_dumpf_buf(ctx, fname, mbuf, off, byte_sz, line_bits, fmode) \
     do { \
         hal_dbg_dump_data(ctx, fname, (void *)mpp_buffer_get_ptr(mbuf) + off, \
-                               byte_sz * 8, line_bits, 0, fmode); \
+                               (byte_sz) * 8, line_bits, 0, fmode); \
     } while (0)
 
 #define hal_dbg_dump_set_regs(ctx, regs, reg_cnt, base_idx, mode) \
