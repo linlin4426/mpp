@@ -125,6 +125,7 @@ KmppObjDef kmpp_obj_to_objdef(KmppObj obj);
 /* object implement element update flags access */
 void *kmpp_obj_to_flags(KmppObj obj);
 rk_s32 kmpp_obj_to_flags_size(KmppObj obj);
+rk_s32 kmpp_obj_to_entry_buf_size(KmppObj obj);
 /* KmppShmPtr is the kernel share object userspace base address for kernel ioctl */
 KmppShmPtr *kmpp_obj_to_shm(KmppObj obj);
 /* KmppShmPtr size defined the copy size for kernel ioctl */

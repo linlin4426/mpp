@@ -1251,6 +1251,9 @@ rk_s32 kmpp_obj_put(KmppObj obj, const char *caller)
     return rk_nok;
 }
 
+static rk_s32 kmpp_ioc_transfer(KmppObj ctx, rk_s32 cmd, KmppObj in,
+                                KmppShmPtr *out, const char *caller);
+
 rk_s32 kmpp_obj_resize(KmppObj obj, rk_s32 vla_size, const char *caller)
 {
     KmppObjImpl *impl;
@@ -1276,7 +1279,7 @@ rk_s32 kmpp_obj_resize(KmppObj obj, rk_s32 vla_size, const char *caller)
         return rk_nok;
     }
 
-    if (!def->flex_entry) {
+    if (!def->flex_entry && !impl->shm) {
         mpp_loge_f("obj %s resize not allowed for non-split objdef at %s\n",
                    def->name, caller);
         return rk_nok;
@@ -1297,25 +1300,48 @@ rk_s32 kmpp_obj_resize(KmppObj obj, rk_s32 vla_size, const char *caller)
         return rk_ok;
     }
 
-    /* flex entry: only realloc entry buffer, handle stays stable */
-    rk_s32 old_buf_size = impl->entry_buf_size;
-    void *new_entry = mpp_realloc_size(impl->entry, rk_u8, buf_size);
+    if (impl->shm) {
+        /* shm-backed obj: ioctl resize via kmpp_ioc_transfer (no obj alloc).
+         * Store sptr in resize_shm, point impl->shm to it, claim upriv. */
+        rk_s32 cmd = kmpp_objdef_get_cmd(def, "resize");
+        KmppObjs *p = get_objs_f();
+        KmppShmPtr sptr;
+        rk_s32 ret;
 
-    if (!new_entry) {
-        mpp_loge_f("flex obj %s resize entry to %d failed at %s\n",
-                   def->name, buf_size, caller);
-        return rk_nok;
+        if (cmd < 0) {
+            mpp_loge_f("obj %s has no resize ioctl at %s\n", def->name, caller);
+            return rk_nok;
+        }
+
+        ret = kmpp_ioc_transfer(obj, cmd, NULL, &sptr, caller);
+        if (ret)
+            return ret;
+
+        impl->shm = (KmppShmPtr *)sptr.uptr;
+        impl->entry = (void *)(sptr.uptr + p->entry_offset);
+        *(rk_u64 *)(sptr.uptr + p->priv_offset) = (rk_u64)(intptr_t)impl;
+    } else {
+        /* local flex entry: realloc entry buffer, handle stays stable */
+        rk_s32 old_buf_size = impl->entry_buf_size;
+        void *new_entry = mpp_realloc_size(impl->entry, rk_u8, buf_size);
+
+        if (!new_entry) {
+            mpp_loge_f("obj %s resize entry to %d failed at %s\n",
+                       def->name, buf_size, caller);
+            return rk_nok;
+        }
+
+        memset((rk_u8 *)new_entry + old_buf_size, 0, buf_size - old_buf_size);
+        impl->entry = new_entry;
+        impl->entry_buf_size = buf_size;
     }
 
-    memset((rk_u8 *)new_entry + old_buf_size, 0, buf_size - old_buf_size);
-    impl->entry = new_entry;
-    impl->entry_buf_size = buf_size;
-
-    obj_dbg_flow("flex obj %-16s resize entry %d -> %d at %s\n",
-                 def->name, old_buf_size, buf_size, caller);
+    /* common exit for both shm-rebind and local-realloc paths */
+    obj_dbg_flow("obj %-16s resize entry to %d at %s\n",
+                 def->name, buf_size, caller);
 
     if (def->resize)
-        def->resize(new_entry, impl, caller);
+        def->resize(impl->entry, impl, caller);
 
     return rk_ok;
 }
@@ -1425,7 +1451,8 @@ static void kmpp_ioc_put_to_objdef(KmppObj ioc)
     mpp_spinlock_unlock(&def_ioc->lock);
 }
 
-rk_s32 kmpp_obj_ioctl(KmppObj ctx, rk_s32 cmd, KmppObj in, KmppObj *out, const char *caller)
+static rk_s32 kmpp_ioc_transfer(KmppObj ctx, rk_s32 cmd, KmppObj in,
+                                KmppShmPtr *out, const char *caller)
 {
     KmppObjs *p = get_objs_f();
     KmppObjDef def_ioc = kmpp_ioc_objdef();
@@ -1503,24 +1530,35 @@ rk_s32 kmpp_obj_ioctl(KmppObj ctx, rk_s32 cmd, KmppObj in, KmppObj *out, const c
 
     ret = ioctl(p->ioc.fd, 0, ioc_arg);
 
-    /* if defined ret in ioc object use ret in ioc object */
     kmpp_ioc_get_ret(ioc, &ret);
+
+    if (out) {
+        out->uaddr = 0;
+        out->kaddr = 0;
+        if (!ret)
+            kmpp_ioc_get_out(ioc, out);
+    }
+
+    kmpp_ioc_put_to_objdef(ioc);
+
+    return ret;
+}
+
+rk_s32 kmpp_obj_ioctl(KmppObj ctx, rk_s32 cmd, KmppObj in, KmppObj *out, const char *caller)
+{
+    KmppShmPtr sptr;
+    rk_s32 ret = kmpp_ioc_transfer(ctx, cmd, in, out ? &sptr : NULL, caller);
 
     if (out) {
         *out = NULL;
 
         if (!ret) {
-            KmppShmPtr sptr = { 0 };
-
-            kmpp_ioc_get_out(ioc, &sptr);
             kmpp_obj_get_by_sptr(out, &sptr, caller);
 
             obj_dbg_ioctl("ioctl [u:k] out %#llx : %#llx obj %p\n",
                           sptr.uaddr, sptr.kaddr, *out);
         }
     }
-
-    kmpp_ioc_put_to_objdef(ioc);
 
     return ret;
 }
@@ -1561,6 +1599,13 @@ rk_s32 kmpp_obj_to_flags_size(KmppObj obj)
     }
 
     return 0;
+}
+
+rk_s32 kmpp_obj_to_entry_buf_size(KmppObj obj)
+{
+    KmppObjImpl *impl = (KmppObjImpl *)obj;
+
+    return impl ? impl->entry_buf_size : 0;
 }
 
 KmppShmPtr *kmpp_obj_to_shm(KmppObj obj)
