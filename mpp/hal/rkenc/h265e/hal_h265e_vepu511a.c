@@ -2601,13 +2601,17 @@ MPP_RET hal_h265e_vepu511a_get_task(void *hal, HalEncTask *task)
     H265eV511AHalContext *ctx = (H265eV511AHalContext *)hal;
     MppFrame frame = task->frame;
     EncFrmStatus  *frm_status = &task->rc_task->frm;
+    RK_U32 smt1_en = ctx->cfg->base.smt1_en;
+    RK_U32 smt3_en = ctx->cfg->base.smt3_en;
+    MppEncRcMode rc_mode = ctx->cfg->rc.rc_mode;
 
     hal_h265e_enter();
 
     ctx->syn = (H265eSyntax_new *)task->syntax.data;
     ctx->dpb = (H265eDpb*)ctx->syn->dpb;
-    ctx->smart_en = (ctx->cfg->rc.rc_mode == MPP_ENC_RC_MODE_SMTRC);
-    ctx->qpmap_en = ctx->cfg->tune.deblur_en;
+    ctx->smart_en = (rc_mode == MPP_ENC_RC_MODE_SMTRC) || smt1_en ||
+                    (rc_mode == MPP_ENC_RC_MODE_SE) || smt3_en;
+    ctx->qpmap_en = ctx->cfg->tune.deblur_en || smt3_en;
 
     if (!task->rc_task->frm.reencode) {
         if (vepu511a_h265_setup_hal_bufs(ctx)) {

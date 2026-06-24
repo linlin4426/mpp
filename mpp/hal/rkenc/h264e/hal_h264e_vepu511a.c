@@ -453,12 +453,16 @@ static MPP_RET hal_h264e_vepu511a_get_task(void *hal, HalEncTask *task)
     MppEncH264HwCfg *hw_cfg = &cfg_set->h264.hw_cfg;
     RK_U32 updated = update_vepu511a_syntax(ctx, &task->syntax);
     EncFrmStatus *frm_status = &task->rc_task->frm;
+    RK_U32 smt1_en = ctx->cfg->base.smt1_en;
+    RK_U32 smt3_en = ctx->cfg->base.smt3_en;
+    MppEncRcMode rc_mode = ctx->cfg->rc.rc_mode;
     H264eFrmInfo *frms = ctx->frms;
 
     hal_h264e_dbg_func("enter %p\n", hal);
 
-    ctx->smart_en = (ctx->cfg->rc.rc_mode == MPP_ENC_RC_MODE_SMTRC);
-    ctx->qpmap_en = ctx->cfg->tune.deblur_en;
+    ctx->smart_en = (rc_mode == MPP_ENC_RC_MODE_SMTRC) || smt1_en ||
+                    (rc_mode == MPP_ENC_RC_MODE_SE) || smt3_en;
+    ctx->qpmap_en = ctx->cfg->tune.deblur_en || smt3_en;
 
     if (updated & SYN_TYPE_FLAG(H264E_SYN_CFG))
         setup_hal_bufs(ctx);
@@ -1082,7 +1086,7 @@ static void setup_vepu511a_rc_base(HalVepu511aRegSet *regs, HalH264eVepu511aCtx 
     reg_frm->common.rc_qp.rc_min_qp       = qp_min;
     reg_frm->common.rc_tgt.ctu_ebit       = mb_target_bits_mul_16;
 
-    if (rc->rc_mode == MPP_ENC_RC_MODE_SMTRC) {
+    if (ctx->smart_en) {
         reg_frm->common.rc_qp.rc_qp_range = 0;
     } else {
         reg_frm->common.rc_qp.rc_qp_range = (slice->slice_type == H264_I_SLICE) ?
@@ -1924,6 +1928,7 @@ static void setup_vepu511a_anti_smear(HalH264eVepu511aCtx *ctx)
     Vepu511aH264Fbk *last_fb = &ctx->last_frame_fb;
     RK_U32 mb_cnt = last_fb->st_mb_num;
     RK_U32 *smear_cnt = last_fb->st_smear_cnt;
+    RK_S32 deblur_en = ctx->cfg->tune.deblur_en;
     RK_S32 deblur_str = ctx->cfg->tune.deblur_str;
     RK_S32 delta_qp = 0;
     RK_S32 flg0 = smear_cnt[4] < (mb_cnt >> 6);
@@ -1941,8 +1946,8 @@ static void setup_vepu511a_anti_smear(HalH264eVepu511aCtx *ctx)
            (smear_cnt[4] > ((66 * mb_cnt) >> 10)) ? 1 : 0;
 
     if (ctx->cfg->tune.scene_mode == MPP_ENC_SCENE_MODE_IPC) {
-        reg->smear_opt_cfg.rdo_smear_en = ctx->qpmap_en;
-        if (ctx->qpmap_en && deblur_str > 3)
+        reg->smear_opt_cfg.rdo_smear_en = deblur_en;
+        if (deblur_en && deblur_str > 3)
             reg->smear_opt_cfg.rdo_smear_lvl16_multi = smear_multi[flg3];
         else
             reg->smear_opt_cfg.rdo_smear_lvl16_multi = flg0 ? 9 : 12;
@@ -1951,7 +1956,7 @@ static void setup_vepu511a_anti_smear(HalH264eVepu511aCtx *ctx)
         reg->smear_opt_cfg.rdo_smear_lvl16_multi = 16;
     }
 
-    if (ctx->qpmap_en && deblur_str > 3) {
+    if (deblur_en && deblur_str > 3) {
         flg2 = 1;
         if (smear_cnt[2] + smear_cnt[3] > (3 * smear_cnt[4] / 4))
             delta_qp = 1;
