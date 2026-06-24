@@ -171,6 +171,39 @@ const RK_U32 rkv_cabac_table[928] = {
     0x1423091d, 0x430e241d, 0x00000000, 0x00000000
 };
 
+void vdpu38x_h264d_dbg_ref_frames(H264dHalCtx_t *p_hal)
+{
+    HalDbgCtx *dbg = p_hal->dbg_ctx;
+    DXVA_PicParams_H264_MVC *pp = p_hal->pp;
+    RK_U32 i;
+    RK_U32 valid_cnt = 0;
+
+    if (!hal_dbg_flag_en(dbg, HAL_DBG_LOG) || NULL == pp)
+        return;
+
+    hal_dbg_log(dbg, "ref_frames.log", "w", "cur_pic_slot=%d  frame_num=%u  num_ref_frames=%u\n",
+                pp->CurrPic.Index7Bits, pp->frame_num, pp->num_ref_frames);
+
+    for (i = 0; i < 16; i++) {
+        DXVA_PicEntry_H264 *e = &pp->RefFrameList[i];
+        if (e->bPicEntry == SLOT_IDX_BUTT)
+            continue;
+
+        if (e->AssociatedFlag) {
+            hal_dbg_log(dbg, "ref_frames.log", "a",
+                        "  dpb[%2d] LONG_TERM  slot=%d  LongTermPicNum=%u\n",
+                        i, e->Index7Bits, pp->LongTermPicNumList[i]);
+        } else {
+            hal_dbg_log(dbg, "ref_frames.log", "a",
+                        "  dpb[%2d] SHORT_TERM slot=%d  FrameNum=%u  POC[t=%d,b=%d]\n",
+                        i, e->Index7Bits, pp->FrameNumList[i],
+                        pp->FieldOrderCntList[i][0], pp->FieldOrderCntList[i][1]);
+        }
+        valid_cnt++;
+    }
+    hal_dbg_log(dbg, "ref_frames.log", "a", "  total valid dpb entries: %u\n", valid_cnt);
+}
+
 MPP_RET vdpu3xx_h264d_deinit(void *hal)
 {
     H264dHalCtx_t *p_hal = (H264dHalCtx_t *)hal;

@@ -15,6 +15,11 @@
 #define COEF_CDF_SIZE (354 * 16) // byte
 #define ALL_CDF_SIZE (NON_COEF_CDF_SIZE + COEF_CDF_SIZE * 4)
 
+/* 0x7f : AV1-specific extra sentinel (INT8_MAX) */
+#define AV1D_REF_IDX_INVALID_7F    (0x7f)
+#define AV1D_REF_IDX_IS_INVALID(idx) \
+    ((idx) == (RK_S8)SLOT_IDX_BUTT || (idx) == AV1D_REF_IDX_INVALID_7F)
+
 extern const RK_U32 g_av1d_default_prob[7400];
 
 MPP_RET vdpu38x_av1d_deinit(void *hal);
@@ -32,5 +37,6 @@ MPP_RET vdpu38x_av1d_colmv_setup(Av1dHalCtx *p_hal, DXVA_PicParams_AV1 *dxva);
 void vdpu38x_av1d_rcb_setup(Av1dHalCtx *p_hal, HalTaskInfo *task,
                             DXVA_PicParams_AV1 *dxva, Vdpu38xRcbRegSet *rcb_regs,
                             Vdpu38xRcbCalc_f func);
+void vdpu38x_av1d_dbg_ref_frames(Av1dHalCtx *p_hal, DXVA_PicParams_AV1 *dxva);
 
 #endif /* HAL_AV1D_COM_H */

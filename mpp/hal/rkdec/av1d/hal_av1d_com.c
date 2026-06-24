@@ -974,6 +974,39 @@ static void hal_av1d_release_res(void *hal)
     MPP_FREE(p_hal->reg_ctx);
 }
 
+static const char *const av1_ref_name[AV1_REFS_PER_FRAME] = {
+    "LAST", "LAST2", "LAST3", "GOLDEN", "BWDREF", "ALTREF2", "ALTREF"
+};
+
+void vdpu38x_av1d_dbg_ref_frames(Av1dHalCtx *p_hal, DXVA_PicParams_AV1 *dxva)
+{
+    HalDbgCtx *dbg = ((Vdpu38xAv1dRegCtx *)p_hal->reg_ctx)->dbg_ctx;
+    RK_U32 i;
+
+    if (!hal_dbg_flag_en(dbg, HAL_DBG_LOG))
+        return;
+
+    hal_dbg_log(dbg, "ref_frames.log", "w",
+                "cur_pic_slot=%d  order_hint=%u\n",
+                dxva->CurrPic.Index7Bits, dxva->order_hint);
+
+    for (i = 0; i < AV1_REFS_PER_FRAME; i++) {
+        RK_U32 slot = dxva->ref_frame_idx[i];
+        RK_S8 idx = dxva->frame_refs[slot].Index;
+
+        if (AV1D_REF_IDX_IS_INVALID(idx)) {
+            hal_dbg_log(dbg, "ref_frames.log", "a",
+                        "  ref[%d] %-7s -> slot %d (invalid)\n",
+                        i, av1_ref_name[i], slot);
+        } else {
+            hal_dbg_log(dbg, "ref_frames.log", "a",
+                        "  ref[%d] %-7s -> slot %d -> frame_slot %d  order_hint=%u\n",
+                        i, av1_ref_name[i], slot, idx,
+                        dxva->frame_refs[slot].order_hint);
+        }
+    }
+}
+
 MPP_RET vdpu38x_av1d_deinit(void *hal)
 {
     Av1dHalCtx *p_hal = (Av1dHalCtx *)hal;

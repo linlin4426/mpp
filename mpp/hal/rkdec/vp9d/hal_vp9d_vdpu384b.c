@@ -269,6 +269,8 @@ static MPP_RET hal_vp9d_vdpu384b_gen_regs(void *hal, HalTaskInfo *task)
 
     hal_dbg_setup(p_hal->dbg_ctx, NULL);
 
+    vdpu38x_vp9d_dbg_ref_frames(p_hal->dbg_ctx, pic_param);
+
     /* uncompress header data */
     vdpu38x_vp9d_uncomp_hdr(p_hal, pic_param, (RK_U64 *)hw_ctx->header_data, GBL_SIZE / 8);
     memcpy(mpp_buffer_get_ptr(hw_ctx->global_base), hw_ctx->header_data, GBL_SIZE);

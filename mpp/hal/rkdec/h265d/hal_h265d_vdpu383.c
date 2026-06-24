@@ -332,6 +332,8 @@ static MPP_RET hal_h265d_vdpu383_gen_regs(void *hal,  HalTaskInfo *syn)
 
     hal_dbg_setup(reg_ctx->dbg_ctx, NULL);
 
+    vdpu38x_h265d_dbg_ref_frames(reg_ctx->dbg_ctx, &dxva_ctx->pp);
+
     /* output pps */
     hw_regs = (Vdpu383RegSet*)reg_ctx->hw_regs;
     memset(hw_regs, 0, sizeof(Vdpu383RegSet));

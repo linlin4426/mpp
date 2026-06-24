@@ -468,6 +468,8 @@ MPP_RET vdpu384b_av1d_gen_regs(void *hal, HalTaskInfo *task)
 
     hal_dbg_setup(ctx->dbg_ctx, NULL);
 
+    vdpu38x_av1d_dbg_ref_frames(p_hal, dxva);
+
     vdpu384b_init_ctrl_regs(regs, MPP_VIDEO_CodingAV1);
     vdpu38x_setup_statistic(&regs->ctrl_regs);
 

@@ -2438,6 +2438,30 @@ RK_U8 cabac_table[27456] = {
     0x40, 0x40, 0x40, 0x40, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
+void vdpu38x_h265d_dbg_ref_frames(HalDbgCtx *dbg, DXVA_PicParams_HEVC *pp)
+{
+    RK_U32 i;
+    RK_U32 valid_cnt = 0;
+
+    if (!hal_dbg_flag_en(dbg, HAL_DBG_LOG) || NULL == pp)
+        return;
+
+    hal_dbg_log(dbg, "ref_frames.log", "w", "cur_pic_slot=%d  POC=%d\n",
+                pp->CurrPic.Index7Bits, pp->CurrPicOrderCntVal);
+
+    for (i = 0; i < MPP_ARRAY_ELEMS(pp->RefPicList); i++) {
+        DXVA_PicEntry_HEVC *e = &pp->RefPicList[i];
+
+        if (e->bPicEntry == SLOT_IDX_BUTT)
+            continue;
+
+        hal_dbg_log(dbg, "ref_frames.log", "a", "  ref[%2d] %s slot=%d  POC=%d\n",
+                    i, e->AssociatedFlag ? "LT" : "ST", e->Index7Bits, pp->PicOrderCntValList[i]);
+        valid_cnt++;
+    }
+    hal_dbg_log(dbg, "ref_frames.log", "a", "  total valid ref entries: %u\n", valid_cnt);
+}
+
 MPP_RET hal_h265d_vdpu38x_deinit(void *hal)
 {
     HalH265dCtx *reg_ctx = (HalH265dCtx *)hal;

@@ -2117,6 +2117,34 @@ static MPP_RET hal_vp9d_release_res(HalVp9dCtx *hal)
     return MPP_OK;
 }
 
+static const char *const vp9_ref_name[3] = { "LAST", "GOLDEN", "ALTREF" };
+
+void vdpu38x_vp9d_dbg_ref_frames(HalDbgCtx *dbg, DXVA_PicParams_VP9 *pp)
+{
+    RK_U32 i;
+
+    if (!hal_dbg_flag_en(dbg, HAL_DBG_LOG) || NULL == pp)
+        return;
+
+    hal_dbg_log(dbg, "ref_frames.log", "w", "frame_type=%u (%s)  intra_only=%u\n",
+                pp->frame_type, pp->frame_type ? "inter" : "key", pp->intra_only);
+
+    if (!pp->frame_type || pp->intra_only) {
+        hal_dbg_log(dbg, "ref_frames.log", "a", "  intra frame, no references\n");
+        return;
+    }
+
+    for (i = 0; i < 3; i++) {
+        RK_U8 pool_idx = pp->frame_refs[i].Index7Bits;
+        DXVA_PicEntry_VPx *e = &pp->ref_frame_map[pool_idx];
+
+        hal_dbg_log(dbg, "ref_frames.log", "a", "  ref[%d] %-7s -> pool %d -> slot %d  %ux%u\n",
+                    i, vp9_ref_name[i], pool_idx, e->Index7Bits,
+                    pp->ref_frame_coded_width[pool_idx],
+                    pp->ref_frame_coded_height[pool_idx]);
+    }
+}
+
 MPP_RET hal_vp9d_vdpu38x_deinit(void *hal)
 {
     HalVp9dCtx *p_hal = (HalVp9dCtx *)hal;

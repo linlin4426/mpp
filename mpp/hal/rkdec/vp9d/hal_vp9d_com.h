@@ -103,6 +103,7 @@ MPP_RET vdpu38x_vp9d_uncomp_hdr(HalVp9dCtx *p_hal, DXVA_PicParams_VP9 *pp,
 void vdpu38x_vp9d_rcb_setup(void *hal, DXVA_PicParams_VP9 *pic_param,
                             HalTaskInfo *task, Vdpu38xRcbRegSet *rcb_regs,
                             Vdpu38xRcbCalc_f func);
+void vdpu38x_vp9d_dbg_ref_frames(HalDbgCtx *dbg, DXVA_PicParams_VP9 *pp);
 
 MPP_RET hal_vp9d_vdpu38x_deinit(void *hal);
 MPP_RET hal_vp9d_vdpu38x_reset(void *hal);

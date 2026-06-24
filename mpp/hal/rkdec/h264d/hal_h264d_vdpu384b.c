@@ -400,6 +400,8 @@ MPP_RET vdpu384b_h264d_gen_regs(void *hal, HalTaskInfo *task)
 
     hal_dbg_setup(p_hal->dbg_ctx, NULL);
 
+    vdpu38x_h264d_dbg_ref_frames(p_hal);
+
     vdpu38x_h264d_prepare_spspps(p_hal, (RK_U64 *)ctx->spspps, VDPU384B_SPSPPS_SIZE / 8);
     vdpu38x_h264d_prepare_scanlist(p_hal, ctx->sclst, VDPU384B_SCALING_LIST_SIZE);
     set_registers(p_hal, regs, task);

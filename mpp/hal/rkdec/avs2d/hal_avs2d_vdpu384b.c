@@ -362,6 +362,8 @@ MPP_RET hal_avs2d_vdpu384b_gen_regs(void *hal, HalTaskInfo *task)
 
     hal_dbg_setup(p_hal->dbg_ctx, NULL);
 
+    vdpu38x_avs2d_dbg_ref_frames(p_hal, task);
+
     hal_avs2d_vdpu38x_prepare_header(p_hal, reg_ctx->shph_dat, AVS2_384B_SHPH_SIZE / 8);
     hal_avs2d_vdpu38x_prepare_scalist(p_hal, reg_ctx->scalist_dat, AVS2_384B_SCALIST_SIZE / 8);
 

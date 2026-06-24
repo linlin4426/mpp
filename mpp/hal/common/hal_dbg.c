@@ -396,3 +396,33 @@ MPP_RET hal_dbg_dump_regs(HalDbgCtx *ctx, RK_U32 *regs, RK_U32 reg_cnt,
 
     return MPP_OK;
 }
+
+MPP_RET hal_dbg_log(HalDbgCtx *ctx, const char *fname, const char *mode,
+                    const char *fmt, ...)
+{
+    char dump_fname_path[HAL_DBG_PATH_MAX_LEN * 2];
+    FILE *log_fd = NULL;
+    va_list ap;
+
+    if (0 == hal_dbg_flag_en(ctx, HAL_DBG_LOG))
+        return MPP_OK;
+
+    if (ctx->target_frm_idx != HAL_DBG_TGT_FRM_NONE
+        && ctx->cur_frm_idx != ctx->target_frm_idx)
+        return MPP_OK;
+
+    snprintf(dump_fname_path, sizeof(dump_fname_path), "%s/%s", ctx->dump_cur_dir, fname);
+    log_fd = fopen(dump_fname_path, mode);
+    if (!log_fd) {
+        mpp_loge_f("open log file: %s failed!\n", dump_fname_path);
+        return MPP_NOK;
+    }
+
+    va_start(ap, fmt);
+    vfprintf(log_fd, fmt, ap);
+    va_end(ap);
+
+    fclose(log_fd);
+
+    return MPP_OK;
+}

@@ -8,6 +8,7 @@
 
 #include "mpp_env.h"
 #include "vdpu38x_com.h"
+#include "hal_avs2d_global.h"
 
 MPP_RET hal_avs2d_vdpu_deinit(void *hal);
 MPP_RET hal_avs2d_vdpu38x_prepare_header(Avs2dHalCtx_t *p_hal, RK_U8 *data, RK_U32 len);
@@ -19,5 +20,6 @@ RK_U8 hal_avs2d_fetch_data(RK_U32 fmt, RK_U8 *line, RK_U32 num);
 MPP_RET hal_avs2d_vdpu_dump_yuv(void *hal, HalTaskInfo *task);
 void vdpu38x_avs2d_rcb_setup(void *hal, HalTaskInfo *task,
                              Vdpu38xRcbRegSet *rcb_regs, Vdpu38xRcbCalc_f func);
+void vdpu38x_avs2d_dbg_ref_frames(Avs2dHalCtx_t *p_hal, HalTaskInfo *task);
 
 #endif /* HAL_AVS2D_COM_H */

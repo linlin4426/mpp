@@ -21,6 +21,33 @@
 #include "hal_avs2d_com.h"
 #include "mpp_bitput.h"
 
+#define AVS2D_DBG_MAX_REF_NUM   8
+
+void vdpu38x_avs2d_dbg_ref_frames(Avs2dHalCtx_t *p_hal, HalTaskInfo *task)
+{
+    HalDbgCtx *dbg = p_hal->dbg_ctx;
+    Avs2dSyntax_t *syntax = &p_hal->syntax;
+    HalDecTask *task_dec = &task->dec;
+    RK_U32 i;
+    RK_U32 valid_cnt = 0;
+
+    if (!hal_dbg_flag_en(dbg, HAL_DBG_LOG))
+        return;
+
+    hal_dbg_log(dbg, "ref_frames.log", "w", "cur_poc=%d  ref_pic_num=%u  output_slot=%d\n",
+                syntax->pp.cur_poc, syntax->refp.ref_pic_num, task_dec->output);
+
+    for (i = 0; i < AVS2D_DBG_MAX_REF_NUM; i++) {
+        if (task_dec->refer[i] < 0)
+            continue;
+
+        hal_dbg_log(dbg, "ref_frames.log", "a", "  ref[%d] slot=%d  ref_poc=%d\n",
+                    i, task_dec->refer[i], syntax->refp.ref_poc_list[i]);
+        valid_cnt++;
+    }
+    hal_dbg_log(dbg, "ref_frames.log", "a", "  total valid refs: %u\n", valid_cnt);
+}
+
 MPP_RET hal_avs2d_vdpu_deinit(void *hal)
 {
     Avs2dHalCtx_t *p_hal = (Avs2dHalCtx_t *)hal;

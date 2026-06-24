@@ -16,6 +16,7 @@
 #define HAL_DBG_SET_REG               (0x00000040)
 #define HAL_DBG_GET_REG               (0x00000080)   /* after hw work */
 #define HAL_DBG_LOAD_DATA             (0x00000100)
+#define HAL_DBG_LOG                   (0x00000200)   /* printf-style text log */
 #define HAL_DBG_MASK                  (0xffffffff)
 
 #define HAL_REG_SET_FNAME "reg_cfg_set.txt"
@@ -67,6 +68,8 @@ MPP_RET hal_dbg_dump_data(HalDbgCtx *ctx, char *fname, void *data,
                           RK_U32 big_end, const char *mode);
 MPP_RET hal_dbg_dump_regs(HalDbgCtx *ctx, RK_U32 *regs, RK_U32 reg_cnt,
                           RK_U32 base_idx, const char *fname, const char *mode);
+MPP_RET hal_dbg_log(HalDbgCtx *ctx, const char *fname, const char *mode,
+                    const char *fmt, ...) __attribute__((format(printf, 4, 5)));
 MPP_RET hal_dbg_load_data(HalDbgCtx *ctx, const char *fname, void *buf,
                           RK_U32 buf_size, const char *mode);
 

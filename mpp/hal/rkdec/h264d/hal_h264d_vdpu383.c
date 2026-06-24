@@ -501,6 +501,8 @@ MPP_RET vdpu383_h264d_gen_regs(void *hal, HalTaskInfo *task)
 
     hal_dbg_setup(p_hal->dbg_ctx, NULL);
 
+    vdpu38x_h264d_dbg_ref_frames(p_hal);
+
     vdpu38x_h264d_prepare_spspps(p_hal, (RK_U64 *)ctx->spspps, VDPU383_SPS_PPS_LEN / 8);
     prepare_framerps(p_hal, (RK_U64 *)ctx->rps, VDPU383_RPS_SIZE / 8);
     vdpu38x_h264d_prepare_scanlist(p_hal, ctx->sclst, VDPU383_SCALING_LIST_SIZE);

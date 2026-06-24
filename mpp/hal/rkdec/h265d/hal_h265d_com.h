@@ -156,6 +156,7 @@ RK_S32 hal_h265d_vdpu38x_output_pps_packet(void *hal, void *dxva, RK_U32 *scanli
 void vdpu38x_h265d_rcb_setup(void *hal, h265d_dxva2_picture_context_t *dxva,
                              HalTaskInfo *task, RK_S32 width, RK_S32 height,
                              Vdpu38xRcbRegSet *rcb_regs, Vdpu38xRcbCalc_f func);
+void vdpu38x_h265d_dbg_ref_frames(HalDbgCtx *dbg, DXVA_PicParams_HEVC *pp);
 
 MPP_RET hal_h265d_vdpu38x_deinit(void *hal);
 MPP_RET hal_h265d_vdpu_reset(void *hal);
