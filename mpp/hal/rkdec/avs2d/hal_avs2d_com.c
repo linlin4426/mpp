@@ -43,7 +43,7 @@ MPP_RET hal_avs2d_vdpu_deinit(void *hal)
         MPP_FREE(reg_ctx->reg_buf[i].regs);
     }
     vdpu38x_rcb_calc_deinit(reg_ctx->rcb_ctx);
-    hal_dbg_deinit(p_hal->dbg_ctx);
+    hal_dbg_deinit(&p_hal->dbg_ctx);
 
     if (reg_ctx->bufs) {
         mpp_buffer_put(reg_ctx->bufs);

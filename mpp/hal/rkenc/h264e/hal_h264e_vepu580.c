@@ -299,7 +299,7 @@ static MPP_RET hal_h264e_vepu580_deinit(void *hal)
         MPP_FREE(p->md_flag_buf);
     }
 
-    hal_dbg_deinit(p->dbg_ctx);
+    hal_dbg_deinit(&p->dbg_ctx);
 
     hal_h264e_dbg_func("leave %p\n", p);
 

@@ -269,7 +269,7 @@ MPP_RET hal_h265e_vepu511a_deinit(void *hal)
 {
     H265eV511AHalContext *ctx = (H265eV511AHalContext *)hal;
     hal_h265e_enter();
-    hal_dbg_deinit(ctx->dbg_ctx);
+    hal_dbg_deinit(&ctx->dbg_ctx);
     MPP_FREE(ctx->poll_cfgs);
     MPP_FREE(ctx->input_fmt);
     hal_bufs_deinit(ctx->dpb_bufs);

@@ -321,6 +321,10 @@ MPP_RET vdpu383_h264d_init(void *hal, MppHalCfg *cfg)
 
     vdpu38x_rcb_calc_init((Vdpu38xRcbCtx **)&reg_ctx->rcb_ctx);
     hal_dbg_init(&p_hal->dbg_ctx, "hal_h264d");
+    if (p_hal->fast_mode && p_hal->dbg_ctx) {
+        mpp_log("fast mode enabled, hal_dbg will be disabled");
+        hal_dbg_deinit(&p_hal->dbg_ctx);
+    }
 
 __RETURN:
     return MPP_OK;

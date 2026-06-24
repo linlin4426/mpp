@@ -90,9 +90,9 @@ MPP_RET hal_dbg_init(HalDbgCtx **ctx, const char *dump_sub_dir)
     return MPP_OK;
 }
 
-MPP_RET hal_dbg_deinit(HalDbgCtx *ctx)
+MPP_RET hal_dbg_deinit(HalDbgCtx **ctx)
 {
-    MPP_FREE(ctx);
+    MPP_FREE(*ctx);
 
     return MPP_OK;
 }

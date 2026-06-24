@@ -190,7 +190,7 @@ static MPP_RET hal_jpege_vpu720_deinit(void *hal)
     JpegeVpu720HalCtx *ctx = (JpegeVpu720HalCtx *)hal;
 
     hal_jpege_enter();
-    hal_dbg_deinit(ctx->dbg_ctx);
+    hal_dbg_deinit(&ctx->dbg_ctx);
     jpege_bits_deinit(ctx->bits);
 
     MPP_FREE(ctx->regs);

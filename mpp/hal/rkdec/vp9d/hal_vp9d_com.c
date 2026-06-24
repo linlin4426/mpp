@@ -2125,7 +2125,7 @@ MPP_RET hal_vp9d_vdpu38x_deinit(void *hal)
 
     hal_vp9d_release_res(p_hal);
     vdpu38x_rcb_calc_deinit(hw_ctx->rcb_ctx);
-    hal_dbg_deinit(p_hal->dbg_ctx);
+    hal_dbg_deinit(&p_hal->dbg_ctx);
 
     MPP_FREE(p_hal->hw_ctx);
 

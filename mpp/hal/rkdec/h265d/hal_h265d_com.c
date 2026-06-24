@@ -2457,7 +2457,7 @@ MPP_RET hal_h265d_vdpu38x_deinit(void *hal)
         }
     }
     vdpu38x_rcb_calc_deinit((Vdpu38xRcbCtx *)reg_ctx->rcb_ctx);
-    hal_dbg_deinit(reg_ctx->dbg_ctx);
+    hal_dbg_deinit(&reg_ctx->dbg_ctx);
 
     for (i = 0; i < loop; i++)
         MPP_FREE(reg_ctx->g_buf[i].hw_regs);

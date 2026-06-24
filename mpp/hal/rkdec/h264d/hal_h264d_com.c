@@ -179,7 +179,7 @@ MPP_RET vdpu3xx_h264d_deinit(void *hal)
     RK_U32 i = 0;
 
     vdpu38x_rcb_calc_deinit(reg_ctx->rcb_ctx);
-    hal_dbg_deinit(p_hal->dbg_ctx);
+    hal_dbg_deinit(&p_hal->dbg_ctx);
 
     if (reg_ctx->bufs) {
         mpp_buffer_put(reg_ctx->bufs);

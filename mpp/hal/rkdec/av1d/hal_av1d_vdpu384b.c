@@ -310,6 +310,10 @@ MPP_RET vdpu384b_av1d_init(void *hal, MppHalCfg *cfg)
     reg_ctx = (Vdpu38xAv1dRegCtx *)p_hal->reg_ctx;
     vdpu38x_rcb_calc_init((Vdpu38xRcbCtx **)&reg_ctx->rcb_ctx);
     hal_dbg_init(&reg_ctx->dbg_ctx, "hal_av1d");
+    if (p_hal->fast_mode && reg_ctx->dbg_ctx) {
+        mpp_log("fast mode enabled, hal_dbg will be disabled");
+        hal_dbg_deinit(&reg_ctx->dbg_ctx);
+    }
 
 __RETURN:
     return MPP_OK;

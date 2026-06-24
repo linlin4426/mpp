@@ -579,7 +579,7 @@ MPP_RET hal_h265e_v540c_deinit(void *hal)
     H265eV540cHalContext *ctx = (H265eV540cHalContext *)hal;
 
     hal_h265e_enter();
-    hal_dbg_deinit(ctx->dbg_ctx);
+    hal_dbg_deinit(&ctx->dbg_ctx);
     MPP_FREE(ctx->regs);
 
     MPP_FREE(ctx->reg_out);

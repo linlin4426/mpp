@@ -56,7 +56,7 @@ typedef struct HalDbgCtx_t {
 } HalDbgCtx;
 
 MPP_RET hal_dbg_init(HalDbgCtx **ctx, const char *dump_sub_dir);
-MPP_RET hal_dbg_deinit(HalDbgCtx *ctx);
+MPP_RET hal_dbg_deinit(HalDbgCtx **ctx);
 MPP_RET hal_dbg_setup(HalDbgCtx *ctx, const char *fmt, ...);
 MPP_RET hal_dbg_finish(HalDbgCtx *ctx);
 MPP_RET hal_dbg_dump_data(HalDbgCtx *ctx, char *fname, void *data,

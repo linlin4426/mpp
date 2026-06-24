@@ -954,7 +954,7 @@ static void hal_av1d_release_res(void *hal)
     for (i = 0; i < max_cnt; i++)
         BUF_PUT(reg_ctx->rcb_bufs[i]);
     vdpu38x_rcb_calc_deinit(reg_ctx->rcb_ctx);
-    hal_dbg_deinit(reg_ctx->dbg_ctx);
+    hal_dbg_deinit(&reg_ctx->dbg_ctx);
 
     BUF_PUT(reg_ctx->filter_mem);
 

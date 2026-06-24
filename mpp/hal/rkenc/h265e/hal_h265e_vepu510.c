@@ -955,7 +955,7 @@ MPP_RET hal_h265e_v510_deinit(void *hal)
 
     hal_h265e_enter();
 
-    hal_dbg_deinit(ctx->dbg_ctx);
+    hal_dbg_deinit(&ctx->dbg_ctx);
     ctx->dbg_ctx = NULL;
 
     MPP_FREE(ctx->poll_cfgs);

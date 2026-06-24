@@ -1427,7 +1427,7 @@ MPP_RET hal_h265e_v580_deinit(void *hal)
 
     hal_h265e_enter();
 
-    hal_dbg_deinit(ctx->dbg_ctx);
+    hal_dbg_deinit(&ctx->dbg_ctx);
 
     for (i = 0; i < ctx->task_cnt; i++) {
         Vepu580H265eFrmCfg *frm = ctx->frms[i];
