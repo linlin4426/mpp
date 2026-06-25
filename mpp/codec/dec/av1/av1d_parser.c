@@ -729,6 +729,7 @@ static MPP_RET set_current_frame(Av1DecCtx *ctx)
         ctx->pix_fmt |= MPP_FRAME_HDR;
 
     mpp_frame_set_fmt(frame->f, ctx->pix_fmt);
+    mpp_frame_set_poc(frame->f, f->order_hint);
 
     if (ctx->cfg->base.enable_thumbnail && ctx->hw_info && ctx->hw_info->cap_down_scale)
         mpp_frame_set_thumbnail_en(frame->f, ctx->cfg->base.enable_thumbnail);

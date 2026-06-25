@@ -114,6 +114,7 @@ struct MppFrameImpl_t {
     RK_U32  viewid;
     /*
     * poc - picture order count
+    * NOTE: AV1 has no POC; its order_hint is reused/stored via this field.
     */
     RK_U32  poc;
     /*
