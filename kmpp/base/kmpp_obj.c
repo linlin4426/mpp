@@ -1039,6 +1039,7 @@ static KmppObjImpl *_get_obj_from_def(KmppObjs *p, KmppObjDefImpl *def, KmppShmP
         /* kernel object: entry from shared memory */
         impl->shm = shm;
         impl->entry = (void *)(shm->uptr + p->entry_offset);
+        impl->entry_buf_size = def->entry_size;
         *(RK_U64 *)(shm->uptr + p->priv_offset) = (RK_U64)(intptr_t)impl;
 
         obj_dbg_flow("%s get kobj %-16s - %p entry [u:k] %llx:%llx at %s\n", func,
@@ -1445,6 +1446,8 @@ static void kmpp_ioc_put_to_objdef(KmppObj ioc)
 
     if (!impl)
         return;
+
+    memset(impl->entry, 0, impl->entry_buf_size);
 
     mpp_spinlock_lock(&def_ioc->lock);
     list_move_tail(&impl->list, &def_ioc->ioc_list_unused);
