@@ -493,6 +493,9 @@ static void kmpp_objs_init(void)
         impl->defs_idx = info->index;
         info_objdef = mpp_trie_get_info(trie_objdef, "__size");
         impl->entry_size = info_objdef ? *(rk_s32 *)mpp_trie_info_ctx(info_objdef) : 0;
+        info_objdef = mpp_trie_get_info(trie_objdef, "__buf_size");
+        impl->flex_entry = info_objdef ? 1 : 0;
+        impl->buf_size = info_objdef ? *(rk_s32 *)mpp_trie_info_ctx(info_objdef) : impl->entry_size;
         impl->name = name;
         impl->is_kobj = 1;
 
@@ -1003,6 +1006,13 @@ rk_s32 kmpp_objdef_get_entry_size(KmppObjDef def)
     return impl ? impl->entry_size : 0;
 }
 
+rk_s32 kmpp_objdef_get_buf_size(KmppObjDef def)
+{
+    KmppObjDefImpl *impl = (KmppObjDefImpl *)def;
+
+    return impl ? impl->buf_size : 0;
+}
+
 MppTrie kmpp_objdef_get_trie(KmppObjDef def)
 {
     KmppObjDefImpl *impl = (KmppObjDefImpl *)def;
@@ -1237,9 +1247,7 @@ rk_s32 kmpp_obj_put(KmppObj obj, const char *caller)
                     mpp_loge("ioctl KMPP_SHM_IOC_PUT_SHM failed ret %d at %s\n", ret, caller);
             }
             impl->shm = NULL;
-        }
-
-        if (def->flex_entry) {
+        } else if (def->flex_entry) {
             /* split allocation: free entry buffer, return impl to pool */
             MPP_FREE(impl->entry);
         }
@@ -1320,6 +1328,7 @@ rk_s32 kmpp_obj_resize(KmppObj obj, rk_s32 vla_size, const char *caller)
 
         impl->shm = (KmppShmPtr *)sptr.uptr;
         impl->entry = (void *)(sptr.uptr + p->entry_offset);
+        impl->entry_buf_size = buf_size;
         *(rk_u64 *)(sptr.uptr + p->priv_offset) = (rk_u64)(intptr_t)impl;
     } else {
         /* local flex entry: realloc entry buffer, handle stays stable */
@@ -1359,7 +1368,7 @@ rk_s32 kmpp_obj_impl_put(KmppObj obj, const char *caller)
             if (def->deinit)
                 def->deinit(impl->entry, impl, caller);
 
-            if (def->flex_entry)
+            if (def->flex_entry && !impl->shm)
                 MPP_FREE(impl->entry);
 
             mpp_assert(def->pool);
@@ -1651,6 +1660,24 @@ void *kmpp_obj_to_entry(KmppObj obj)
     KmppObjImpl *impl = (KmppObjImpl *)obj;
 
     return impl ? impl->entry : NULL;
+}
+
+void *kmpp_obj_to_entry_flex(KmppObj obj)
+{
+    KmppObjImpl *impl = (KmppObjImpl *)obj;
+
+    if (impl && impl->def && impl->def->flex_entry)
+        return (rk_u8 *)impl->entry + impl->def->buf_size;
+
+    return NULL;
+}
+
+rk_s32 kmpp_obj_to_entry_flex_size(KmppObj obj)
+{
+    KmppObjImpl *impl = (KmppObjImpl *)obj;
+
+    return (impl && impl->def) ?
+           impl->entry_buf_size - impl->def->buf_size : 0;
 }
 
 rk_s32 kmpp_obj_to_offset(KmppObj obj, const char *name)

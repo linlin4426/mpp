@@ -89,6 +89,7 @@ rk_s32 kmpp_objdef_dump(KmppObjDef def);
 /* mpp objcet internal element set / get function */
 const char *kmpp_objdef_get_name(KmppObjDef def);
 rk_s32 kmpp_objdef_get_entry_size(KmppObjDef def);
+rk_s32 kmpp_objdef_get_buf_size(KmppObjDef def);
 MppTrie kmpp_objdef_get_trie(KmppObjDef def);
 
 /* import kernel object ref */
@@ -141,6 +142,8 @@ void *kmpp_obj_to_priv(KmppObj obj);
  * entry = KmppShmPtr->uaddr + entry_offset
  */
 void *kmpp_obj_to_entry(KmppObj obj);
+void *kmpp_obj_to_entry_flex(KmppObj obj);
+rk_s32 kmpp_obj_to_entry_flex_size(KmppObj obj);
 /* offset is the entry offset from kernel share object body */
 rk_s32 kmpp_obj_to_offset(KmppObj obj, const char *name);
 
