@@ -125,6 +125,8 @@ done:
     if (obj)
         kmpp_obj_put_f(obj);
 
+    kmpp_helper_test_unregister();
+
     mpp_log("done %s\n", ret ? "failed" : "success");
     return ret;
 }
