@@ -373,6 +373,76 @@ void mpp_h264d_fill_dynamic_meta(H264dCurCtx_t *p_Cur, const RK_U8 *data, RK_U32
     p_Cur->hdr_dynamic = 1;
 }
 
+/*
+ * In fast parse mode, the slice NALU swallows any trailing NALU (e.g. dlby
+ * Vision RPU) into its buffer. This detects and extracts such a trailing
+ * NALU from the slice tail so that hdr_dynamic_meta is filled.
+ *
+ * base:meta_chk_len controls the behaviour:
+ *   0         -> disabled
+ *   positive  -> max tail scan window in bytes
+ *
+ * Per-IDR state machine in p_Cur->trailing_nal_state:
+ *   -1 init, 0 IDR detecting, 1 has trailing NAL, 2 clean
+ * Each IDR re-detects; P frames scan only when state == 1.
+ * p_Cur->trailing_nal_len records the IDR's trailing NALU length so P frames
+ * can use that as window (capped by meta_chk_len). slice data carries
+ * 00 00 03 emulation prevention so 00 00 01 only occurs at a NALU boundary,
+ * which makes the reverse scan safe.
+ */
+static void check_hdr_meta(H264_DecCtx_t *p_Dec, H264dCurCtx_t *p_Cur, H264dCurStream_t *p_strm)
+{
+    RK_S32 is_idr;
+    RK_U32 cfg_win;
+    RK_U32 win;
+    RK_S32 stop;
+    RK_S32 i;
+    RK_S32 found = 0;
+
+    if (!p_Dec->cfg->base.enable_hdr_meta || !p_Dec->cfg->base.meta_chk_len)
+        return;
+
+    is_idr = (p_strm->nalu_type == H264_NALU_TYPE_IDR);
+    if (is_idr) {
+        p_Cur->trailing_nal_state = 0;       /* re-detect on each IDR */
+        p_Cur->trailing_nal_len = 0;         /* reset recorded len */
+    }
+
+    if (p_Cur->trailing_nal_state != 0 && p_Cur->trailing_nal_state != 1)
+        return;                              /* state == -1 or 2: skip */
+
+    /* IDR uses cfg window; P uses min(cfg, IDR-recorded len) */
+    cfg_win = p_Dec->cfg->base.meta_chk_len;
+    if (is_idr || !p_Cur->trailing_nal_len)
+        win = MPP_MIN(p_strm->nalu_len, cfg_win);
+    else
+        win = MPP_MIN(p_strm->nalu_len, MPP_MIN(cfg_win, p_Cur->trailing_nal_len));
+
+    /* reverse scan tail window for [00 00 01][trailing NALU header] */
+    stop = (RK_S32)p_strm->nalu_len - (RK_S32)win;
+    i = (RK_S32)p_strm->nalu_len - 1;
+    while (i - 3 >= stop) {
+        if ((p_strm->nalu_buf[i] & 0x1F) == H264_NALU_TYPE_UNSPECIFIED28 &&
+            p_strm->nalu_buf[i - 1] == 0x01 &&
+            p_strm->nalu_buf[i - 2] == 0x00 &&
+            p_strm->nalu_buf[i - 3] == 0x00) {
+            RK_U32 t28_len = p_strm->nalu_len - (RK_U32)i;
+
+            if (t28_len > 2)
+                mpp_h264d_fill_dynamic_meta(p_Cur, p_strm->nalu_buf + i + 2, t28_len - 2, DLBY);
+            p_strm->nalu_len = (RK_U32)i - 3;        /* truncate slice, drop tail */
+            if (is_idr)
+                p_Cur->trailing_nal_len = t28_len;   /* record for P-frame window */
+            found = 1;
+            break;
+        }
+        i--;
+    }
+
+    if (is_idr)
+        p_Cur->trailing_nal_state = found ? 1 : 2;
+}
+
 static MPP_RET store_cur_nalu(H264dCurCtx_t *p_Cur, H264dCurStream_t *p_strm, H264dDxvaCtx_t *dxva_ctx)
 {
     MPP_RET ret = MPP_ERR_UNKNOW;
@@ -778,6 +848,7 @@ MPP_RET parse_prepare_fast(H264dInputCtx_t *p_Inp, H264dCurCtx_t *p_Cur)
                     memcpy(&p_strm->nalu_buf[0], p_strm->curdata, pkt_impl->length + 1);
                     pkt_impl->length = 0;
                     p_Cur->p_Inp->task_valid = 1;
+                    check_hdr_meta(p_Dec, p_Cur, p_strm);
                     break;
                 }
             }

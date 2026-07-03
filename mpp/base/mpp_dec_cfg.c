@@ -45,6 +45,7 @@
     ENTRY(prefix, u32, rk_u32,     disable_thread,      FLAG_INCR,      base, disable_thread) \
     ENTRY(prefix, u32, rk_u32,     codec_mode,          FLAG_INCR,      base, codec_mode) \
     ENTRY(prefix, u32, rk_u32,     dis_err_clr_mark,    FLAG_INCR,      base, dis_err_clr_mark) \
+    ENTRY(prefix, u32, rk_u32,     meta_chk_len,        FLAG_INCR,      base, meta_chk_len) \
     STRUCT_END(base) \
     STRUCT_START(status) \
     ENTRY(prefix, s32, rk_s32,     width,               FLAG_NONE,      status, width) \
@@ -76,6 +77,7 @@ rk_s32 mpp_dec_cfg_set_default(void *entry, KmppObj obj, const char *caller)
 #else
     cfg->base.enable_fast_play = MPP_ENABLE_FAST_PLAY;
 #endif
+    cfg->base.meta_chk_len = MPP_DEC_META_CHK_LEN_DEFAULT;
     (void) obj;
     (void) caller;
 

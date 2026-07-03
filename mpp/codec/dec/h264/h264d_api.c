@@ -360,6 +360,7 @@ MPP_RET h264d_init(void *decoder, ParserCfg *init)
     //!< malloc decoder buffer
     p_Dec->p_Inp = mpp_calloc(H264dInputCtx_t, 1);
     p_Dec->p_Cur = mpp_calloc(H264dCurCtx_t, 1);
+    p_Dec->p_Cur->trailing_nal_state = -1;
     p_Dec->p_Vid = mpp_calloc(H264dVideoCtx_t, 1);
     MEM_CHECK(ret, p_Dec->p_Inp && p_Dec->p_Cur && p_Dec->p_Vid);
     p_Dec->p_Inp->p_Dec = p_Dec;

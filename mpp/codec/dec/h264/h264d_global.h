@@ -981,6 +981,10 @@ typedef struct h264d_cur_ctx_t {
     struct h264_drpm_t        *dec_ref_pic_marking_buffer[MAX_MARKING_TIMES];
     MppFrameHdrDynamicMeta    *hdr_dynamic_meta;
     RK_U32                    hdr_dynamic;
+    /* fast mode tail scan: -1=init 0=IDR detecting 1=has trailing NAL 2=clean */
+    RK_S32                    trailing_nal_state;
+    /* trailing NALU len recorded at IDR, basis for P-frame window */
+    RK_U32                    trailing_nal_len;
 } H264dCurCtx_t;
 
 //!< parameters for video decoder

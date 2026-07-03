@@ -35,6 +35,8 @@ typedef enum FastPlayMode_e {
     MPP_ENABLE_FAST_PLAY_ONCE,
 } FastPlayMode;
 
+#define MPP_DEC_META_CHK_LEN_DEFAULT  512
+
 typedef struct MppDecBaseCfg_t {
     MppCtxType          type;
     MppCodingType       coding;
@@ -57,6 +59,7 @@ typedef struct MppDecBaseCfg_t {
     RK_U32              disable_thread;
     RK_U32              codec_mode;
     RK_U32              dis_err_clr_mark;
+    RK_U32              meta_chk_len;      /* fast mode trailing NAL (DV RPU) tail scan length, 0=disabled */
 } MppDecBaseCfg;
 
 typedef struct MppDecCbCfg_t {
