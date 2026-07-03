@@ -6,19 +6,75 @@
 #include "kmpp_packet_impl.h"
 #include "kmpp_meta.h"
 
+rk_s32 kmpp_packet_has_meta(KmppPacket packet)
+{
+    KmppShmPtr sptr;
+
+    if (!packet)
+        return 0;
+
+    return !kmpp_packet_get_meta(packet, &sptr) && (sptr.uptr || sptr.kptr);
+}
+
+rk_s32 kmpp_packet_get_meta_obj(KmppPacket packet, KmppMeta *meta)
+{
+    KmppPacketPriv *priv = NULL;
+    KmppShmPtr sptr;
+    rk_s32 ret;
+
+    if (!packet || !meta) {
+        mpp_loge_f("invalid packet %p meta %p\n", packet, meta);
+        return rk_nok;
+    }
+
+    priv = (KmppPacketPriv *)kmpp_obj_to_priv(packet);
+    if (priv->meta) {
+        *meta = priv->meta;
+        return rk_ok;
+    }
+
+    ret = kmpp_packet_get_meta(packet, &sptr);
+    if (ret) {
+        *meta = NULL;
+        return ret;
+    }
+
+    ret = kmpp_obj_get_by_sptr_f(&priv->meta, &sptr);
+    if (ret) {
+        *meta = NULL;
+        mpp_loge_f("packet meta get obj by sptr failed ret %d\n", ret);
+        return ret;
+    }
+
+    *meta = priv->meta;
+
+    return rk_ok;
+}
+
+static rk_s32 kmpp_packet_impl_init(void *entry, KmppObj obj, const char *caller)
+{
+    KmppPacketPriv *priv = (KmppPacketPriv *)kmpp_obj_to_priv(obj);
+    (void)entry;
+
+    if (!priv) {
+        mpp_loge_f("invalid %p without priv at %s\n", obj, caller);
+        return rk_nok;
+    }
+
+    priv->meta = NULL;
+
+    return rk_ok;
+}
+
 static rk_s32 kmpp_packet_impl_deinit(void *entry, KmppObj obj, const char *caller)
 {
-    KmppShmPtr meta_sptr;
+    KmppPacketPriv *priv = (KmppPacketPriv *)kmpp_obj_to_priv(obj);
 
     (void)entry;
-    (void)caller;
 
-    if (kmpp_packet_get_meta(obj, &meta_sptr) == rk_ok) {
-        KmppMeta meta = NULL;
-
-        kmpp_obj_get_by_sptr_f(&meta, &meta_sptr);
-        if (meta)
-            kmpp_meta_put_f(meta);
+    if (priv && priv->meta) {
+        kmpp_obj_impl_put(priv->meta, caller);
+        priv->meta = NULL;
     }
 
     return rk_ok;
@@ -27,7 +83,9 @@ static rk_s32 kmpp_packet_impl_deinit(void *entry, KmppObj obj, const char *call
 #define KMPP_OBJ_NAME               kmpp_packet
 #define KMPP_OBJ_INTF_TYPE          KmppPacket
 #define KMPP_OBJ_IMPL_TYPE          KmppPacketImpl
+#define KMPP_OBJ_FUNC_INIT          kmpp_packet_impl_init
 #define KMPP_OBJ_FUNC_DEINIT        kmpp_packet_impl_deinit
 #define KMPP_OBJ_SGLN_ID            MPP_SGLN_KMPP_PACKET
 #define KMPP_OBJ_ENTRY_TABLE        KMPP_PACKET_ENTRY_TABLE
+#define KMPP_OBJ_PRIV_SIZE          sizeof(KmppPacketPriv)
 #include "kmpp_obj_helper.h"

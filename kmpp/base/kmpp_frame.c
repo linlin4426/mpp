@@ -7,7 +7,17 @@
 
 #include "kmpp_frame_impl.h"
 
-rk_s32 kmpp_frame_get_meta(KmppFrame frame, KmppMeta *meta)
+rk_s32 kmpp_frame_has_meta(KmppFrame frame)
+{
+    KmppShmPtr sptr;
+
+    if (!frame)
+        return 0;
+
+    return !kmpp_frame_get_meta(frame, &sptr) && (sptr.uptr || sptr.kptr);
+}
+
+rk_s32 kmpp_frame_get_meta_obj(KmppFrame frame, KmppMeta *meta)
 {
     KmppFramePriv *priv = NULL;
     KmppShmPtr sptr;
@@ -24,7 +34,12 @@ rk_s32 kmpp_frame_get_meta(KmppFrame frame, KmppMeta *meta)
         return rk_ok;
     }
 
-    kmpp_obj_get_shm(frame, "meta", &sptr);
+    ret = kmpp_frame_get_meta(frame, &sptr);
+    if (ret) {
+        *meta = NULL;
+        return ret;
+    }
+
     ret = kmpp_obj_get_by_sptr_f(&priv->meta, &sptr);
     if (ret) {
         *meta = NULL;
