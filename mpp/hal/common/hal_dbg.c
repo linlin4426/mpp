@@ -279,6 +279,44 @@ MPP_RET hal_dbg_dump_data(HalDbgCtx *ctx, char *fname, void *data,
     return MPP_OK;
 }
 
+MPP_RET hal_dbg_dump_raw_data(HalDbgCtx *ctx, const char *fname, void *data,
+                              size_t byte_sz, const char *mode)
+{
+    char dump_fname_path[HAL_DBG_PATH_MAX_LEN * 2];
+    FILE *dump_fp = NULL;
+    size_t written;
+
+    if (0 == hal_dbg_flag_en(ctx, HAL_DBG_DUMP))
+        return MPP_OK;
+
+    if (ctx->target_frm_idx != HAL_DBG_TGT_FRM_NONE
+        && ctx->cur_frm_idx != ctx->target_frm_idx)
+        return MPP_OK;
+
+    if (NULL == data || 0 == byte_sz) {
+        mpp_loge_f("invalid args: data=%p byte_sz=%zu\n", data, byte_sz);
+        return MPP_NOK;
+    }
+
+    snprintf(dump_fname_path, sizeof(dump_fname_path), "%s/%s", ctx->dump_cur_dir, fname);
+    dump_fp = fopen(dump_fname_path, mode);
+    if (!dump_fp) {
+        mpp_loge_f("open file: %s failed!\n", dump_fname_path);
+        return MPP_NOK;
+    }
+
+    hal_dbg_detail("dump binary: %s byte_sz=%zu mode=%s\n",
+                   dump_fname_path, byte_sz, mode);
+
+    written = fwrite(data, 1, byte_sz, dump_fp);
+    if (written != byte_sz)
+        mpp_loge_f("short write %zu/%zu to %s\n", written, byte_sz, dump_fname_path);
+
+    fclose(dump_fp);
+
+    return MPP_OK;
+}
+
 static inline RK_U8 hal_dbg_hex_to_val(char c)
 {
     if (c >= '0' && c <= '9')

@@ -31,6 +31,13 @@
                                (byte_sz) * 8, line_bits, 0, fmode); \
     } while (0)
 
+#define hal_dbg_dumpf_raw_buf(ctx, fname, mbuf, off, byte_sz, fmode) \
+    do { \
+        hal_dbg_dump_raw_data(ctx, fname, \
+                              (void *)mpp_buffer_get_ptr(mbuf) + off, \
+                              byte_sz, fmode); \
+    } while (0)
+
 #define hal_dbg_dump_set_regs(ctx, regs, reg_cnt, base_idx, mode) \
     do { \
         if (hal_dbg_flag_en(ctx, HAL_DBG_SET_REG)) \
@@ -66,6 +73,8 @@ MPP_RET hal_dbg_finish(HalDbgCtx *ctx);
 MPP_RET hal_dbg_dump_data(HalDbgCtx *ctx, char *fname, void *data,
                           RK_U32 data_bit_size, RK_U32 line_bits,
                           RK_U32 big_end, const char *mode);
+MPP_RET hal_dbg_dump_raw_data(HalDbgCtx *ctx, const char *fname, void *data,
+                              size_t byte_sz, const char *mode);
 MPP_RET hal_dbg_dump_regs(HalDbgCtx *ctx, RK_U32 *regs, RK_U32 reg_cnt,
                           RK_U32 base_idx, const char *fname, const char *mode);
 MPP_RET hal_dbg_log(HalDbgCtx *ctx, const char *fname, const char *mode,
