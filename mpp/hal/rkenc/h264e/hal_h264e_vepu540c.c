@@ -1655,9 +1655,9 @@ static MPP_RET hal_h264e_vepu540c_wait(void *hal, HalEncTask *task)
         HalBuf *curr = hal_bufs_get_buf(bufs, frms->curr_idx);
 
         if (refr && refr->cnt)
-            vepu_dump_fbc_buf(ctx->dbg_ctx, "refr_", refr, fbc_hdr_size, 128);
+            vepu_dump_fbc_buf(ctx->dbg_ctx, "refr_", refr, fbc_hdr_size);
         if (curr && curr->cnt)
-            vepu_dump_fbc_buf(ctx->dbg_ctx, "recn_", curr, fbc_hdr_size, 128);
+            vepu_dump_fbc_buf(ctx->dbg_ctx, "recn_", curr, fbc_hdr_size);
     }
     ret = mpp_dev_ioctl(ctx->dev, MPP_DEV_CMD_POLL, NULL);
     if (ret) {

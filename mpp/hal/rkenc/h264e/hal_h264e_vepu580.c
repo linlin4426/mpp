@@ -2354,9 +2354,9 @@ static MPP_RET hal_h264e_vepu580_wait(void *hal, HalEncTask *task)
         HalBuf *curr = hal_bufs_get_buf(bufs, task->flags.curr_idx);
 
         if (refr && refr->cnt)
-            vepu_dump_fbc_buf(ctx->dbg_ctx, "refr_", refr, fbc_hdr_size, 128);
+            vepu_dump_fbc_buf(ctx->dbg_ctx, "refr_", refr, fbc_hdr_size);
         if (curr && curr->cnt)
-            vepu_dump_fbc_buf(ctx->dbg_ctx, "recn_", curr, fbc_hdr_size, 128);
+            vepu_dump_fbc_buf(ctx->dbg_ctx, "recn_", curr, fbc_hdr_size);
     }
 
     /* if pass1 mode, it will disable split mode and the split out need to be disable */

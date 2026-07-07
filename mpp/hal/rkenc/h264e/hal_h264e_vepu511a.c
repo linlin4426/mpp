@@ -2349,9 +2349,9 @@ static MPP_RET hal_h264e_vepu511a_wait(void *hal, HalEncTask *task)
         RK_S32 fbc_hdr_size = ctx->pixel_buf_fbc_hdr_size;
 
         if (ref_buf && ref_buf->cnt)
-            vepu_dump_fbc_buf(ctx->dbg_ctx, "refr_", ref_buf, fbc_hdr_size, 128);
+            vepu_dump_fbc_buf(ctx->dbg_ctx, "refr_", ref_buf, fbc_hdr_size);
         if (recn_buf && recn_buf->cnt)
-            vepu_dump_fbc_buf(ctx->dbg_ctx, "recn_", recn_buf, fbc_hdr_size, 128);
+            vepu_dump_fbc_buf(ctx->dbg_ctx, "recn_", recn_buf, fbc_hdr_size);
     }
 
     /* if pass1 mode, it will disable split mode and the split out need to be disable */

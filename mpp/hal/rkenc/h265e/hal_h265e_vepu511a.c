@@ -2581,9 +2581,9 @@ MPP_RET hal_h265e_vepu511a_wait(void *hal, HalEncTask *task)
         HalBuf *recn_buf = hal_bufs_get_buf(ctx->dpb_bufs, syn->sp.recon_pic.slot_idx);
 
         if (ref_buf && ref_buf->cnt)
-            vepu_dump_fbc_buf(ctx->dbg_ctx, "refr_", ref_buf, ctx->fbc_header_len, 128);
+            vepu_dump_fbc_buf(ctx->dbg_ctx, "refr_", ref_buf, ctx->fbc_header_len);
         if (recn_buf && recn_buf->cnt)
-            vepu_dump_fbc_buf(ctx->dbg_ctx, "recn_", recn_buf, ctx->fbc_header_len, 128);
+            vepu_dump_fbc_buf(ctx->dbg_ctx, "recn_", recn_buf, ctx->fbc_header_len);
     }
 
     if (ret)

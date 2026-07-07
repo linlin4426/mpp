@@ -43,12 +43,12 @@
     hal_dbg_dump_get_regs(dbg_ctx, (RK_U32 *)&(regs), sizeof(regs) / sizeof(RK_U32), \
                           offset / sizeof(RK_U32), mode)
 
-#define vepu_dump_fbc_buf(dbg_ctx, prefix, hal_buf, fbc_hdr, line_bits) do { \
+#define vepu_dump_fbc_buf(dbg_ctx, prefix, hal_buf, fbc_hdr) do { \
     size_t _total = mpp_buffer_get_size((hal_buf)->buf[0]); \
     size_t _dsp   = mpp_buffer_get_size((hal_buf)->buf[1]); \
-    hal_dbg_dumpf_buf(dbg_ctx, prefix "fbh.bin", (hal_buf)->buf[0], 0,       fbc_hdr,          line_bits, "w+"); \
-    hal_dbg_dumpf_buf(dbg_ctx, prefix "fbd.bin", (hal_buf)->buf[0], fbc_hdr,  _total - fbc_hdr, line_bits, "w+"); \
-    hal_dbg_dumpf_buf(dbg_ctx, prefix "dsp.bin", (hal_buf)->buf[1], 0,        _dsp,             line_bits, "w+"); \
+    hal_dbg_dumpf_raw_buf(dbg_ctx, prefix "fbh.bin", (hal_buf)->buf[0], 0,       fbc_hdr,          "w+"); \
+    hal_dbg_dumpf_raw_buf(dbg_ctx, prefix "fbd.bin", (hal_buf)->buf[0], fbc_hdr,  _total - fbc_hdr, "w+"); \
+    hal_dbg_dumpf_raw_buf(dbg_ctx, prefix "dsp.bin", (hal_buf)->buf[1], 0,        _dsp,             "w+"); \
 } while (0)
 
 /*

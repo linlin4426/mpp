@@ -3242,11 +3242,11 @@ MPP_RET hal_h265e_v580_wait(void *hal, HalEncTask *task)
         H265eSyntax_new *syn = ctx->syn;
         HalBuf *ref_buf = hal_bufs_get_buf(ctx->dpb_bufs, syn->sp.ref_pic.slot_idx);
         if (ref_buf && ref_buf->cnt)
-            vepu_dump_fbc_buf(ctx->dbg_ctx, "refr_", ref_buf, ctx->fbc_header_len, 128);
+            vepu_dump_fbc_buf(ctx->dbg_ctx, "refr_", ref_buf, ctx->fbc_header_len);
 
         HalBuf *recon_buf = hal_bufs_get_buf(ctx->dpb_bufs, syn->sp.recon_pic.slot_idx);
         if (recon_buf && recon_buf->cnt)
-            vepu_dump_fbc_buf(ctx->dbg_ctx, "recn_", recon_buf, ctx->fbc_header_len, 128);
+            vepu_dump_fbc_buf(ctx->dbg_ctx, "recn_", recon_buf, ctx->fbc_header_len);
     }
 
     {
