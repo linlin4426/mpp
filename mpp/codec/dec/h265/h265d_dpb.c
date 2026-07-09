@@ -132,7 +132,8 @@ static H265dFrame *h265d_frame_create(H265dPrs *p, RK_S32 poc, RK_U32 ref_only)
         mpp_frame_set_poc(frame->frame, poc);
         mpp_frame_set_color_range(frame->frame, ctx->color_range);
         mpp_frame_set_color_primaries(frame->frame, p->sps->vui.colour_primaries);
-        if (p->alternative_transfer.present)
+        if (p->alternative_transfer.present &&
+            p->alternative_transfer.preferred_transfer_characteristics)
             mpp_frame_set_color_trc(frame->frame,
                                     p->alternative_transfer.preferred_transfer_characteristics);
         else
