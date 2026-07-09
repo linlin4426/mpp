@@ -34,15 +34,10 @@ NOTE:
    RV1108/RV1107
    RV1109/RV1126
 3. Mpp support all format hardware can support except VC1.
-4. you can get demo about mpp applied to linux and android.
-     Liunx : https://github.com/WainDing/mpp_linux_cpp
-             https://github.com/MUZLATAN
-             https://github.com/nyanmisaka
-     Android : https://github.com/c-xh/RKMediaCodecDemo
-5. offical github: https://github.com/rockchip-linux/mpp
+4. offical github: https://github.com/rockchip-linux/mpp
    develop github: https://github.com/HermanChen/mpp
    develop gitee : https://gitee.com/hermanchen82/mpp
-6. Commit message format should base on https://keepachangelog.com/en/1.0.0/
+5. Commit message format should base on https://keepachangelog.com/en/1.0.0/
 
 More document can be found at http://opensource.rock-chips.com/wiki_Mpp
 

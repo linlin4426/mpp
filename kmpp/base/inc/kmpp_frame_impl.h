@@ -43,13 +43,6 @@ typedef struct KmppFrameImpl_t {
     MppFrameColorPrimaries color_primaries;
     MppFrameColorTransferCharacteristic color_trc;
 
-    /**
-     * YUV colorspace type.
-     * It must be accessed using av_frame_get_colorspace() and
-     * av_frame_set_colorspace().
-     * - encoding: Set by user
-     * - decoding: Set by libavcodec
-     */
     MppFrameColorSpace colorspace;
     MppFrameChromaLocation chroma_location;
 

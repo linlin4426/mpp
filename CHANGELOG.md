@@ -428,7 +428,7 @@
 - [script]: Prepend bash with /usr/bin/env
 - [kmpp_buffer]: Close fd when deinit
 - [mpp_thread]: Fix thread name is not set
-- Rename FFmpeg to FF for sdk release request
+- Rename FF for sdk release request
 - [kmpp_obj]: Fix kmpp obj get by sptr
 - [h265d]: Ensure the DTS is transmitted to the frame
 - [kmpp_obj]: Rename kmpp_obj_impl_put func
