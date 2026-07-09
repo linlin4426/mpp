@@ -95,7 +95,7 @@ else
     echo "Found cmake in ${CMAKE_PROGRAM}, version: ${CMAKE_VERSION}"
 fi
 
-if [ ${CMAKE_MAJOR_VERSION} -ge 3 ] && [ ${CMAKE_MINOR_VERSION} -ge 12 ]; then
+if [ ${CMAKE_MAJOR_VERSION} -gt 3 ] || { [ ${CMAKE_MAJOR_VERSION} -eq 3 ] && [ ${CMAKE_MINOR_VERSION} -ge 12 ]; }; then
     CMAKE_PARALLEL_ENABLE=1
     echo "use cmake parallel build."
 fi
