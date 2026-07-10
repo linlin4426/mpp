@@ -60,6 +60,7 @@ typedef enum MppMetaKey_e {
     KEY_OSD_DATA                = FOURCC_META('o', 's', 'd', ' '),
     KEY_OSD_DATA2               = FOURCC_META('o', 's', 'd', '2'),
     KEY_OSD_DATA3               = FOURCC_META('o', 's', 'd', '3'),
+    KEY_OSD_DATA4               = FOURCC_META('o', 's', 'd', '4'),
     KEY_USER_DATA               = FOURCC_META('u', 's', 'r', 'd'),
     KEY_USER_DATAS              = FOURCC_META('u', 'r', 'd', 's'),
 

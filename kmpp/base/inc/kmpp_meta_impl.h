@@ -110,7 +110,8 @@ typedef struct __attribute__((packed, aligned(4))) KmppMetaVals_t {
     KmppMetaFlex        jpeg_roi;
     KmppMetaObj         enc_osd;
     KmppMetaObj         enc_osd2;
-    KmppMetaFlex        enc_osd3;
+    KmppMetaVal         enc_osd3;
+    KmppMetaFlex        enc_osd4;
     KmppMetaFlex        usr_data;
     KmppMetaFlex        usr_datas;
     KmppMetaObj         enc_qpmap0;

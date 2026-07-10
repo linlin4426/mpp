@@ -79,6 +79,9 @@ typedef struct KmppMetaSrv_s {
      * meta_flex_at skips the per-call objdef trie lookup. */
     KmppEntry           *entry_user_data;
     KmppEntry           *entry_user_datas;
+
+    /* FIX section end, probed on first get */
+    rk_s32              flex_fixed_size;
 } KmppMetaSrv;
 
 typedef struct KmppMetaPriv_s {
@@ -104,6 +107,25 @@ static rk_u32 kmpp_meta_debug = 0;
         __tmp; \
     })
 
+/* FIX section end (cached after first probe). 0 = not probed. */
+static rk_s32 meta_flex_fixed_size(KmppMetaSrv *srv, void *entry)
+{
+    if (srv && entry && !srv->flex_fixed_size) {
+        KmppMetaFlex *fud = srv->entry_user_data ?
+                            (KmppMetaFlex *)((rk_u8 *)entry + srv->entry_user_data->tbl.elem_offset) : NULL;
+        KmppMetaFlex *fuds = srv->entry_user_datas ?
+                             (KmppMetaFlex *)((rk_u8 *)entry + srv->entry_user_datas->tbl.elem_offset) : NULL;
+        rk_s32 n = fud ? fud->offset : 0;
+
+        if (fuds && fuds->offset > 0 && (n == 0 || fuds->offset < n))
+            n = fuds->offset;
+
+        srv->flex_fixed_size = n;
+    }
+
+    return srv ? srv->flex_fixed_size : 0;
+}
+
 static rk_s32 kmpp_meta_impl_init(void *entry, KmppObj obj, const char *caller)
 {
     KmppMetaPriv *priv = (KmppMetaPriv *)kmpp_obj_to_priv(obj);
@@ -123,6 +145,8 @@ static rk_s32 kmpp_meta_impl_init(void *entry, KmppObj obj, const char *caller)
          * correlation; priv->meta_id is the independent userspace counter. */
         if (srv->offset_kmeta_id)
             priv->kmeta_id = *(rk_u32 *)((rk_u8 *)entry + srv->offset_kmeta_id);
+
+        meta_flex_fixed_size(srv, entry);
     }
 
     return rk_ok;
@@ -791,8 +815,37 @@ rk_s32 kmpp_meta_set_ptr(KmppMeta meta, KmppMetaKey key, void *val)
             flex->length = 0;
         } else if (*state & META_VAL_FIXED) {
             /* fixed-size inline */
-            rk_u8 *flex_base = (rk_u8 *)kmpp_obj_to_entry_flex(meta);
+            rk_u8 *flex_base;
+            rk_s32 flex_size = 0;
+            rk_s32 needed = meta_flex_fixed_size(srv, entry);
 
+            if (needed > 0) {
+                if (srv->entry_flex_size)
+                    kmpp_obj_tbl_get_s32(meta, srv->entry_flex_size, &flex_size);
+
+                if (needed > flex_size) {
+                    rk_s32 ret;
+
+                    if (srv->cmd_resize < 0 || !srv->entry_resize_size) {
+                        mpp_loge_f("FIXED flex %d > capacity %d, resize unsupported on old kernel\n",
+                                   needed, flex_size);
+                        return rk_nok;
+                    }
+
+                    kmpp_obj_tbl_set_s32(meta, srv->entry_resize_size, needed);
+                    ret = kmpp_obj_resize_f(meta, needed);
+                    if (ret) {
+                        mpp_loge_f("FIXED flex resize to %d failed ret %d\n", needed, ret);
+                        return ret;
+                    }
+
+                    entry = kmpp_obj_to_entry(meta);
+                    flex = (KmppMetaFlex *)((rk_u8 *)entry + tbl->tbl.elem_offset);
+                    state = (rk_u32 *)flex;
+                }
+            }
+
+            flex_base = (rk_u8 *)kmpp_obj_to_entry_flex(meta);
             meta_flex_set_fixed(flex_base, flex, val);
         } else {
             /* variable-length inline (USER_DATA / USER_DATAS) */

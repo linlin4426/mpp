@@ -61,6 +61,7 @@ static MPP_RET meta_set(KmppMeta meta, rk_u8 *ud_data)
     //ret |= kmpp_meta_set_shm(meta, KEY_ROI_DATA, NULL);
     ret |= kmpp_meta_set_shm(meta, KEY_OSD_DATA, NULL);
     ret |= kmpp_meta_set_shm(meta, KEY_OSD_DATA2, NULL);
+    ret |= kmpp_meta_set_shm(meta, KEY_OSD_DATA3, NULL);
     ret |= kmpp_meta_set_ptr(meta, KEY_USER_DATA, &ud);
     ret |= kmpp_meta_set_ptr(meta, KEY_USER_DATAS, &uds);
 
@@ -103,6 +104,7 @@ static MPP_RET meta_get(KmppMeta meta)
     //ret |= kmpp_meta_get_shm(meta, KEY_ROI_DATA, &shm);
     ret |= kmpp_meta_get_shm(meta, KEY_OSD_DATA, &shm);
     ret |= kmpp_meta_get_shm(meta, KEY_OSD_DATA2, &shm);
+    ret |= kmpp_meta_get_shm(meta, KEY_OSD_DATA3, &shm);
     ret |= kmpp_meta_get_ptr(meta, KEY_USER_DATA, &ptr);
     if (ptr) {
         MppEncUserDataShm *shm_ud = (MppEncUserDataShm *)ptr;
@@ -327,6 +329,47 @@ static void test_flex_grow(rk_u8 *ud_data)
     kmpp_meta_put_f(meta);
 }
 
+/* set a FIXED-flex key (OSD_DATA4, copy-into-meta mode) before any variable
+ * key — exercises on-demand FIX section allocation in set_ptr. */
+static void test_fixed_only(void)
+{
+    KmppMeta meta = NULL;
+    MppEncOSDData3 osd;
+    MppEncOSDData3 *get;
+    void *ptr = NULL;
+
+    mpp_log(MODULE_TAG " test_fixed_only start\n");
+
+    kmpp_meta_get_f(&meta);
+    mpp_assert(meta);
+
+    memset(&osd, 0, sizeof(osd));
+    osd.change = 1;
+    osd.num_region = 1;
+
+    if (kmpp_meta_set_ptr(meta, KEY_OSD_DATA4, &osd)) {
+        mpp_log(MODULE_TAG " fixed_only: set OSD_DATA4 failed\n");
+        kmpp_meta_put_f(meta);
+        return;
+    }
+
+    kmpp_meta_get_ptr(meta, KEY_OSD_DATA4, &ptr);
+    if (ptr) {
+        get = (MppEncOSDData3 *)ptr;
+
+        if (get->num_region != osd.num_region)
+            mpp_log(MODULE_TAG " fixed_only: OSD_DATA4 num_region mismatch %u != %u\n",
+                    get->num_region, osd.num_region);
+        else
+            mpp_log(MODULE_TAG " fixed_only: OSD_DATA4 verified\n");
+    } else {
+        mpp_log(MODULE_TAG " fixed_only: OSD_DATA4 get_ptr NULL\n");
+    }
+
+    mpp_log(MODULE_TAG " fixed_only OK\n");
+    kmpp_meta_put_f(meta);
+}
+
 void *meta_test(void *param)
 {
     MetaTestCtx *ctx = (MetaTestCtx *)param;
@@ -404,6 +447,7 @@ int main(int argc, char **argv)
     test_resize_rebind(ctxs[0].ud_data);
     test_flex_order(ctxs[0].ud_data);
     test_flex_grow(ctxs[0].ud_data);
+    test_fixed_only();
 
     mpp_log(MODULE_TAG " start threads %d loop %d\n", thd_cnt, loop_cnt);
 
