@@ -1326,6 +1326,11 @@ rk_s32 kmpp_obj_resize(KmppObj obj, rk_s32 vla_size, const char *caller)
         if (ret)
             return ret;
 
+        if (!sptr.uptr) {
+            mpp_loge_f("obj %s resize returned empty shm sptr at %s\n", def->name, caller);
+            return rk_nok;
+        }
+
         impl->shm = (KmppShmPtr *)sptr.uptr;
         impl->entry = (void *)(sptr.uptr + p->entry_offset);
         impl->entry_buf_size = buf_size;
