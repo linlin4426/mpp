@@ -121,14 +121,6 @@ typedef struct KmppBufPriv_t {
 typedef struct KmppBufferImpl_t {
     KmppShmPtr          cfg;
     KmppBufCfg          cfg_ext;
-    KmppBufCfgImpl      *cfg_usr;
-
-    KmppBufGrpImpl      *grp;
-    /* when grp is valid used grp lock else use srv lock */
-    pthread_mutex_t     lock;
-    struct list_head    list_status;
-    KmppObj             obj;
-
     KmppDmaBuf          buf;
     void                *kptr;
     rk_u64              uaddr;
@@ -137,17 +129,6 @@ typedef struct KmppBufferImpl_t {
     rk_s32              grp_id;
     rk_s32              buf_gid;
     rk_s32              buf_uid;
-    rk_s32              ref_cnt;
-
-    rk_u32              status;
-    rk_u32              discard;
-
-    /* mutex for list_maps */
-    void                *mutex_maps;
-    /* list for list in KmppBufIovaMap */
-    struct list_head    list_maps;
-
-    KmppBufCfgImpl      cfg_int;
 } KmppBufferImpl;
 
 #endif /* KMPP_BUF_GRP_IMPL_H */
