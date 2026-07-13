@@ -1186,12 +1186,14 @@ void h265d_fill_dynamic_meta(H265dPrs *p, const RK_U8 *data, RK_U32 size, RK_U32
     MppRefPool *pool = &p->hdr_meta_pool;
     RK_S32 idx;
     MppFrameHdrDynamicMeta *meta;
+    RK_U8 start_code[4] = {0, 0, 0, 1};
+    RK_U32 extra_size = (hdr_fmt == DLBY) ? sizeof(start_code) : 0;
 
     /* Cleanup unused slots in pool */
     mpp_ref_pool_cleanup(pool);
 
     /* Allocate a new slot from pool (include struct header size) */
-    idx = mpp_ref_pool_get(pool, sizeof(MppFrameHdrDynamicMeta) + size);
+    idx = mpp_ref_pool_get(pool, sizeof(MppFrameHdrDynamicMeta) + size + extra_size);
     if (idx < 0) {
         mpp_loge_f("failed to allocate hdr meta slot\n");
         return;
@@ -1201,10 +1203,9 @@ void h265d_fill_dynamic_meta(H265dPrs *p, const RK_U8 *data, RK_U32 size, RK_U32
     if (size && data) {
         switch (hdr_fmt) {
         case DLBY: {
-            RK_U8 start_code[4] = {0, 0, 0, 1};
-
-            memcpy((RK_U8*)meta->data, start_code, 4);
-            memcpy((RK_U8*)meta->data + 4, (RK_U8*)data, size - 4);
+            memcpy((RK_U8*)meta->data, start_code, extra_size);
+            memcpy((RK_U8*)meta->data + extra_size, (RK_U8*)data, size);
+            size += extra_size;
         } break;
         case HDRVIVID:
         case HDR10PLUS: {
