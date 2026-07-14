@@ -1148,12 +1148,8 @@ RK_S32 h265d_nal_unit(H265dPrs *p, const RK_U8 *nal, RK_S32 length)
         p->max_ra     = INT_MAX;
     } break;
     case NAL_AUD :
-    case NAL_FD_NUT : {
-    } break;
-    case NAL_UNSPEC62: {
-        if (length > 2) {
-            h265d_fill_dynamic_meta(p, nal + 2, length - 2, DLBY);
-        }
+    case NAL_FD_NUT :
+    case NAL_UNSPEC62 : {
     } break;
     default : {
         mpp_log("Skipping NAL unit %d\n", type);
@@ -1224,12 +1220,45 @@ void h265d_fill_dynamic_meta(H265dPrs *p, const RK_U8 *data, RK_U32 size, RK_U32
 
 }
 
+static void h265d_check_rpus(H265dPrs *p)
+{
+    RK_S32 i;
+
+    /*
+     * RPUs are carried in unregistered NAL type 62 and are usually appended
+     * after the VCL NALs in the access unit.  The output  frame is created
+     * while parsing the first slice, so the RPU has to be collected before
+     * normal NAL parsing starts.
+     */
+    for (i = p->nb_nals - 1; i >= 0; i--) {
+        H265dNal *nal = &p->nals[i];
+        const RK_U8 *data;
+        RK_U32 type;
+
+        if (nal->size <= 2)
+            continue;
+
+        data = p->bitstream + nal->bitstream_offset + 3;
+        type = (data[0] >> 1) & 0x3f;
+
+        if (type == NAL_EOS_NUT || type == NAL_EOB_NUT ||
+            type == NAL_AUD || type == NAL_FD_NUT)
+            continue;
+
+        if (type == NAL_UNSPEC62)
+            h265d_fill_dynamic_meta(p, data + 2, nal->size - 2, DLBY);
+
+        break;
+    }
+}
+
 RK_S32 h265d_nal_units(H265dPrs *p)
 {
     RK_S32 ret = 0;
     RK_S32 i;
 
     p->slice_cnt = 0;
+    h265d_check_rpus(p);
 
     for (i = 0; i < p->nb_nals; i++) {
         const RK_U8 *nal_data = p->bitstream + p->nals[i].bitstream_offset + 3;

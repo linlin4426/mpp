@@ -172,6 +172,7 @@ static H265dFrame *h265d_frame_create(H265dPrs *p, RK_S32 poc, RK_U32 ref_only)
                 mpp_ref_pool_ref(hdr_meta_pool, hdr_meta_index);
                 mpp_frame_set_hdr_dynamic_meta(frame->frame,
                                                (MppFrameHdrDynamicMeta*)mpp_ref_pool_ptr(hdr_meta_pool, hdr_meta_index));
+                p->hdr_dynamic = 0;
                 h265d_dbg_ref("h265d_frame_create poc %d slot %d hdr_meta_index %d",
                               poc, frame->slot_index, hdr_meta_index);
             }
