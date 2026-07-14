@@ -59,7 +59,6 @@ typedef struct MppHalImpl_t {
 /* max 32 coding type and max 2 apis on each soc for each coding type hardware decoder */
 static const MppHalApi *vdec_apis[32][2] = {{ 0 }};
 
-static RK_U32 mpp_hal_debug = 0;
 RK_U32 hal_h265d_debug = 0;
 RK_U32 hal_h264d_debug = 0;
 RK_U32 hal_vp8d_debug = 0;
@@ -79,8 +78,6 @@ MPP_RET mpp_hal_api_register(const MppHalApi *api)
     RK_S32 soc_match = 0;
     RK_S32 index;
     RK_S32 i;
-
-    mpp_env_get_u32("mpp_hal_debug", &mpp_hal_debug, 0);
 
     dec_hal_dbg_api("api %s adding coding %d type %d client %d\n",
                     api->name, api->coding, api->type, api->client);

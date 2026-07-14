@@ -46,7 +46,6 @@ typedef struct MppEncHalImpl_t {
 /* max 32 coding type and max 2 apis on each soc for each coding type hardware encoder */
 static const MppEncHalApi *venc_apis[32][2] = {{ 0 }};
 
-static RK_U32 mpp_enc_hal_debug = 0;
 RK_U32 hal_h265e_debug = 0;
 RK_U32 hal_h264e_debug = 0;
 RK_U32 hal_jpege_debug = 0;
@@ -59,8 +58,6 @@ MPP_RET mpp_enc_hal_api_register(const MppEncHalApi *api)
     RK_S32 soc_match = 0;
     RK_S32 index;
     RK_S32 i;
-
-    mpp_env_get_u32("mpp_enc_hal_debug", &mpp_enc_hal_debug, 0);
 
     enc_hal_dbg_api("api %s adding coding %d client %d\n",
                     api->name, api->coding, api->client);

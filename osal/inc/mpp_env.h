@@ -12,6 +12,10 @@
 extern "C" {
 #endif
 
+extern RK_U32 mpp_cfg_io_debug;
+extern RK_U32 mpp_hal_debug;
+extern RK_U32 mpp_enc_hal_debug;
+
 RK_S32 mpp_env_get_u32(const char *name, RK_U32 *value, RK_U32 default_value);
 RK_S32 mpp_env_get_str(const char *name, const char **value, const char *default_value);
 

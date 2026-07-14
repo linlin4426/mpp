@@ -134,8 +134,6 @@ typedef struct MppCfgStrBuf_t {
     MppCfgStrFmt type;
 } MppCfgStrBuf;
 
-static rk_u32 mpp_cfg_io_debug = 0;
-
 static const char *strof_type(MppCfgType type)
 {
     static const char *str[MPP_CFG_TYPE_BUTT + 1] = {
@@ -298,8 +296,6 @@ rk_s32 mpp_cfg_get_object(MppCfgObj *obj, const char *name, MppCfgType type, Mpp
         mpp_loge_f("invalid param obj %p name %s type %d val %p\n", obj, name, type, val);
         return rk_nok;
     }
-
-    mpp_env_get_u32("mpp_cfg_io_debug", &mpp_cfg_io_debug, mpp_cfg_io_debug);
 
     if (*obj)
         mpp_logw_f("obj %p overwrite\n", *obj);
