@@ -457,7 +457,23 @@ RK_U32 mpp_buf_slots_setup_thumbnail_frame(MppFrame frame, RK_U32 *hor_y_stride,
     sd_buf_size = MPP_ALIGN(sd_buf_size, 16);
 
     if (update_frm_info) {
-        mpp_frame_set_fmt(frame, MPP_FMT_YUV420SP);
+        MppFrameFormat sd_fmt = fmt;
+
+        switch (fmt & MPP_FRAME_FMT_MASK) {
+        case MPP_FMT_YUV420SP_10BIT : {
+            sd_fmt = MPP_FMT_YUV420SP;
+        } break;
+        case MPP_FMT_YUV422SP_10BIT : {
+            sd_fmt = MPP_FMT_YUV422SP;
+        } break;
+        case MPP_FMT_YUV444SP_10BIT : {
+            sd_fmt = MPP_FMT_YUV444SP;
+        } break;
+        default : {
+        } break;
+        }
+
+        mpp_frame_set_fmt(frame, sd_fmt);
         mpp_frame_set_width(frame, sd_w);
         mpp_frame_set_height(frame, sd_h);
         mpp_frame_set_hor_stride(frame, sd_hor);
