@@ -27,7 +27,7 @@
 #include "mpp_buffer.h"
 #include "mpp_allocator.h"
 
-#define MPP_BUFFER_TEST_DEBUG_FLAG      (0xf)
+#define MPP_BUFFER_TEST_DEBUG_FLAG      (0x0)
 #define MPP_BUFFER_TEST_SIZE            (SZ_1K*4)
 #define MPP_BUFFER_TEST_COMMIT_COUNT    10
 #define MPP_BUFFER_TEST_NORMAL_COUNT    10
