@@ -281,8 +281,8 @@ void mpp_mem_pool_put(MppMemPool pool, void *p, const char *caller)
     }
 
     if (node != node->check) {
-        mpp_err_f("invalid mem pool ptr %p node %p check %p\n",
-                  p, node, node->check);
+        mpp_err_f("invalid mem pool ptr %p node %p check %p caller %s\n",
+                  p, node, node->check, caller);
         return ;
     }
 
