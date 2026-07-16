@@ -14,8 +14,15 @@
 #include "mpp_enc_cfg.h"
 #include "mpp_mem_pool.h"
 #include "kmpp_obj.h"
+#include "kmpp_venc.h"
 
 typedef struct Kmpp_t Kmpp;
+/* kmpp path mode */
+typedef enum KmppMode_e {
+    KMPP_MODE_OBJ     = 1,  /* kmpp_obj path via /dev/kmpp_objs + /dev/kmpp_ioctl */
+    KMPP_MODE_LEGACY  = 2,  /* legacy /dev/vcodec path */
+} KmppMode;
+
 typedef struct KmppOps_t {
     MPP_RET (*open_client)(Kmpp *ctx);
     MPP_RET (*init)(Kmpp *ctx, MppCtxType type, MppCodingType coding);
@@ -71,6 +78,15 @@ struct Kmpp_t {
 
     KmppOps             *mApi;
     KmppObj             mVencInitKcfg;
+
+    /* path mode selection */
+    RK_U32              mMode;
+
+    /* kmpp_obj path (mode 1) specific */
+    KmppVenc            mVenc;
+    KmppObj             mCtrlCfg;
+    RK_S32              mEventFd;
+    KmppObj             mUserdataBuf;
 };
 
 #ifdef __cplusplus
@@ -78,6 +94,7 @@ extern "C" {
 #endif
 
 void mpp_get_api(Kmpp *ctx);
+void kmpp_release_venc_packet(void *ctx, void *arg);
 
 #ifdef __cplusplus
 }

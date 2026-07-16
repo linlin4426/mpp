@@ -16,6 +16,7 @@ add_subdirectory(base)
 # ----------------------------------------------------------------------------
 set (KMPP_SRC
     kmpp.c
+    kmpp_legacy.c
     kmpp_venc.c
     kmpp_vdec.c
     )
