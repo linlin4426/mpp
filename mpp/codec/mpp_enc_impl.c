@@ -828,8 +828,10 @@ static void proc_rc_cfg(MppEncImpl *enc)
     if (change & RC_CHANGE_DEBREATH)
         mpp_enc_refs_force_recon(enc->refs, !!cfg->debreath_en);
 
-    if (set->ref_cfg)
+    if (set->ref_cfg) {
+        mpp_logw_f("rc:ref_cfg is deprecated, use MPP_ENC_SET_REF_CFG instead\n");
         mpp_enc_control_set_ref_cfg(enc, set->ref_cfg);
+    }
 }
 
 static void proc_split_cfg(MppEncSliceSplit *cfg, MppEncSliceSplit *set)

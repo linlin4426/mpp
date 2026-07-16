@@ -16,6 +16,7 @@
 
 #define MODULE_TAG "mpi_enc_utils"
 
+#include <stdio.h>
 #include <errno.h>
 #include <string.h>
 #include <sys/mman.h>
@@ -31,6 +32,7 @@
 #include "mpp_opt.h"
 #include "mpi_enc_utils.h"
 
+#include "kmpp_obj.h"
 #include "mpp_enc_ref.h"
 
 #define MAX_FILE_NAME_LENGTH        256
@@ -204,12 +206,28 @@ error:
     return ret;
 }
 
-static MPP_RET mpi_enc_load_ref_cfg(MppEncRefCfg *ref, const char *path)
+MPP_RET mpi_enc_load_ref_cfg(MppEncRefCfg ref, const char *path)
 {
-    MPP_RET ret = MPP_NOK;
+    MPP_RET ret = MPP_OK;
+    MppCfgStrFmt fmt = MPP_CFG_STR_FMT_JSON;
     RK_S32 fd = -1;
     RK_S32 size = 0;
     char *buf = NULL;
+    const char *ext;
+
+    if (!ref)
+        return MPP_ERR_NULL_PTR;
+
+    if (!path)
+        return MPP_OK;
+
+    ext = strrchr(path, '.');
+    if (ext) {
+        if (!strcmp(ext, ".toml"))
+            fmt = MPP_CFG_STR_FMT_TOML;
+        else
+            fmt = MPP_CFG_STR_FMT_JSON;
+    }
 
     fd = open(path, O_RDONLY);
     if (fd < 0) {
@@ -228,13 +246,7 @@ static MPP_RET mpi_enc_load_ref_cfg(MppEncRefCfg *ref, const char *path)
         goto done;
     }
 
-    ret = mpp_enc_ref_cfg_setup(ref, 0, 0);
-    if (ret)
-        goto done;
-
-    ret = mpp_enc_ref_cfg_apply(*ref, MPP_CFG_STR_FMT_JSON, buf);
-    if (ret)
-        mpp_enc_ref_cfg_deinit(ref);
+    ret = mpp_enc_ref_cfg_apply(ref, fmt, buf);
 
 done:
     if (buf) {
@@ -1837,7 +1849,6 @@ MPP_RET mpi_enc_cfg_setup(MpiEncTestData *p, MpiEncTestArgs *cmd, MppEncCfg cfg_
     MppCtx ctx = p->ctx;
     MppEncCfg cfg = p->cfg;
     MPP_RET ret;
-    MppEncRefCfg ref = NULL;
 
     /* setup default parameter */
     if (cmd->fps_in_den == 0)
@@ -2036,29 +2047,8 @@ MPP_RET mpi_enc_cfg_setup(MpiEncTestData *p, MpiEncTestArgs *cmd, MppEncCfg cfg_
     } break;
     }
 
-    // config gop_len and ref cfg
+    // config gop_len
     mpp_enc_cfg_set_s32(cfg, "rc:gop", (cmd->gop_len != 0) ? cmd->gop_len : cmd->fps_out_num * 2);
-
-    {
-        void *existing_ref = NULL;
-        mpp_enc_cfg_get_ptr(cfg, "rc:ref_cfg", &existing_ref);
-
-        if (!existing_ref) {
-            if (cmd->file_ref_cfg) {
-                if (MPP_OK == mpi_enc_load_ref_cfg(&ref, cmd->file_ref_cfg))
-                    mpp_enc_cfg_set_ptr(cfg, "rc:ref_cfg", ref);
-            } else if (cmd->gop_mode) {
-                mpp_enc_ref_cfg_init(&ref);
-
-                if (cmd->gop_mode < 4)
-                    mpi_enc_gen_ref_cfg(ref, cmd->gop_mode);
-                else
-                    mpi_enc_gen_smart_gop_ref_cfg(ref, cmd->gop_len, cmd->vi_len);
-
-                mpp_enc_cfg_set_ptr(cfg, "rc:ref_cfg", ref);
-            }
-        }
-    }
 
     /* setup hardware specified parameters */
     if (cmd->rc_mode == MPP_ENC_RC_MODE_SMTRC) {
@@ -2099,9 +2089,6 @@ MPP_RET mpi_enc_cfg_setup(MpiEncTestData *p, MpiEncTestArgs *cmd, MppEncCfg cfg_
         }
     }
 
-    if (ref)
-        mpp_enc_ref_cfg_deinit(&ref);
-
     /* optional */
     ret = mpi->control(ctx, MPP_ENC_SET_SEI_CFG, &cmd->sei_mode);
     if (ret) {
@@ -2124,6 +2111,23 @@ MPP_RET mpi_enc_cfg_setup(MpiEncTestData *p, MpiEncTestArgs *cmd, MppEncCfg cfg_
     }
 
 RET:
+    return ret;
+}
+
+MPP_RET mpi_enc_ref_cfg_setup(MpiEncTestData *p, MpiEncTestArgs *cmd, MppEncRefCfg ref)
+{
+    MPP_RET ret = MPP_OK;
+
+    if (cmd->file_ref_cfg)
+        ret = mpi_enc_load_ref_cfg(ref, cmd->file_ref_cfg);
+    else if (cmd->gop_mode < 4)
+        ret = mpi_enc_gen_ref_cfg(ref, cmd->gop_mode);
+    else
+        ret = mpi_enc_gen_smart_gop_ref_cfg(ref, cmd->gop_len, cmd->vi_len);
+
+    if (!ret)
+        ret = p->mpi->control(p->ctx, MPP_ENC_SET_REF_CFG, ref);
+
     return ret;
 }
 
