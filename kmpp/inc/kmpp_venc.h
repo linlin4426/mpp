@@ -7,6 +7,7 @@
 #define KMPP_VENC_H__
 
 #include "rk_venc_kcfg.h"
+#include "rk_mpi_cmd.h"
 
 typedef void* KmppVenc;
 
@@ -20,14 +21,19 @@ typedef void* KmppVenc;
     IOC_CTX(prefix, resume)                                     \
     IOC_IN_(prefix, get_cfg,        MppVencKcfg)                \
     IOC_IN_(prefix, set_cfg,        MppVencKcfg)                \
+    IOC_IN_(prefix, set_ref_cfg,    MppVencKcfg)                \
+    IOC_IN_(prefix, get_ref_cfg,    MppVencKcfg)                \
     IOC_IO_(prefix, encode,         KmppFrame,     KmppPacket)  \
     IOC_IN_(prefix, put_frm,        KmppFrame)                  \
     IOC_OUT(prefix, get_pkt,        KmppPacket)                 \
-    IOC_IN_(prefix, put_pkt,        KmppPacket)
+    IOC_IN_(prefix, put_pkt,        KmppPacket)                 \
+    IOC_IN_(prefix, control,        MppVencKcfg)
 
 #define KMPP_OBJ_NAME               kmpp_venc
 #define KMPP_OBJ_INTF_TYPE          KmppVenc
 #define KMPP_OBJ_FUNC_IOCTL         KMPP_VENC_IOCTL_TABLE
 #include "kmpp_obj_func.h"
+
+rk_s32 kmpp_venc_ctrl(KmppVenc venc, MpiCmd cmd, MppParam param);
 
 #endif /* KMPP_VENC_H__*/

@@ -3,37 +3,63 @@
  * Copyright (c) 2024 Rockchip Electronics Co., Ltd.
  */
 
-#define  MODULE_TAG "kmpp"
+#define MODULE_TAG "kmpp"
 
-#include <string.h>
+#include "rk_mpi.h"
 
 #include "mpp_log.h"
 #include "mpp_env.h"
-#include "rk_mpi.h"
-#include "mpp_impl.h"
+#include "mpp_thread.h"
+
 #include "kmpp.h"
-#include "kmpp_obj.h"
-#include "kmpp_frame.h"
 #include "kmpp_packet.h"
 
-/* external ops table from kmpp_legacy.c */
+/* kmpp path mode */
+typedef enum KmppMode_e {
+    KMPP_MODE_AUTO      = 0,  /* auto-detect / no kmpp wrapper */
+    KMPP_MODE_LEGACY    = 1,  /* legacy /dev/vcodec path */
+    KMPP_MODE_OBJ       = 2,  /* kmpp_obj path via /dev/kmpp_objs + /dev/kmpp_ioctl */
+    KMPP_MODE_BUTT,
+} KmppMode;
+
 extern KmppOps kmpp_legacy_ops;
+extern KmppOps kmpp_venc_obj_ops;
+
+static RK_U32 kmpp_mode = 0;
+static pthread_once_t kmpp_mode_once = PTHREAD_ONCE_INIT;
+
+static void kmpp_mode_init(void)
+{
+    mpp_env_get_u32("kmpp_mode", &kmpp_mode, 0);
+}
 
 void mpp_get_api(Kmpp *ctx)
 {
-    RK_U32 mode = 0;
-
     if (!ctx)
         return;
 
-    mpp_env_get_u32("kmpp_mode", &mode, 0);
+    pthread_once(&kmpp_mode_once, kmpp_mode_init);
 
-    /* validate mode, fall back to legacy on invalid value */
-    if (mode != KMPP_MODE_OBJ && mode != KMPP_MODE_LEGACY)
-        mode = KMPP_MODE_LEGACY;
+    if (kmpp_mode == KMPP_MODE_AUTO) {
+        /* default to legacy mode */
+        kmpp_mode = KMPP_MODE_LEGACY;
+    }
 
-    ctx->mMode = mode;
-    ctx->mApi = &kmpp_legacy_ops;
+    switch (kmpp_mode) {
+    case KMPP_MODE_OBJ : {
+        ctx->mApi = &kmpp_venc_obj_ops;
+    } break;
+    case KMPP_MODE_LEGACY : {
+        ctx->mApi = &kmpp_legacy_ops;
+    } break;
+    default : {
+        mpp_loge_f("invalid kmpp mode %d, fallback to legacy mode\n");
+        kmpp_mode = KMPP_MODE_LEGACY;
+        ctx->mApi = &kmpp_legacy_ops;
+    } break;
+    }
+
+    ctx->mMode = kmpp_mode;
 }
 
 void kmpp_release_venc_packet(void *ctx, void *arg)
@@ -41,10 +67,9 @@ void kmpp_release_venc_packet(void *ctx, void *arg)
     KmppPacket pkt = (KmppPacket)arg;
 
     if (!ctx || !pkt) {
-        mpp_err_f("invalid input ctx %p pkt %p\n", ctx, pkt);
+        mpp_loge_f("invalid input ctx %p pkt %p\n", ctx, pkt);
         return;
     }
 
     kmpp_packet_put(pkt);
 }
-
