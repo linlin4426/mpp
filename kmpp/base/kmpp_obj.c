@@ -1184,12 +1184,10 @@ rk_s32 kmpp_obj_get_by_sptr(KmppObj *obj, KmppShmPtr *sptr, const char *caller)
         return rk_nok;
 
     impl = (KmppObjImpl *)(intptr_t) * (rk_u64 *)(uptr + p->priv_offset);
-    if (impl) {
-        if (!kmpp_obj_check_f((KmppObj)impl))
-            goto done;
-    }
+    if (impl && kmpp_obj_check_f((KmppObj)impl))
+        impl = NULL;
 
-    {
+    if (!impl) {
         rk_u32 val = *((rk_u32 *)(uptr + p->name_offset));
         char *str;
 
@@ -1203,12 +1201,11 @@ rk_s32 kmpp_obj_get_by_sptr(KmppObj *obj, KmppShmPtr *sptr, const char *caller)
             mpp_loge_f("failed to get objdef %p - %s at %s\n", str, str, caller);
             return rk_nok;
         }
+
+        mpp_assert(def && def->pool);
+        impl = get_obj_from_def(p, def, (KmppShmPtr *)uptr, caller);
     }
 
-    mpp_assert(def && def->pool);
-    impl = get_obj_from_def(p, def, (KmppShmPtr *)uptr, caller);
-
-done:
     *obj = impl;
 
     return impl ? rk_ok : rk_nok;
@@ -1221,10 +1218,18 @@ rk_s32 kmpp_obj_put(KmppObj obj, const char *caller)
         KmppObjDefImpl *def = impl->def;
         KmppObjs *p;
 
-        mpp_assert(def && def->pool);
+        if (!def) {
+            mpp_loge_f("obj %p invalid def at %s (double-put or stale shm?)\n",
+                       impl, caller);
+            return rk_nok;
+        }
 
-        if (def && def->deinit)
+        if (def->deinit)
             def->deinit(impl->entry, impl, caller);
+
+        /* clear def to mark "in release": repeated put is detected at
+         * entry before deinit runs again */
+        impl->def = NULL;
 
         /* use shm to check userspace objdef or kernel objdef */
         /* userspace objdef path */
@@ -1239,7 +1244,7 @@ rk_s32 kmpp_obj_put(KmppObj obj, const char *caller)
                 ioc->obj_sptr[0].uaddr = impl->shm->uaddr;
                 ioc->obj_sptr[0].kaddr = impl->shm->kaddr;
 
-                obj_dbg_flow("put obj %-16s - %p entry [u:k] %llx:%llx at %s\n", def ? def->name : NULL,
+                obj_dbg_flow("put obj %-16s - %p entry [u:k] %llx:%llx at %s\n", def->name,
                              impl, impl->shm->uaddr, impl->shm->kaddr, caller);
 
                 ret = ioctl(p->obj.fd, KMPP_SHM_IOC_PUT_SHM, ioc);
@@ -1367,20 +1372,25 @@ rk_s32 kmpp_obj_impl_put(KmppObj obj, const char *caller)
         KmppObjImpl *impl = (KmppObjImpl *)obj;
         KmppObjDefImpl *def = impl->def;
 
-        mpp_assert(def);
-
-        if (def) {
-            if (def->deinit)
-                def->deinit(impl->entry, impl, caller);
-
-            if (def->flex_entry && !impl->shm)
-                MPP_FREE(impl->entry);
-
-            mpp_assert(def->pool);
-            mpp_mem_pool_put(def->pool, impl, caller);
-
-            return rk_ok;
+        if (!def) {
+            mpp_loge_f("obj %p invalid def at %s (double-put or stale shm?)\n",
+                       impl, caller);
+            return rk_nok;
         }
+
+        if (def->deinit)
+            def->deinit(impl->entry, impl, caller);
+
+        /* clear def to mark "in release": repeated put is detected at
+         * entry before deinit runs again */
+        impl->def = NULL;
+
+        if (def->flex_entry && !impl->shm)
+            MPP_FREE(impl->entry);
+
+        mpp_mem_pool_put(def->pool, impl, caller);
+
+        return rk_ok;
     }
 
     return rk_nok;
