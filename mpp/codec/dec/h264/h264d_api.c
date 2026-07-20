@@ -444,6 +444,7 @@ MPP_RET h264d_reset(void *decoder)
     p_strm->prefixdata        = 0xffffffff;
     p_strm->nalu_offset       = 0;
     p_strm->nalu_len          = 0;
+    p_strm->head_offset       = 0;
     p_strm->tmp_offset        = 0;
     p_strm->first_mb_in_slice = 0;
     p_strm->endcode_found     = 0;
