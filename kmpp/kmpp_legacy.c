@@ -26,6 +26,7 @@
 #include "mpp_frame_impl.h"
 #include "mpp_packet_impl.h"
 #include "kmpp_packet.h"
+#include "kmpp_meta_impl.h"
 #include "mpp_vcodec_client.h"
 #include "mpp_enc_cfg.h"
 
@@ -278,7 +279,7 @@ static MPP_RET put_frame(Kmpp *ctx, MppFrame frame)
             {
                 MppEncOSDData3 *osd_data3 = NULL;
 
-                mpp_meta_get_ptr(meta, KEY_OSD_DATA3, (void **)&osd_data3);
+                kmpp_meta_get_osd(meta, &osd_data3);
                 if (osd_data3) {
                     osd_data3->change = 1;
                     ctx->mApi->control(ctx, MPP_ENC_SET_OSD_DATA_CFG, osd_data3);

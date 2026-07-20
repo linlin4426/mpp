@@ -8,6 +8,7 @@
 
 #include "mpp_list.h"
 #include "kmpp_meta.h"
+#include "rk_venc_cmd.h"
 
 #define MPP_TAG_SIZE            32
 
@@ -179,6 +180,14 @@ typedef struct __attribute__((packed, aligned(4))) KmppMetaImpl_t {
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* Peek a ready ptr/flex entry without consuming it (no CAS, no dec_size). */
+rk_s32 kmpp_meta_peek_ptr(KmppMeta meta, KmppMetaKey key, void **val);
+
+/* OSD wrapper: set_osd writes OSD_DATA4 (flex-inline); get_osd peeks
+ * OSD_DATA4 then falls back to OSD_DATA3. Reads are non-consuming. */
+rk_s32 kmpp_meta_set_osd(KmppMeta meta, MppEncOSDData3 *osd);
+rk_s32 kmpp_meta_get_osd(KmppMeta meta, MppEncOSDData3 **osd);
 
 #ifdef __cplusplus
 }

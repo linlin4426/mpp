@@ -974,3 +974,60 @@ rk_s32 kmpp_meta_get_ptr_d(KmppMeta meta, KmppMetaKey key, void **val, void *def
 
     return rk_ok;
 }
+
+/* Peek a ready ptr/flex entry without consuming it (no CAS, no dec_size). */
+rk_s32 kmpp_meta_peek_ptr(KmppMeta meta, KmppMetaKey key, void **val)
+{
+    void *entry = kmpp_obj_to_entry(meta);
+    KmppMetaSrv *srv = srv_meta;
+    rk_u64 name = META_KEY_TO_U64(key, TYPE_UPTR);
+    KmppEntry *tbl = NULL;
+    rk_u32 *state;
+
+    if (!srv || !val)
+        return rk_nok;
+
+    *val = NULL;
+    kmpp_objdef_get_entry(srv->def, (const char *)&name, &tbl);
+    if (!tbl)
+        return rk_nok;
+
+    state = (rk_u32 *)((rk_u8 *)entry + tbl->tbl.elem_offset);
+
+    if ((*state & META_READY_MASK) != META_READY_MASK)
+        return rk_nok;
+
+    if (*state & META_VAL_FLEX_ANY) {
+        KmppMetaFlex *flex = (KmppMetaFlex *)state;
+        rk_u8 *flex_base = (rk_u8 *)kmpp_obj_to_entry_flex(meta);
+
+        *val = flex_base + flex->offset;
+    } else {
+        KmppMetaVal *meta_val = (KmppMetaVal *)state;
+
+        *val = meta_val->val_ptr;
+    }
+
+    return rk_ok;
+}
+
+/* OSD wrapper: set_osd writes OSD_DATA4; get_osd peeks OSD_DATA4 then OSD_DATA3. */
+rk_s32 kmpp_meta_set_osd(KmppMeta meta, MppEncOSDData3 *osd)
+{
+    return kmpp_meta_set_ptr(meta, KEY_OSD_DATA4, osd);
+}
+
+rk_s32 kmpp_meta_get_osd(KmppMeta meta, MppEncOSDData3 **osd)
+{
+    rk_s32 ret;
+
+    if (!osd)
+        return rk_nok;
+
+    *osd = NULL;
+    ret = kmpp_meta_peek_ptr(meta, KEY_OSD_DATA4, (void **)osd);
+    if (ret || !*osd)
+        ret = kmpp_meta_peek_ptr(meta, KEY_OSD_DATA3, (void **)osd);
+
+    return ret;
+}
