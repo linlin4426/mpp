@@ -2931,7 +2931,8 @@ RK_S32 hal_h265d_vdpu38x_output_pps_packet(void *hal, void *dxva, RK_U32 *scanli
                 mpp_put_bits(&bp, row_height[i], 12);
         }
         /* update rps */
-        if ((soc_type == ROCKCHIP_SOC_RK3538 ||
+        if ((soc_type == ROCKCHIP_SOC_RV1126B ||
+             soc_type == ROCKCHIP_SOC_RK3538 ||
              soc_type == ROCKCHIP_SOC_RK3572 ||
              soc_type == ROCKCHIP_SOC_RK3539) &&
             dxva_ctx->pp.rps_update_flag) {
