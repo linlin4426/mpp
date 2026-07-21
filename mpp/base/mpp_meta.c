@@ -9,13 +9,16 @@
 #include <endian.h>
 
 #include "mpp_env.h"
+#include "mpp_mem.h"
 #include "mpp_lock.h"
 #include "mpp_debug.h"
-#include "mpp_mem_pool.h"
 #include "mpp_singleton.h"
 
 #include "mpp_trie.h"
 #include "mpp_meta_impl.h"
+
+#include "kmpp_obj.h"
+#include "kmpp_meta.h"
 
 #define META_DBG_FLOW               (0x00000001)
 #define META_DBG_KEYS               (0x00000002)
@@ -76,12 +79,20 @@ static inline RK_U64 META_KEY_TO_U64(RK_U32 key, RK_U32 type)
     return (RK_U64)((RK_U32)htobe32(key)) | ((RK_U64)type << 32);
 }
 
-#define EXPAND_AS_TRIE(key, type) \
+#define EXPAND_AS_TRIE(key, _type) \
     do { \
-        RK_U64 val = META_KEY_TO_U64(key, type); \
-        mpp_trie_add_info(srv->trie, (const char *)&val, NULL, 0); \
+        RK_U64 val = META_KEY_TO_U64(key, _type); \
+        KmppEntry e = { .val = 0 }; \
+        e.tbl.type = ENTRY_TYPE_LOC_TBL; \
+        e.tbl.elem_offset = (rk_u16)(meta_key_count * sizeof(MppMetaVal)); \
+        e.tbl.elem_size = sizeof(MppMetaVal); \
+        e.tbl.elem_type = ELEM_TYPE_s32; \
+        kmpp_objdef_add_entry(mpp_meta_def, 0, (const char *)&val, &e); \
         meta_key_count++; \
     } while (0);
+
+#define EXPAND_AS_COUNT(key, _type) \
+    meta_key_count++;
 
 #define EXPAND_AS_LOG(key, type) \
     do { \
@@ -158,14 +169,13 @@ static inline RK_U64 META_KEY_TO_U64(RK_U32 key, RK_U32 type)
 typedef struct MppMetaSrv_t {
     spinlock_t          lock;
     struct list_head    list_meta;
-    MppTrie             trie;
 
     RK_U32              meta_id;
     RK_S32              meta_count;
 } MppMetaSrv;
 
 static MppMetaSrv *srv_meta = NULL;
-static MppMemPool pool_meta = NULL;
+static KmppObjDef mpp_meta_def = NULL;
 static RK_U32 srv_finalized = 0;
 static RK_U32 meta_key_count = 0;
 static RK_U32 mpp_meta_debug = 0;
@@ -175,9 +185,65 @@ static RK_S32 user_datas_index = -1;
 RK_S32 meta_hdr_offset_index = -1;
 RK_S32 meta_hdr_size_index = -1;
 
-static void put_meta(MppMetaSrv *srv, MppMetaImpl *meta);
+static void put_meta(MppMetaSrv *srv, KmppObj meta);
+static void clean_user_data(MppMetaPriv *priv);
+static void clean_user_datas(MppMetaPriv *priv);
 static inline RK_S32 get_index_of_key(MppMetaKey key, MppMetaType type, const char *caller);
 #define get_index_of_key_f(key, type) get_index_of_key(key, type, __FUNCTION__);
+
+static rk_s32 mpp_meta_impl_init(void *entry, KmppObj obj, const char *caller)
+{
+    MppMetaSrv *srv = srv_meta;
+    MppMetaPriv *priv;
+    MppMetaVal *vals = (MppMetaVal *)entry;
+    RK_U32 i;
+
+    (void)caller;
+
+    if (!srv)
+        return rk_nok;
+
+    for (i = 0; i < meta_key_count; i++)
+        vals[i].state = 0;
+
+    priv = (MppMetaPriv *)kmpp_obj_to_priv(obj);
+    if (priv) {
+        priv->obj = obj;
+        priv->meta_id = MPP_FETCH_ADD(&srv->meta_id, 1);
+        INIT_LIST_HEAD(&priv->list_meta);
+        priv->ref_count = 1;
+        priv->node_count = 0;
+
+        mpp_spinlock_lock(&srv->lock);
+        list_add_tail(&priv->list_meta, &srv->list_meta);
+        mpp_spinlock_unlock(&srv->lock);
+        MPP_FETCH_ADD(&srv->meta_count, 1);
+    }
+    return rk_ok;
+}
+
+static rk_s32 mpp_meta_impl_deinit(void *entry, KmppObj obj, const char *caller)
+{
+    (void)entry;
+    (void)caller;
+    MppMetaSrv *srv = srv_meta;
+    MppMetaPriv *priv;
+
+    if (!srv)
+        return rk_nok;
+
+    priv = (MppMetaPriv *)kmpp_obj_to_priv(obj);
+    if (priv) {
+        clean_user_data(priv);
+        clean_user_datas(priv);
+
+        mpp_spinlock_lock(&srv->lock);
+        list_del_init(&priv->list_meta);
+        mpp_spinlock_unlock(&srv->lock);
+        MPP_FETCH_SUB(&srv->meta_count, 1);
+    }
+    return rk_ok;
+}
 
 static void mpp_meta_srv_init()
 {
@@ -199,19 +265,32 @@ static void mpp_meta_srv_init()
     mpp_spinlock_init(&srv->lock);
     INIT_LIST_HEAD(&srv->list_meta);
 
-    mpp_trie_init(&srv->trie, "MppMetaDef");
-    if (srv->trie) {
-        meta_key_count = 0;
-        META_ENTRY_TABLE(EXPAND_AS_TRIE)
-        mpp_trie_add_info(srv->trie, NULL, NULL, 0);
-        user_data_index = get_index_of_key_f(KEY_USER_DATA, TYPE_UPTR);
-        user_datas_index = get_index_of_key_f(KEY_USER_DATAS, TYPE_UPTR);
-        meta_hdr_offset_index = get_index_of_key_f(KEY_HDR_META_OFFSET, TYPE_VAL_32);
-        meta_hdr_size_index = get_index_of_key_f(KEY_HDR_META_SIZE, TYPE_VAL_32);
+    /* Step 1: count meta keys to determine impl_size */
+    meta_key_count = 0;
+    META_ENTRY_TABLE(EXPAND_AS_COUNT)
+
+    /* Step 2: register local MppMeta objdef with correct size */
+    if (!mpp_meta_def) {
+        rk_s32 impl_size = sizeof(MppMetaVal) * meta_key_count;
+
+        kmpp_objdef_register(&mpp_meta_def, sizeof(MppMetaPriv),
+                             impl_size, "MppMeta");
+        if (mpp_meta_def) {
+            kmpp_objdef_add_init(mpp_meta_def, mpp_meta_impl_init);
+            kmpp_objdef_add_deinit(mpp_meta_def, mpp_meta_impl_deinit);
+        }
     }
 
-    pool_meta = mpp_mem_pool_init_f("MppMeta", sizeof(MppMetaImpl) +
-                                    sizeof(MppMetaVal) * meta_key_count);
+    /* Step 3: expand key→index mapping into objdef trie */
+    meta_key_count = 0;
+    META_ENTRY_TABLE(EXPAND_AS_TRIE)
+    /* finalize objdef: NULL entry triggers mem_pool creation */
+    kmpp_objdef_add_entry(mpp_meta_def, 0, NULL, NULL);
+
+    user_data_index = get_index_of_key_f(KEY_USER_DATA, TYPE_UPTR);
+    user_datas_index = get_index_of_key_f(KEY_USER_DATAS, TYPE_UPTR);
+    meta_hdr_offset_index = get_index_of_key_f(KEY_HDR_META_OFFSET, TYPE_VAL_32);
+    meta_hdr_size_index = get_index_of_key_f(KEY_HDR_META_SIZE, TYPE_VAL_32);
 
     meta_dbg_flow("meta key count %d\n", meta_key_count);
     if (mpp_meta_debug & META_DBG_KEYS) {
@@ -229,27 +308,24 @@ static void mpp_meta_srv_deinit()
         return;
 
     if (!list_empty(&srv->list_meta)) {
-        MppMetaImpl *pos, *n;
+        MppMetaPriv *pos, *n;
 
         mpp_log_f("cleaning leaked metadata\n");
 
-        list_for_each_entry_safe(pos, n, &srv->list_meta, MppMetaImpl, list_meta) {
-            put_meta(srv, pos);
+        list_for_each_entry_safe(pos, n, &srv->list_meta, MppMetaPriv, list_meta) {
+            list_del_init(&pos->list_meta);
+            if (pos->obj)
+                kmpp_obj_put_f(pos->obj);
         }
     }
 
     mpp_assert(srv->meta_count == 0);
 
-    if (srv->trie) {
-        mpp_trie_deinit(srv->trie);
-        srv->trie = NULL;
-    }
-
     MPP_FREE(srv_meta);
 
-    if (pool_meta) {
-        mpp_mem_pool_deinit_f(pool_meta);
-        pool_meta = NULL;
+    if (mpp_meta_def) {
+        kmpp_objdef_put(mpp_meta_def);
+        mpp_meta_def = NULL;
     }
 
     srv_finalized = 1;
@@ -261,68 +337,65 @@ MPP_SINGLETON(MPP_SGLN_META, mpp_meta, mpp_meta_srv_init, mpp_meta_srv_deinit)
 
 static inline RK_S32 get_index_of_key(MppMetaKey key, MppMetaType type, const char *caller)
 {
-    MppMetaSrv *srv = get_srv_meta(caller);
-    MppTrieInfo *info = NULL;
+    RK_U64 val = META_KEY_TO_U64(key, type);
+    KmppEntry *tbl = NULL;
 
-    if (srv) {
-        RK_U64 val = META_KEY_TO_U64(key, type);
+    (void)caller;
 
-        info = mpp_trie_get_info(srv->trie, (const char *)&val);
-    }
+    if (kmpp_objdef_get_entry(mpp_meta_def, (const char *)&val, &tbl) == rk_ok && tbl)
+        return (RK_S32)(tbl->tbl.elem_offset / sizeof(MppMetaVal));
 
-    return info ? info->index : -1;
+    return -1;
 }
 
-static MppMetaImpl *get_meta(MppMetaSrv *srv, const char *tag, const char *caller)
+static void *get_meta(const char *tag, const char *caller)
 {
-    MppMetaImpl *impl = (MppMetaImpl *)mpp_mem_pool_get(pool_meta, caller);
+    KmppObj obj = NULL;
+    rk_s32 ret;
 
-    if (impl) {
+    if (!mpp_meta_def) {
+        mpp_err_f("local objdef not registered\n");
+        return NULL;
+    }
+
+    ret = kmpp_obj_get(&obj, mpp_meta_def, caller);
+    if (ret == rk_ok && obj) {
+        MppMetaPriv *priv = (MppMetaPriv *)kmpp_obj_to_priv(obj);
         const char *tag_src = (tag) ? (tag) : (MODULE_TAG);
-        RK_U32 i;
 
-        strncpy(impl->tag, tag_src, sizeof(impl->tag) - 1);
-        impl->caller = caller;
-        impl->meta_id = MPP_FETCH_ADD(&srv->meta_id, 1);
-        INIT_LIST_HEAD(&impl->list_meta);
-        impl->ref_count = 1;
-        impl->node_count = 0;
-
-        for (i = 0; i < meta_key_count; i++)
-            impl->vals[i].state = 0;
-
-        mpp_spinlock_lock(&srv->lock);
-        list_add_tail(&impl->list_meta, &srv->list_meta);
-        mpp_spinlock_unlock(&srv->lock);
-        MPP_FETCH_ADD(&srv->meta_count, 1);
+        strncpy(priv->tag, tag_src, sizeof(priv->tag) - 1);
+        priv->caller = caller;
+        /* meta_id / list_meta / ref_count / node_count / vals[] set by mpp_meta_impl_init */
     } else {
         mpp_err_f("failed to malloc meta data\n");
     }
 
-    return impl;
+    return obj;
 }
 
-static void clean_user_data(MppMetaImpl *impl)
+static void clean_user_data(MppMetaPriv *priv)
 {
-    MPP_FREE(impl->user_data.pdata);
-    impl->user_data.len = 0;
+    MPP_FREE(priv->user_data.pdata);
+    priv->user_data.len = 0;
 }
 
-static void clean_user_datas(MppMetaImpl *impl)
+static void clean_user_datas(MppMetaPriv *priv)
 {
-    MPP_FREE(impl->user_data_set.datas);
-    impl->user_data_set.count = 0;
-    impl->datas_buf_size = 0;
+    MPP_FREE(priv->user_data_set.datas);
+    priv->user_data_set.count = 0;
+    priv->datas_buf_size = 0;
 }
 
-static void put_meta(MppMetaSrv *srv, MppMetaImpl *meta)
+static void put_meta(MppMetaSrv *srv, KmppObj obj)
 {
+    MppMetaPriv *priv;
     RK_S32 ref_count;
 
-    if (!srv)
+    if (!srv || !obj)
         return;
 
-    ref_count = MPP_SUB_FETCH(&meta->ref_count, 1);
+    priv = (MppMetaPriv *)kmpp_obj_to_priv(obj);
+    ref_count = MPP_SUB_FETCH(&priv->ref_count, 1);
     if (ref_count > 0)
         return;
 
@@ -331,79 +404,77 @@ static void put_meta(MppMetaSrv *srv, MppMetaImpl *meta)
         return;
     }
 
-    mpp_spinlock_lock(&srv->lock);
-    clean_user_data(meta);
-    clean_user_datas(meta);
-    list_del_init(&meta->list_meta);
-    mpp_spinlock_unlock(&srv->lock);
-    MPP_FETCH_SUB(&srv->meta_count, 1);
-
-    if (pool_meta)
-        mpp_mem_pool_put_f(pool_meta, meta);
+    /* clean_user_data / list_del / meta_count-- done by mpp_meta_impl_deinit */
+    kmpp_obj_put_f(obj);
 }
 
 MPP_RET mpp_meta_get_with_tag(MppMeta *meta, const char *tag, const char *caller)
 {
-    MppMetaSrv *srv = get_srv_meta(caller);
-    MppMetaImpl *impl;
-
-    if (!srv)
-        return MPP_NOK;
+    KmppObj obj;
 
     if (!meta) {
         mpp_err_f("found NULL input\n");
         return MPP_ERR_NULL_PTR;
     }
 
-    impl = get_meta(srv, tag, caller);
-    *meta = (MppMeta) impl;
-    return (impl) ? (MPP_OK) : (MPP_NOK);
+    obj = (KmppObj)get_meta(tag, caller);
+    *meta = (MppMeta)obj;
+    return (obj) ? (MPP_OK) : (MPP_NOK);
 }
 
 MPP_RET mpp_meta_put(MppMeta meta)
 {
-    MppMetaImpl *impl = (MppMetaImpl *)meta;
-
-    if (!impl) {
+    if (!meta) {
         mpp_err_f("found NULL input\n");
         return MPP_ERR_NULL_PTR;
     }
 
-    put_meta(get_srv_meta_f(), impl);
+    if (kmpp_obj_is_kobj((KmppObj)meta))
+        return kmpp_meta_put_f(meta);
+
+    put_meta(get_srv_meta_f(), (KmppObj)meta);
     return MPP_OK;
 }
 
 MPP_RET mpp_meta_inc_ref(MppMeta meta)
 {
-    MppMetaImpl *impl = (MppMetaImpl *)meta;
-
-    if (!impl) {
+    if (!meta) {
         mpp_err_f("found NULL input\n");
         return MPP_ERR_NULL_PTR;
     }
 
-    MPP_FETCH_ADD(&impl->ref_count, 1);
+    if (kmpp_obj_is_kobj((KmppObj)meta))
+        return MPP_OK; /* kobj metas use kernel ref mechanism */
+
+    {
+        MppMetaPriv *priv = (MppMetaPriv *)kmpp_obj_to_priv((KmppObj)meta);
+        MPP_FETCH_ADD(&priv->ref_count, 1);
+    }
     return MPP_OK;
 }
 
 RK_S32 mpp_meta_size(MppMeta meta)
 {
-    MppMetaImpl *impl = (MppMetaImpl *)meta;
-
-    if (!impl) {
+    if (!meta) {
         mpp_err_f("found NULL input\n");
         return -1;
     }
 
-    return MPP_FETCH_ADD(&impl->node_count, 0);
+    if (kmpp_obj_is_kobj((KmppObj)meta))
+        return kmpp_meta_size_f(meta);
+
+    {
+        MppMetaPriv *priv = (MppMetaPriv *)kmpp_obj_to_priv((KmppObj)meta);
+        return MPP_FETCH_ADD(&priv->node_count, 0);
+    }
 }
 
-static MPP_RET set_user_data(MppMetaImpl *impl, void *user_data)
+static MPP_RET set_user_data(MppMetaPriv *priv, void *user_data)
 {
     MppEncUserData *src = (MppEncUserData *)user_data;
 
     if (!src) {
-        clean_user_data(impl);
+        clean_user_data(priv);
         return MPP_OK;
     }
 
@@ -412,24 +483,24 @@ static MPP_RET set_user_data(MppMetaImpl *impl, void *user_data)
         return MPP_ERR_NULL_PTR;
     }
 
-    if (impl->user_data.len < src->len) {
-        void *buf_ptr = mpp_realloc(impl->user_data.pdata, RK_U8, src->len);
+    if (priv->user_data.len < src->len) {
+        void *buf_ptr = mpp_realloc(priv->user_data.pdata, RK_U8, src->len);
 
         if (!buf_ptr) {
             mpp_err_f("failed to realloc user data buf size %d\n", src->len);
-            impl->user_data.len = 0;
+            priv->user_data.len = 0;
             return MPP_ERR_MALLOC;
         }
-        impl->user_data.pdata = buf_ptr;
+        priv->user_data.pdata = buf_ptr;
     }
 
-    memcpy(impl->user_data.pdata, src->pdata, src->len);
-    impl->user_data.len = src->len;
+    memcpy(priv->user_data.pdata, src->pdata, src->len);
+    priv->user_data.len = src->len;
 
     return MPP_OK;
 }
 
-static MPP_RET set_user_datas(MppMetaImpl *impl, void *user_data)
+static MPP_RET set_user_datas(MppMetaPriv *priv, void *user_data)
 {
     MppEncUserDataSet *src_set = (MppEncUserDataSet *)user_data;
     MppEncUserDataFull *dst_set = NULL;
@@ -440,7 +511,7 @@ static MPP_RET set_user_datas(MppMetaImpl *impl, void *user_data)
     RK_U32 i = 0;
 
     if (!src_set) {
-        clean_user_datas(impl);
+        clean_user_datas(priv);
         return MPP_OK;
     }
 
@@ -459,19 +530,19 @@ static MPP_RET set_user_datas(MppMetaImpl *impl, void *user_data)
     }
     buf_size = struct_size + data_size;
 
-    if (impl->datas_buf_size < buf_size) {
-        buf_ptr = mpp_realloc(impl->user_data_set.datas, RK_U8, buf_size);
+    if (priv->datas_buf_size < buf_size) {
+        buf_ptr = mpp_realloc(priv->user_data_set.datas, RK_U8, buf_size);
         if (!buf_ptr) {
             mpp_err_f("failed to realloc user data buf size %d\n", buf_size);
-            impl->user_data_set.count = 0;
-            impl->datas_buf_size = 0;
+            priv->user_data_set.count = 0;
+            priv->datas_buf_size = 0;
             return MPP_ERR_MALLOC;
         }
-        impl->user_data_set.datas = (MppEncUserDataFull *)buf_ptr;
+        priv->user_data_set.datas = (MppEncUserDataFull *)buf_ptr;
     }
 
-    impl->datas_buf_size = buf_size;
-    dst_set = impl->user_data_set.datas;
+    priv->datas_buf_size = buf_size;
+    dst_set = priv->user_data_set.datas;
     buf_ptr = (void *)dst_set + struct_size;
 
     for (i = 0; i < src_set->count; i++) {
@@ -496,15 +567,15 @@ static MPP_RET set_user_datas(MppMetaImpl *impl, void *user_data)
             dst->pdata = NULL;
         }
     }
-    impl->user_data_set.count = src_set->count;
+    priv->user_data_set.count = src_set->count;
 
     return MPP_OK;
 }
 
-static MPP_RET get_user_data(MppMetaImpl *impl, void **val)
+static MPP_RET get_user_data(MppMetaPriv *priv, void **val)
 {
-    if (impl->user_data.pdata) {
-        *val = &impl->user_data;
+    if (priv->user_data.pdata) {
+        *val = &priv->user_data;
         return MPP_OK;
     }
 
@@ -512,10 +583,10 @@ static MPP_RET get_user_data(MppMetaImpl *impl, void **val)
     return MPP_NOK;
 }
 
-static MPP_RET get_user_datas(MppMetaImpl *impl, void **val)
+static MPP_RET get_user_datas(MppMetaPriv *priv, void **val)
 {
-    if (impl->user_data_set.datas) {
-        *val = &impl->user_data_set;
+    if (priv->user_data_set.datas) {
+        *val = &priv->user_data_set;
         return MPP_OK;
     }
 
@@ -525,188 +596,324 @@ static MPP_RET get_user_datas(MppMetaImpl *impl, void **val)
 
 MppMeta mpp_meta_dup(MppMeta meta)
 {
-    MppMetaSrv *srv = get_srv_meta_f();
-    MppMetaImpl *impl = (MppMetaImpl *)meta;
-    MppMetaImpl *ret;
-
-    if (!srv || !meta)
+    if (!meta)
         return NULL;
 
-    ret = get_meta(srv, impl->tag, __FUNCTION__);
-    if (ret) {
-        memcpy(ret->vals, impl->vals, meta_key_count * sizeof(MppMetaVal));
-        if (ret->user_data.len) {
-            memset(&ret->user_data, 0, sizeof(ret->user_data));
-            set_user_data(ret, (void *)(intptr_t)&impl->user_data);
-        }
-        if (ret->user_data_set.count) {
-            memset(&ret->user_data, 0, sizeof(ret->user_data));
-            set_user_datas(impl, (void *)(intptr_t)&impl->user_data_set);
-        }
-        ret->node_count = impl->node_count;
-    }
+    if (kmpp_obj_is_kobj((KmppObj)meta))
+        return NULL; /* kobj metas: dup not supported, caller must handle NULL */
 
-    return ret;
+    {
+        MppMetaPriv *priv = (MppMetaPriv *)kmpp_obj_to_priv((KmppObj)meta);
+        MppMetaVal *vals = (MppMetaVal *)kmpp_obj_to_entry((KmppObj)meta);
+        KmppObj ret_obj = (KmppObj)get_meta(priv->tag, __FUNCTION__);
+        MppMetaPriv *ret_priv;
+        MppMetaVal *ret_vals;
+
+        if (!ret_obj)
+            return NULL;
+
+        ret_priv = (MppMetaPriv *)kmpp_obj_to_priv(ret_obj);
+        ret_vals = (MppMetaVal *)kmpp_obj_to_entry(ret_obj);
+
+        memcpy(ret_vals, vals, meta_key_count * sizeof(MppMetaVal));
+        if (priv->user_data.len) {
+            memset(&ret_priv->user_data, 0, sizeof(ret_priv->user_data));
+            set_user_data(ret_priv, (void *)(intptr_t)&priv->user_data);
+        }
+        if (priv->user_data_set.count) {
+            memset(&ret_priv->user_data_set, 0, sizeof(ret_priv->user_data_set));
+            set_user_datas(ret_priv, (void *)(intptr_t)&priv->user_data_set);
+        }
+        ret_priv->node_count = priv->node_count;
+
+        return (MppMeta)ret_obj;
+    }
 }
 
 MPP_RET mpp_meta_dump(MppMeta meta)
 {
-    MppMetaSrv *srv = get_srv_meta_f();
-    MppMetaImpl *impl = (MppMetaImpl *)meta;
-    MppTrieInfo *root;
-
-    if (!impl) {
+    if (!meta) {
         mpp_err_f("found NULL input\n");
         return MPP_ERR_NULL_PTR;
     }
 
-    mpp_logi("dumping meta %d node count %d\n", impl->meta_id, impl->node_count);
+    if (kmpp_obj_is_kobj((KmppObj)meta))
+        return kmpp_obj_udump_f(meta, __FUNCTION__);
 
-    if (!srv || !srv->trie)
-        return MPP_NOK;
+    {
+        MppMetaPriv *priv = (MppMetaPriv *)kmpp_obj_to_priv((KmppObj)meta);
+        MppMetaVal *vals = (MppMetaVal *)kmpp_obj_to_entry((KmppObj)meta);
+        MppTrie trie;
+        MppTrieInfo *root;
 
-    root = mpp_trie_get_info_first(srv->trie);
-    if (root) {
-        MppTrieInfo *node = root;
-        const char *key = NULL;
-        char log_str[256];
-        RK_S32 pos;
+        mpp_logi("dumping meta %d node count %d\n", priv->meta_id, priv->node_count);
 
-        do {
-            if (mpp_trie_info_is_self(node))
-                continue;
+        trie = kmpp_objdef_get_trie(mpp_meta_def);
+        if (!trie)
+            return MPP_NOK;
 
-            key = mpp_trie_info_name(node);
+        root = mpp_trie_get_info_first(trie);
+        if (root) {
+            MppTrieInfo *node = root;
+            const char *key = NULL;
+            char log_str[256];
+            RK_S32 pos;
 
-            pos = snprintf(log_str, sizeof(log_str) - 1, "key %c%c%c%c - ",
-                           key[0], key[1], key[2], key[3]);
+            do {
+                KmppEntry *tbl;
 
-            switch (key[4]) {
-            case '3' : {
-                snprintf(log_str + pos, sizeof(log_str) - pos - 1, "s32 - %d",
-                         impl->vals[node->index].val_s32);
-            } break;
-            case '6' : {
-                snprintf(log_str + pos, sizeof(log_str) - pos - 1, "s64 - %lld",
-                         impl->vals[node->index].val_s64);
-            } break;
-            case 'k' :
-            case 'u' :
-            case 's' : {
-                snprintf(log_str + pos, sizeof(log_str) - pos - 1, "ptr - %p",
-                         impl->vals[node->index].val_ptr);
-            } break;
-            default : {
-            } break;
-            }
+                if (mpp_trie_info_is_self(node))
+                    continue;
 
-            mpp_logi("%s\n", log_str);
-        } while ((node = mpp_trie_get_info_next(srv->trie, node)));
+                key = mpp_trie_info_name(node);
+                tbl = (KmppEntry *)mpp_trie_info_ctx(node);
+
+                pos = snprintf(log_str, sizeof(log_str) - 1, "key %c%c%c%c - ",
+                               key[0], key[1], key[2], key[3]);
+
+                switch (key[4]) {
+                case '3' : {
+                    snprintf(log_str + pos, sizeof(log_str) - pos - 1, "s32 - %d",
+                             vals[tbl->tbl.elem_offset / sizeof(MppMetaVal)].val_s32);
+                } break;
+                case '6' : {
+                    snprintf(log_str + pos, sizeof(log_str) - pos - 1, "s64 - %lld",
+                             vals[tbl->tbl.elem_offset / sizeof(MppMetaVal)].val_s64);
+                } break;
+                case 'k' :
+                case 'u' :
+                case 's' : {
+                    snprintf(log_str + pos, sizeof(log_str) - pos - 1, "ptr - %p",
+                             vals[tbl->tbl.elem_offset / sizeof(MppMetaVal)].val_ptr);
+                } break;
+                default : {
+                } break;
+                }
+
+                mpp_logi("%s\n", log_str);
+            } while ((node = mpp_trie_get_info_next(trie, node)));
+        }
+
+        return MPP_OK;
     }
-
-    return MPP_OK;
 }
 
+/* MPP_META_ACCESSOR — generates set/get/get_d for s32 / s64 / ptr types.
+ * frame / packet / buffer are handled separately because their kobj dispatch
+ * target is kmpp_meta_set_obj / kmpp_meta_get_obj. */
 #define MPP_META_ACCESSOR(func_type, arg_type, key_type, key_field)  \
     MPP_RET mpp_meta_set_##func_type(MppMeta meta, MppMetaKey key, arg_type val) \
     { \
-        MppMetaImpl *impl = (MppMetaImpl *)meta; \
-        MppMetaVal *meta_val; \
-        RK_S32 index; \
-        if (!impl) { \
-            mpp_err_f("found NULL input\n"); \
-            return MPP_ERR_NULL_PTR; \
+        if (kmpp_obj_is_kobj((KmppObj)meta)) \
+            return kmpp_meta_set_##func_type((KmppMeta)meta, key, val); \
+        { \
+            MppMetaPriv *priv = (MppMetaPriv *)kmpp_obj_to_priv((KmppObj)meta); \
+            MppMetaVal *vals = (MppMetaVal *)kmpp_obj_to_entry((KmppObj)meta); \
+            MppMetaVal *meta_val; \
+            RK_S32 index; \
+            if (!priv) { \
+                mpp_err_f("found NULL input\n"); \
+                return MPP_ERR_NULL_PTR; \
+            } \
+            index = get_index_of_key_f(key, key_type); \
+            if (index < 0) \
+                return MPP_NOK; \
+            meta_val = &vals[index]; \
+            if (MPP_BOOL_CAS(&meta_val->state, META_VAL_INVALID, META_VAL_VALID)) \
+                MPP_FETCH_ADD(&priv->node_count, 1); \
+            if (index == user_data_index) { \
+                set_user_data(priv, (void *)(intptr_t)val); \
+            } else if (index == user_datas_index) { \
+                set_user_datas(priv, (void *)(intptr_t)val); \
+            } else { \
+                meta_val->key_field = val; \
+            } \
+            MPP_FETCH_OR(&meta_val->state, META_VAL_READY); \
+            return MPP_OK; \
         } \
-        index = get_index_of_key_f(key, key_type); \
-        if (index < 0) \
-            return MPP_NOK; \
-        meta_val = &impl->vals[index]; \
-        if (MPP_BOOL_CAS(&meta_val->state, META_VAL_INVALID, META_VAL_VALID)) \
-            MPP_FETCH_ADD(&impl->node_count, 1); \
-        if (index == user_data_index) { \
-            set_user_data(impl, (void *)(intptr_t)val); \
-        } else if (index == user_datas_index) { \
-            set_user_datas(impl, (void *)(intptr_t)val); \
-        } else { \
-            meta_val->key_field = val; \
-        } \
-        MPP_FETCH_OR(&meta_val->state, META_VAL_READY); \
-        return MPP_OK; \
     } \
     MPP_RET mpp_meta_get_##func_type(MppMeta meta, MppMetaKey key, arg_type *val) \
     { \
-        MppMetaImpl *impl = (MppMetaImpl *)meta; \
-        MppMetaVal *meta_val; \
-        RK_S32 index; \
-        MPP_RET ret = MPP_NOK; \
-        if (!impl) { \
-            mpp_err_f("found NULL input\n"); \
-            return MPP_ERR_NULL_PTR; \
+        if (kmpp_obj_is_kobj((KmppObj)meta)) \
+            return kmpp_meta_get_##func_type((KmppMeta)meta, key, val); \
+        { \
+            MppMetaPriv *priv = (MppMetaPriv *)kmpp_obj_to_priv((KmppObj)meta); \
+            MppMetaVal *vals = (MppMetaVal *)kmpp_obj_to_entry((KmppObj)meta); \
+            MppMetaVal *meta_val; \
+            RK_S32 index; \
+            MPP_RET ret = MPP_NOK; \
+            if (!priv) { \
+                mpp_err_f("found NULL input\n"); \
+                return MPP_ERR_NULL_PTR; \
+            } \
+            index = get_index_of_key_f(key, key_type); \
+            if (index < 0) \
+                return MPP_NOK; \
+            meta_val = &vals[index]; \
+            if (MPP_BOOL_CAS(&meta_val->state, META_VAL_VALID | META_VAL_READY, META_VAL_INVALID)) { \
+                if (index == user_data_index) \
+                    get_user_data(priv, (void**)val); \
+                else if (index == user_datas_index) \
+                    get_user_datas(priv, (void**)val); \
+                else \
+                    *val = meta_val->key_field; \
+                MPP_FETCH_SUB(&priv->node_count, 1); \
+                ret = MPP_OK; \
+            } \
+            return ret; \
         } \
-        index = get_index_of_key_f(key, key_type); \
-        if (index < 0) \
-            return MPP_NOK; \
-        meta_val = &impl->vals[index]; \
-        if (MPP_BOOL_CAS(&meta_val->state, META_VAL_VALID | META_VAL_READY, META_VAL_INVALID)) { \
-            if (index == user_data_index) \
-                get_user_data(impl, (void**)val); \
-            else if (index == user_datas_index) \
-                get_user_datas(impl, (void**)val); \
-            else \
-                *val = meta_val->key_field; \
-            MPP_FETCH_SUB(&impl->node_count, 1); \
-            ret = MPP_OK; \
-        } \
-        return ret; \
     } \
     MPP_RET mpp_meta_get_##func_type##_d(MppMeta meta, MppMetaKey key, arg_type *val, arg_type def) \
     { \
-        MppMetaImpl *impl = (MppMetaImpl *)meta; \
-        MppMetaVal *meta_val; \
-        RK_S32 index; \
-        MPP_RET ret = MPP_NOK; \
-        if (!impl) { \
-            mpp_err_f("found NULL input\n"); \
-            return MPP_ERR_NULL_PTR; \
+        if (kmpp_obj_is_kobj((KmppObj)meta)) \
+            return kmpp_meta_get_##func_type##_d((KmppMeta)meta, key, val, def); \
+        { \
+            MppMetaPriv *priv = (MppMetaPriv *)kmpp_obj_to_priv((KmppObj)meta); \
+            MppMetaVal *vals = (MppMetaVal *)kmpp_obj_to_entry((KmppObj)meta); \
+            MppMetaVal *meta_val; \
+            RK_S32 index; \
+            MPP_RET ret = MPP_NOK; \
+            if (!priv) { \
+                mpp_err_f("found NULL input\n"); \
+                return MPP_ERR_NULL_PTR; \
+            } \
+            index = get_index_of_key_f(key, key_type); \
+            if (index < 0) \
+                return MPP_NOK; \
+            meta_val = &vals[index]; \
+            if (MPP_BOOL_CAS(&meta_val->state, META_VAL_VALID | META_VAL_READY, META_VAL_INVALID)) { \
+                if (index == user_data_index) \
+                    get_user_data(priv, (void**)val); \
+                else if (index == user_datas_index) \
+                    get_user_datas(priv, (void**)val); \
+                else \
+                    *val = meta_val->key_field; \
+                MPP_FETCH_SUB(&priv->node_count, 1); \
+                ret = MPP_OK; \
+            } else { \
+                *val = def; \
+            } \
+            return ret; \
         } \
-        index = get_index_of_key_f(key, key_type); \
-        if (index < 0) \
-            return MPP_NOK; \
-        meta_val = &impl->vals[index]; \
-        if (MPP_BOOL_CAS(&meta_val->state, META_VAL_VALID | META_VAL_READY, META_VAL_INVALID)) { \
-            if (index == user_data_index) \
-                get_user_data(impl, (void**)val); \
-            else if (index == user_datas_index) \
-                get_user_datas(impl, (void**)val); \
-            else \
-                *val = meta_val->key_field; \
-            MPP_FETCH_SUB(&impl->node_count, 1); \
-            ret = MPP_OK; \
-        } else { \
-            *val = def; \
-        } \
-        return ret; \
     }
 
 MPP_META_ACCESSOR(s32, RK_S32, TYPE_VAL_32, val_s32)
 MPP_META_ACCESSOR(s64, RK_S64, TYPE_VAL_64, val_s64)
 MPP_META_ACCESSOR(ptr, void *, TYPE_UPTR, val_ptr)
-MPP_META_ACCESSOR(frame, MppFrame, TYPE_SPTR, frame)
-MPP_META_ACCESSOR(packet, MppPacket, TYPE_SPTR, packet)
-MPP_META_ACCESSOR(buffer, MppBuffer, TYPE_SPTR, buffer)
+
+/*
+ * frame / packet / buffer accessors — dispatch to kmpp_meta_set_obj / get_obj
+ * for kobj metas, and use the same local path (vals + priv) for local metas.
+ */
+
+#define MPP_META_ACCESSOR_OBJ(func_type, arg_type, key_type)  \
+    MPP_RET mpp_meta_set_##func_type(MppMeta meta, MppMetaKey key, arg_type val) \
+    { \
+        if (kmpp_obj_is_kobj((KmppObj)meta)) \
+            return kmpp_meta_set_obj((KmppMeta)meta, key, (KmppObj)val); \
+        { \
+            MppMetaPriv *priv = (MppMetaPriv *)kmpp_obj_to_priv((KmppObj)meta); \
+            MppMetaVal *vals = (MppMetaVal *)kmpp_obj_to_entry((KmppObj)meta); \
+            MppMetaVal *meta_val; \
+            RK_S32 index; \
+            if (!priv) { \
+                mpp_err_f("found NULL input\n"); \
+                return MPP_ERR_NULL_PTR; \
+            } \
+            index = get_index_of_key_f(key, key_type); \
+            if (index < 0) \
+                return MPP_NOK; \
+            meta_val = &vals[index]; \
+            if (MPP_BOOL_CAS(&meta_val->state, META_VAL_INVALID, META_VAL_VALID)) \
+                MPP_FETCH_ADD(&priv->node_count, 1); \
+            meta_val->val_ptr = val; \
+            MPP_FETCH_OR(&meta_val->state, META_VAL_READY); \
+            return MPP_OK; \
+        } \
+    } \
+    MPP_RET mpp_meta_get_##func_type(MppMeta meta, MppMetaKey key, arg_type *val) \
+    { \
+        if (kmpp_obj_is_kobj((KmppObj)meta)) { \
+            KmppObj obj = NULL; \
+            rk_s32 ret = kmpp_meta_get_obj((KmppMeta)meta, key, &obj); \
+            *val = (arg_type)obj; \
+            return (ret == rk_ok) ? MPP_OK : MPP_NOK; \
+        } \
+        { \
+            MppMetaPriv *priv = (MppMetaPriv *)kmpp_obj_to_priv((KmppObj)meta); \
+            MppMetaVal *vals = (MppMetaVal *)kmpp_obj_to_entry((KmppObj)meta); \
+            MppMetaVal *meta_val; \
+            RK_S32 index; \
+            MPP_RET ret = MPP_NOK; \
+            if (!priv) { \
+                mpp_err_f("found NULL input\n"); \
+                return MPP_ERR_NULL_PTR; \
+            } \
+            index = get_index_of_key_f(key, key_type); \
+            if (index < 0) \
+                return MPP_NOK; \
+            meta_val = &vals[index]; \
+            if (MPP_BOOL_CAS(&meta_val->state, META_VAL_VALID | META_VAL_READY, META_VAL_INVALID)) { \
+                *val = meta_val->val_ptr; \
+                MPP_FETCH_SUB(&priv->node_count, 1); \
+                ret = MPP_OK; \
+            } \
+            return ret; \
+        } \
+    } \
+    MPP_RET mpp_meta_get_##func_type##_d(MppMeta meta, MppMetaKey key, arg_type *val, arg_type def) \
+    { \
+        if (kmpp_obj_is_kobj((KmppObj)meta)) { \
+            KmppObj obj = NULL; \
+            rk_s32 ret = kmpp_meta_get_obj_d((KmppMeta)meta, key, &obj, (KmppObj)def); \
+            *val = (arg_type)obj; \
+            return (ret == rk_ok) ? MPP_OK : MPP_NOK; \
+        } \
+        { \
+            MppMetaPriv *priv = (MppMetaPriv *)kmpp_obj_to_priv((KmppObj)meta); \
+            MppMetaVal *vals = (MppMetaVal *)kmpp_obj_to_entry((KmppObj)meta); \
+            MppMetaVal *meta_val; \
+            RK_S32 index; \
+            MPP_RET ret = MPP_NOK; \
+            if (!priv) { \
+                mpp_err_f("found NULL input\n"); \
+                return MPP_ERR_NULL_PTR; \
+            } \
+            index = get_index_of_key_f(key, key_type); \
+            if (index < 0) \
+                return MPP_NOK; \
+            meta_val = &vals[index]; \
+            if (MPP_BOOL_CAS(&meta_val->state, META_VAL_VALID | META_VAL_READY, META_VAL_INVALID)) { \
+                *val = meta_val->val_ptr; \
+                MPP_FETCH_SUB(&priv->node_count, 1); \
+                ret = MPP_OK; \
+            } else { \
+                *val = def; \
+            } \
+            return ret; \
+        } \
+    }
+
+MPP_META_ACCESSOR_OBJ(frame, MppFrame, TYPE_SPTR)
+MPP_META_ACCESSOR_OBJ(packet, MppPacket, TYPE_SPTR)
+MPP_META_ACCESSOR_OBJ(buffer, MppBuffer, TYPE_SPTR)
 
 RK_S32 mpp_meta_s32_read(MppMeta meta, RK_S32 index, RK_S32 *val)
 {
-    MppMetaImpl *impl = (MppMetaImpl *)meta;
+    MppMetaVal *vals;
     MppMetaVal *meta_val;
     MPP_RET ret = MPP_NOK;
 
-    if (!impl || index < 0 || (RK_U32)index >= meta_key_count) {
+    if (!meta || index < 0 || (RK_U32)index >= meta_key_count) {
         mpp_err_f("found NULL input meta %p index %d\n", meta, index);
         return MPP_ERR_NULL_PTR;
     }
 
-    meta_val = &impl->vals[index];
+    if (kmpp_obj_is_kobj((KmppObj)meta))
+        return MPP_NOK;
+
+    vals = (MppMetaVal *)kmpp_obj_to_entry((KmppObj)meta);
+    meta_val = &vals[index];
     if (meta_val->state == (META_VAL_VALID | META_VAL_READY)) {
         *val = meta_val->val_s32;
         ret = MPP_OK;

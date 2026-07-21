@@ -36,9 +36,11 @@ typedef struct MppMetaVal_t {
     };
 } MppMetaVal;
 
-typedef struct MppMetaImpl_t {
+typedef struct MppMetaPriv_t {
     char                tag[MPP_TAG_SIZE];
     const char          *caller;
+    /* back-pointer for leaked-metadata cleanup */
+    KmppObj             obj;
     RK_S32              meta_id;
     RK_S32              ref_count;
 
@@ -47,6 +49,9 @@ typedef struct MppMetaImpl_t {
     MppEncUserData      user_data;
     MppEncUserDataSet   user_data_set;
     RK_U32              datas_buf_size;
+} MppMetaPriv;
+
+typedef struct MppMetaImpl_t {
     MppMetaVal          vals[0];
 } MppMetaImpl;
 
