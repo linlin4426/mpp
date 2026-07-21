@@ -384,11 +384,10 @@ void mpp_h264d_fill_dynamic_meta(H264dCurCtx_t *p_Cur, const RK_U8 *data, RK_U32
  *
  * Per-IDR state machine in p_Cur->trailing_nal_state:
  *   -1 init, 0 IDR detecting, 1 has trailing NAL, 2 clean
- * Each IDR re-detects; P frames scan only when state == 1.
- * p_Cur->trailing_nal_len records the IDR's trailing NALU length so P frames
- * can use that as window (capped by meta_chk_len). slice data carries
- * 00 00 03 emulation prevention so 00 00 01 only occurs at a NALU boundary,
- * which makes the reverse scan safe.
+ * Each IDR re-detects; P frames scan only when state == 1. RPU size may
+ * differ between IDR and P frames, so P frames use the configured window.
+ * Slice data carries 00 00 03 emulation prevention so 00 00 01 only occurs
+ * at a NALU boundary, which makes the reverse scan safe.
  */
 static void check_hdr_meta(H264_DecCtx_t *p_Dec, H264dCurCtx_t *p_Cur, H264dCurStream_t *p_strm)
 {
@@ -405,18 +404,14 @@ static void check_hdr_meta(H264_DecCtx_t *p_Dec, H264dCurCtx_t *p_Cur, H264dCurS
     is_idr = (p_strm->nalu_type == H264_NALU_TYPE_IDR);
     if (is_idr) {
         p_Cur->trailing_nal_state = 0;       /* re-detect on each IDR */
-        p_Cur->trailing_nal_len = 0;         /* reset recorded len */
     }
 
     if (p_Cur->trailing_nal_state != 0 && p_Cur->trailing_nal_state != 1)
         return;                              /* state == -1 or 2: skip */
 
-    /* IDR uses cfg window; P uses min(cfg, IDR-recorded len) */
+    /* RPU size may vary per frame; use cfg window for both IDR and P frames. */
     cfg_win = p_Dec->cfg->base.meta_chk_len;
-    if (is_idr || !p_Cur->trailing_nal_len)
-        win = MPP_MIN(p_strm->nalu_len, cfg_win);
-    else
-        win = MPP_MIN(p_strm->nalu_len, MPP_MIN(cfg_win, p_Cur->trailing_nal_len));
+    win = MPP_MIN(p_strm->nalu_len, cfg_win);
 
     /* reverse scan tail window for [00 00 01][trailing NALU header] */
     stop = (RK_S32)p_strm->nalu_len - (RK_S32)win;
@@ -431,8 +426,6 @@ static void check_hdr_meta(H264_DecCtx_t *p_Dec, H264dCurCtx_t *p_Cur, H264dCurS
             if (t28_len > 2)
                 mpp_h264d_fill_dynamic_meta(p_Cur, p_strm->nalu_buf + i + 2, t28_len - 2, DLBY);
             p_strm->nalu_len = (RK_U32)i - 3;        /* truncate slice, drop tail */
-            if (is_idr)
-                p_Cur->trailing_nal_len = t28_len;   /* record for P-frame window */
             found = 1;
             break;
         }
@@ -1163,5 +1156,3 @@ __FAILED:
 
     return ret;
 }
-
-
