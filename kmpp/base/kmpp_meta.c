@@ -220,6 +220,8 @@ static void kmpp_meta_init(void)
         return;
     }
 
+    kmpp_objdef_set_prop(srv->def, "disable_mismatch_log", 1);
+
     kmpp_objdef_add_init(srv->def, kmpp_meta_impl_init);
     kmpp_objdef_add_deinit(srv->def, kmpp_meta_impl_deinit);
 
