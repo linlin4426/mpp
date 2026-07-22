@@ -29,26 +29,61 @@
 #define venc_kcfg_dbg_set(fmt, ...)     venc_kcfg_dbg(VENC_KCFG_DBG_SET, fmt, ## __VA_ARGS__)
 #define venc_kcfg_dbg_get(fmt, ...)     venc_kcfg_dbg(VENC_KCFG_DBG_GET, fmt, ## __VA_ARGS__)
 
-static RK_U32 venc_kcfg_debug = 0;
+typedef struct KmppVencKcfgInfo_t  {
+    const char      *name;
+    rk_s32          cache_en;
+    KmppObjInit     cache_init;
+    KmppObjInit     cache_deinit;
+} KmppVencKcfgInfo;
 
-static char *kcfg_names[] = {
-    [MPP_VENC_KCFG_TYPE_INIT]   = "KmppVencInitCfg",
-    [MPP_VENC_KCFG_TYPE_DEINIT] = "KmppVencDeinitCfg",
-    [MPP_VENC_KCFG_TYPE_RESET]  = "KmppVencResetCfg",
-    [MPP_VENC_KCFG_TYPE_START]  = "KmppVencStartCfg",
-    [MPP_VENC_KCFG_TYPE_STOP]   = "KmppVencStopCfg",
-    [MPP_VENC_KCFG_TYPE_ST_CFG] = "KmppVencStCfg",
-    [MPP_VENC_KCFG_TYPE_REF_CFG] = "KmppVencRefCfg",
-    [MPP_VENC_KCFG_TYPE_CTRL_CFG] = "KmppVencCtrlCfg",
-};
+static RK_U32 venc_kcfg_debug = 0;
 static KmppObjDef kcfg_defs[MPP_VENC_KCFG_TYPE_BUTT] = {NULL};
+
+static rk_s32 kcfg_ctrl_cache_init(void *entry, KmppObj obj, const char *caller);
+
+KmppVencKcfgInfo kcfg_info[MPP_VENC_KCFG_TYPE_BUTT] = {
+    [MPP_VENC_KCFG_TYPE_INIT]       = { "KmppVencInitCfg",   0, NULL, NULL },
+    [MPP_VENC_KCFG_TYPE_DEINIT]     = { "KmppVencDeinitCfg", 0, NULL, NULL },
+    [MPP_VENC_KCFG_TYPE_RESET]      = { "KmppVencResetCfg",  0, NULL, NULL },
+    [MPP_VENC_KCFG_TYPE_START]      = { "KmppVencStartCfg",  0, NULL, NULL },
+    [MPP_VENC_KCFG_TYPE_STOP]       = { "KmppVencStopCfg",   0, NULL, NULL },
+    [MPP_VENC_KCFG_TYPE_ST_CFG]     = { "KmppVencStCfg",     0, NULL, NULL },
+    [MPP_VENC_KCFG_TYPE_REF_CFG]    = { "KmppVencRefCfg",    0, NULL, NULL },
+    [MPP_VENC_KCFG_TYPE_CTRL_CFG]   = { "KmppVencCtrlCfg",   1, kcfg_ctrl_cache_init, NULL },
+};
+
+static rk_s32 kcfg_ctrl_cache_init(void *entry, KmppObj obj, const char *caller)
+{
+    KmppShmPtr zero = { .uaddr = 0, .kaddr = 0 };
+    (void)entry;
+    (void)caller;
+
+    kmpp_obj_set_s32(obj, "cmd", 0);
+    kmpp_obj_set_s64(obj, "val", 0);
+    kmpp_obj_set_shm(obj, "arg", &zero);
+    kmpp_obj_set_shm(obj, "ret", &zero);
+
+    return rk_ok;
+}
 
 static void mpp_venc_kcfg_def_init(void)
 {
     RK_U32 i;
 
     for (i = 0; i < MPP_VENC_KCFG_TYPE_BUTT; i++) {
-        kmpp_objdef_get(&kcfg_defs[i], 0, kcfg_names[i]);
+        KmppVencKcfgInfo *info = &kcfg_info[i];
+        KmppObjDef def = NULL;
+
+        kmpp_objdef_get(&def, 0, info->name);
+        if (def && info->cache_en) {
+            kmpp_objdef_set_prop(def, "cached", 1);
+            if (info->cache_init)
+                kmpp_objdef_add_cache_init(def, info->cache_init);
+            if (info->cache_deinit)
+                kmpp_objdef_add_cache_deinit(def, info->cache_deinit);
+        }
+
+        kcfg_defs[i] = def;
     }
 }
 
@@ -102,7 +137,7 @@ MPP_RET mpp_venc_kcfg_init_by_name(MppVencKcfg *cfg, const char *name)
     }
 
     for (i = 0; i < MPP_VENC_KCFG_TYPE_BUTT; i++) {
-        if (!strncmp(name, kcfg_names[i], strlen(kcfg_names[i]))) {
+        if (!strncmp(name, kcfg_info[i].name, strlen(kcfg_info[i].name))) {
             type = i;
             break;
         }
