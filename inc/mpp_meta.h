@@ -74,6 +74,8 @@ typedef enum MppMetaKey_e {
     KEY_LVL16_INTRA_NUM         = FOURCC_META('l', '1', '6', 'i'),
     KEY_LVL8_INTRA_NUM          = FOURCC_META('l', '8', 'i', ' '),
     KEY_LVL4_INTRA_NUM          = FOURCC_META('l', '4', 'i', ' '),
+    KEY_ENC_MADI_B16            = FOURCC_META('m', 'a', 'd', 'i'),   /* average blk16 madi */
+    KEY_ENC_MADP_CTU            = FOURCC_META('m', 'a', 'd', 'p'),   /* average ctu madp */
     /* output P skip frame indicator */
     KEY_OUTPUT_PSKIP            = FOURCC_META('o', 'p', 's', 'p'),
     /*

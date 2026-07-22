@@ -3100,17 +3100,15 @@ static MPP_RET vepu580_h265_set_feedback(H265eV580HalContext *ctx, HalEncTask *e
                                        (fb->st_lvl32_intra_num << 6)) << 8) / mb4_num;
 
         if (mb64_num > 0) {
-            /*
-            hal_cfg[k].inter_lv8_prop = ((fb->st_lvl8_inter_num + (fb->st_lvl16_inter_num << 2) +
-                                          (fb->st_lvl32_inter_num << 4) +
-                                          (fb->st_lvl64_inter_num << 6)) << 8) / mb8_num;*/
-
             hal_rc_ret->quality_real = fb->qp_sum / mb8_num;
-            // hal_cfg[k].sse          = fb->sse_sum / mb64_num;
         }
 
         hal_rc_ret->madi += fb->st_madi;
         hal_rc_ret->madp += fb->st_madp;
+        hal_rc_ret->madi_b16 = hal_rc_ret->madi;
+        hal_rc_ret->madp_ctu = hal_rc_ret->madp;
+        hal_h265e_dbg_st("frame %d madi_b16 %d madp_ctu %d\n",
+                         ctx->frame_count, hal_rc_ret->madi_b16, hal_rc_ret->madp_ctu);
     }
     hal_h265e_leave();
     return MPP_OK;

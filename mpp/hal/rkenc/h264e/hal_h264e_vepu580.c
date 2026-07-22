@@ -316,6 +316,7 @@ static MPP_RET hal_h264e_vepu580_init(void *hal, MppEncHalCfg *cfg)
 
     p->cfg = cfg->cfg;
 
+    mpp_env_get_u32("hal_h264e_debug", &hal_h264e_debug, 0);
     mpp_env_get_u32("disable_rcb_buf", &disable_rcb_buf, 0);
 
     /* update output to MppEnc */
@@ -2473,6 +2474,8 @@ static MPP_RET hal_h264e_vepu580_ret_task(void * hal, HalEncTask * task)
     rc_info->iblk4_prop = (regs->reg_st.st_pnum_i4.pnum_i4 +
                            regs->reg_st.st_pnum_i8.pnum_i8 +
                            regs->reg_st.st_pnum_i16.pnum_i16) * 256 / mbs;
+    rc_info->madi_b16 = rc_info->madi;
+    rc_info->madp_ctu = rc_info->madp;
 
     rc_info->sse = ((RK_S64)regs->reg_st.sse_h32 << 16) + (regs->reg_st.st_sse_bsl.sse_l16 & 0xffff);
     rc_info->lvl16_inter_num = regs->reg_st.st_pnum_p16.pnum_p16;
@@ -2516,7 +2519,9 @@ static MPP_RET hal_h264e_vepu580_ret_task(void * hal, HalEncTask * task)
     else
         rc_info->complex_level = 0;
 
-    hal_h264e_dbg_rc("motion_level %u, complex_level %u\n", rc_info->motion_level, rc_info->complex_level);
+    hal_h264e_dbg_rc("motion_level %u, complex_level %u madi_b16 %d madp_ctu %d\n",
+                     rc_info->motion_level, rc_info->complex_level,
+                     rc_info->madi_b16, rc_info->madp_ctu);
 
     vepu580_h264e_tune_stat_update(ctx->tune, task);
 

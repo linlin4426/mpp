@@ -2758,6 +2758,8 @@ static MPP_RET set_enc_info_to_packet(MppEncImpl *enc, HalEncTask *hal_task)
         mpp_meta_set_s64(meta, KEY_ENC_SSE,  rc_task->info.sse);
         mpp_meta_set_s32(meta, KEY_OUTPUT_PSKIP,    frm->force_pskip || is_pskip);
         mpp_meta_set_s32(meta, KEY_ENC_BPS_RT, rc_task->info.rt_bits);
+        mpp_meta_set_s32(meta, KEY_ENC_MADI_B16, rc_task->info.madi_b16);
+        mpp_meta_set_s32(meta, KEY_ENC_MADP_CTU, rc_task->info.madp_ctu);
 
         if (rc_task->info.frame_type == INTER_VI_FRAME)
             mpp_meta_set_s32(meta, KEY_ENC_USE_LTR, rc_task->cpb.refr.lt_idx);

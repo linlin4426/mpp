@@ -221,7 +221,10 @@ typedef struct EncRcCommonInfo_t {
     /* rc stats info: real time bits */
     RK_S32          rt_bits;
 
-    RK_S32          reserve[4];
+    RK_S32          madi_b16;
+    RK_S32          madp_ctu;
+
+    RK_S32          reserve[2];
 } EncRcTaskInfo;
 
 typedef struct EncRcTask_s {
