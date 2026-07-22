@@ -78,6 +78,9 @@ rk_s32 kmpp_objdef_add_preset(KmppObjDef def, KmppObjPreset preset);
 rk_s32 kmpp_objdef_add_dump(KmppObjDef def, KmppObjDump dump);
 /* userspace object resize callback: called after successful entry realloc */
 rk_s32 kmpp_objdef_add_resize(KmppObjDef def, KmppObjResizeCb resize);
+/* cached objdef callbacks: cache_init on get-hit, cache_deinit on put-return */
+rk_s32 kmpp_objdef_add_cache_init(KmppObjDef def, KmppObjInit cache_init);
+rk_s32 kmpp_objdef_add_cache_deinit(KmppObjDef def, KmppObjDeinit cache_deinit);
 
 rk_s32 kmpp_objdef_set_prop(KmppObjDef def, const char *op, rk_s32 value);
 

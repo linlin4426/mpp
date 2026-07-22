@@ -27,11 +27,14 @@
 #warning "KMPP_OBJ_FUNC_DEINIT          - add object deinit function"
 #warning "KMPP_OBJ_FUNC_DUMP            - add object dump function"
 #warning "KMPP_OBJ_FUNC_RESIZE          - add object resize callback"
+#warning "KMPP_OBJ_FUNC_CACHE_INIT      - add object cache init callback (called on cache hit)"
+#warning "KMPP_OBJ_FUNC_CACHE_DEINIT    - add object cache deinit callback (called before return to pool)"
 #warning "KMPP_OBJ_SGLN                 - singleton macro (default MPP_SINGLETON)"
 #warning "KMPP_OBJ_SGLN_ID              - add object singleton id for singleton macro"
 #warning "KMPP_OBJ_FUNC_EXPORT_DISABLE  - disable function exprot by EXPORT_SYMBOL"
 #warning "KMPP_OBJ_ACCESS_DISABLE       - disable access function creation"
 #warning "KMPP_OBJ_SHARE_DISABLE        - disable object sharing by /dev/kmpp_objs to userspace"
+#warning "KMPP_OBJ_CACHE_ENABLE         - enable object cache (kmpp_obj_put returns to pool)"
 #warning "KMPP_OBJ_HIERARCHY_ENABLE     - enable hierarchy name creation"
 #warning "KMPP_OBJ_FLEX_ENTRY_ENABLE    - enable flexible entry allocation (VLA support)"
 #warning "KMPP_OBJ_MISMATCH_LOG_DISABLE - disable entry query mismatch log"
@@ -549,6 +552,9 @@ static void CONCAT_US(KMPP_OBJ_NAME, register)(void)
 #if defined(KMPP_OBJ_MISMATCH_LOG_DISABLE)
     kmpp_objdef_set_prop(KMPP_OBJ_DEF(KMPP_OBJ_NAME), "disable_mismatch_log", 1);
 #endif
+#if defined(KMPP_OBJ_CACHE_ENABLE)
+    kmpp_objdef_set_prop(KMPP_OBJ_DEF(KMPP_OBJ_NAME), "cached", 1);
+#endif
 
     KMPP_OBJ_ENTRY_TABLE(KMPP_OBJ_NAME, ENTRY_QUERY, ENTRY_QUERY,
                          HOOK_QUERY, HOOK_QUERY, ENTRY_NOTHING);
@@ -564,6 +570,12 @@ static void CONCAT_US(KMPP_OBJ_NAME, register)(void)
 #endif
 #if defined(KMPP_OBJ_FUNC_RESIZE)
     kmpp_objdef_add_resize(KMPP_OBJ_DEF(KMPP_OBJ_NAME), KMPP_OBJ_FUNC_RESIZE);
+#endif
+#if defined(KMPP_OBJ_FUNC_CACHE_INIT)
+    kmpp_objdef_add_cache_init(KMPP_OBJ_DEF(KMPP_OBJ_NAME), KMPP_OBJ_FUNC_CACHE_INIT);
+#endif
+#if defined(KMPP_OBJ_FUNC_CACHE_DEINIT)
+    kmpp_objdef_add_cache_deinit(KMPP_OBJ_DEF(KMPP_OBJ_NAME), KMPP_OBJ_FUNC_CACHE_DEINIT);
 #endif
 #if !defined(KMPP_OBJ_SHARE_DISABLE) && defined(__KERNEL__)
     kmpp_objdef_share(KMPP_OBJ_DEF(KMPP_OBJ_NAME));
@@ -785,6 +797,8 @@ extern "C" {
 #undef KMPP_OBJ_FUNC_IOCTL
 #undef KMPP_OBJ_FUNC_DUMP
 #undef KMPP_OBJ_FUNC_RESIZE
+#undef KMPP_OBJ_FUNC_CACHE_INIT
+#undef KMPP_OBJ_FUNC_CACHE_DEINIT
 #undef KMPP_OBJ_SGLN_ID
 #undef KMPP_OBJ_FUNC_EXPORT_DISABLE
 #undef KMPP_OBJ_ACCESS_DISABLE
@@ -792,6 +806,7 @@ extern "C" {
 #undef KMPP_OBJ_HIERARCHY_ENABLE
 #undef KMPP_OBJ_MISMATCH_LOG_DISABLE
 #undef KMPP_OBJ_FLEX_ENTRY_ENABLE
+#undef KMPP_OBJ_CACHE_ENABLE
 
 /* undef tmp macro */
 #undef ENTRY_TO_TRIE

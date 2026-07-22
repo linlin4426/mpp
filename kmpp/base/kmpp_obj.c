@@ -158,8 +158,11 @@ typedef struct KmppObjDefImpl_t {
     /* properties */
     rk_s32 disable_mismatch_log;
 
-    struct list_head    ioc_list_used;
-    struct list_head    ioc_list_unused;
+    rk_s32              cached;         /* objdef uses put-to-cache instead of deinit */
+    KmppObjInit         cache_init;     /* optional: called on cache hit (get) */
+    KmppObjDeinit       cache_deinit;   /* optional: called before returning to cache (put) */
+    struct list_head    list_used;      /* cached objects in use */
+    struct list_head    list_unused;    /* cached objects available for reuse */
     spinlock_t          lock;
 
     const char *name;
@@ -539,25 +542,32 @@ rk_s32 kmpp_objdef_put(KmppObjDef def)
 
     if (impl) {
         rk_s32 release = 0;
+        rk_s32 was_cached = impl->cached;
 
-        if (!list_empty(&impl->ioc_list_used)) {
-            KmppObjImpl *ioc = NULL, *n = NULL;
+        /* temporarily disable cache so kmpp_obj_put_f does real deinit
+         * instead of returning objects to the lists we are destroying */
+        impl->cached = 0;
 
-            list_for_each_entry_safe(ioc, n, &impl->ioc_list_used, KmppObjImpl, list) {
-                obj_dbg_flow("deinit leak ioc %p\n", ioc);
-                list_del_init(&ioc->list);
-                kmpp_obj_put_f((KmppObj)ioc);
+        if (!list_empty(&impl->list_used)) {
+            KmppObjImpl *obj = NULL, *n = NULL;
+
+            list_for_each_entry_safe(obj, n, &impl->list_used, KmppObjImpl, list) {
+                mpp_loge_f("objdef %-16s deinit leak %p\n", impl->name, obj);
+                list_del_init(&obj->list);
+                kmpp_obj_put_f((KmppObj)obj);
             }
         }
 
-        if (!list_empty(&impl->ioc_list_unused)) {
-            KmppObjImpl *ioc = NULL, *n = NULL;
+        if (!list_empty(&impl->list_unused)) {
+            KmppObjImpl *obj = NULL, *n = NULL;
 
-            list_for_each_entry_safe(ioc, n, &impl->ioc_list_unused, KmppObjImpl, list) {
-                list_del_init(&ioc->list);
-                kmpp_obj_put_f((KmppObj)ioc);
+            list_for_each_entry_safe(obj, n, &impl->list_unused, KmppObjImpl, list) {
+                list_del_init(&obj->list);
+                kmpp_obj_put_f((KmppObj)obj);
             }
         }
+
+        impl->cached = was_cached;
 
         if (impl->is_kobj) {
             impl->ref_cnt--;
@@ -625,8 +635,8 @@ rk_s32 kmpp_objdef_register(KmppObjDef *def, rk_s32 priv_size, rk_s32 size, cons
     impl->buf_size = size + sizeof(KmppObjImpl);
     impl->ref_cnt = 1;
 
-    INIT_LIST_HEAD(&impl->ioc_list_used);
-    INIT_LIST_HEAD(&impl->ioc_list_unused);
+    INIT_LIST_HEAD(&impl->list_used);
+    INIT_LIST_HEAD(&impl->list_unused);
     mpp_spinlock_init(&impl->lock);
 
     obj_dbg_flow("objdef %-16s registered size %4d\n", name, size, impl);
@@ -722,8 +732,8 @@ rk_s32 kmpp_objdef_get(KmppObjDef *def, rk_s32 priv_size, const char *name)
     else
         impl->ref_cnt++;
 
-    INIT_LIST_HEAD(&impl->ioc_list_used);
-    INIT_LIST_HEAD(&impl->ioc_list_unused);
+    INIT_LIST_HEAD(&impl->list_used);
+    INIT_LIST_HEAD(&impl->list_unused);
     mpp_spinlock_init(&impl->lock);
 
     *def = impl;
@@ -863,6 +873,28 @@ rk_s32 kmpp_objdef_add_resize(KmppObjDef def, KmppObjResizeCb resize)
     return rk_nok;
 }
 
+rk_s32 kmpp_objdef_add_cache_init(KmppObjDef def, KmppObjInit cache_init)
+{
+    if (def) {
+        KmppObjDefImpl *impl = (KmppObjDefImpl *)def;
+
+        impl->cache_init = cache_init;
+        return rk_ok;
+    }
+    return rk_nok;
+}
+
+rk_s32 kmpp_objdef_add_cache_deinit(KmppObjDef def, KmppObjDeinit cache_deinit)
+{
+    if (def) {
+        KmppObjDefImpl *impl = (KmppObjDefImpl *)def;
+
+        impl->cache_deinit = cache_deinit;
+        return rk_ok;
+    }
+    return rk_nok;
+}
+
 rk_s32 kmpp_objdef_set_prop(KmppObjDef def, const char *op, rk_s32 value)
 {
     if (def && op) {
@@ -872,6 +904,8 @@ rk_s32 kmpp_objdef_set_prop(KmppObjDef def, const char *op, rk_s32 value)
             impl->disable_mismatch_log = (value != 0) ? 1 : 0;
         } else if (!strcmp(op, "flex_entry")) {
             impl->flex_entry = (value != 0) ? 1 : 0;
+        } else if (!strcmp(op, "cached")) {
+            impl->cached = (value != 0) ? 1 : 0;
         } else {
             mpp_loge_f("unknown property %s value %d\n", op, value);
             return rk_nok;
@@ -1081,6 +1115,14 @@ static KmppObjImpl *_get_obj_from_def(KmppObjs *p, KmppObjDefImpl *def, KmppShmP
     if (def->init)
         def->init(impl->entry, impl, caller);
 
+    /* cached objdef: add to used list */
+    if (def->cached) {
+        INIT_LIST_HEAD(&impl->list);
+        mpp_spinlock_lock(&def->lock);
+        list_add_tail(&impl->list, &def->list_used);
+        mpp_spinlock_unlock(&def->lock);
+    }
+
     return impl;
 }
 
@@ -1105,6 +1147,24 @@ rk_s32 kmpp_obj_get(KmppObj *obj, KmppObjDef def, const char *caller)
     if (!def_impl->pool) {
         mpp_loge_f("invalid objdef %s without pool at %s\n", def_impl->name, caller);
         return ret;
+    }
+
+    /* cached objdef: try unused list before allocating */
+    if (def_impl->cached) {
+        mpp_spinlock_lock(&def_impl->lock);
+        if (!list_empty(&def_impl->list_unused)) {
+            KmppObjImpl *cached = list_first_entry(&def_impl->list_unused, KmppObjImpl, list);
+
+            list_move_tail(&cached->list, &def_impl->list_used);
+            mpp_spinlock_unlock(&def_impl->lock);
+            *obj = (KmppObj)cached;
+            if (def_impl->cache_init)
+                def_impl->cache_init(cached->entry, (KmppObj)cached, caller);
+            obj_dbg_flow("%s cache-hit %-16s - %p at %s\n",
+                         __FUNCTION__, def_impl->name, cached, caller);
+            return rk_ok;
+        }
+        mpp_spinlock_unlock(&def_impl->lock);
     }
 
     /* userspace objdef path */
@@ -1224,6 +1284,17 @@ rk_s32 kmpp_obj_put(KmppObj obj, const char *caller)
             return rk_nok;
         }
 
+        /* cached objdef: return to unused list instead of deinit */
+        if (def->cached) {
+            if (def->cache_deinit)
+                def->cache_deinit(impl->entry, impl, caller);
+            obj_dbg_flow("put cached %-16s - %p at %s\n", def->name, impl, caller);
+            mpp_spinlock_lock(&def->lock);
+            list_move_tail(&impl->list, &def->list_unused);
+            mpp_spinlock_unlock(&def->lock);
+            return rk_ok;
+        }
+
         if (def->deinit)
             def->deinit(impl->entry, impl, caller);
 
@@ -1265,8 +1336,8 @@ rk_s32 kmpp_obj_put(KmppObj obj, const char *caller)
     return rk_nok;
 }
 
-static rk_s32 kmpp_ioc_transfer(KmppObj ctx, rk_s32 cmd, KmppObj in,
-                                KmppShmPtr *out, const char *caller);
+static rk_s32 kmpp_ioc_call(KmppObj ctx, rk_s32 cmd, KmppObj in,
+                            KmppShmPtr *out, const char *caller);
 
 rk_s32 kmpp_obj_resize(KmppObj obj, rk_s32 vla_size, const char *caller)
 {
@@ -1315,7 +1386,7 @@ rk_s32 kmpp_obj_resize(KmppObj obj, rk_s32 vla_size, const char *caller)
     }
 
     if (impl->shm) {
-        /* shm-backed obj: ioctl resize via kmpp_ioc_transfer (no obj alloc).
+        /* shm-backed obj: ioctl resize via kmpp_ioc_call (no obj alloc).
          * Store sptr in resize_shm, point impl->shm to it, claim upriv. */
         rk_s32 cmd = kmpp_objdef_get_cmd(def, "resize");
         KmppObjs *p = get_objs_f();
@@ -1327,7 +1398,7 @@ rk_s32 kmpp_obj_resize(KmppObj obj, rk_s32 vla_size, const char *caller)
             return rk_nok;
         }
 
-        ret = kmpp_ioc_transfer(obj, cmd, NULL, &sptr, caller);
+        ret = kmpp_ioc_call(obj, cmd, NULL, &sptr, caller);
         if (ret)
             return ret;
 
@@ -1435,51 +1506,8 @@ rk_s32 kmpp_obj_check(KmppObj obj, const char *caller)
     return rk_ok;
 }
 
-static KmppObj kmpp_ioc_get_from_objdef(void)
-{
-    KmppObjDefImpl *def_ioc = kmpp_ioc_objdef();
-    KmppObjImpl *ioc = NULL;
-    rk_s32 ret;
-
-    mpp_spinlock_lock(&def_ioc->lock);
-    if (!list_empty(&def_ioc->ioc_list_unused)) {
-        ioc = list_first_entry(&def_ioc->ioc_list_unused, KmppObjImpl, list);
-        list_move_tail(&ioc->list, &def_ioc->ioc_list_used);
-        mpp_spinlock_unlock(&def_ioc->lock);
-        return (KmppObj)ioc;
-    }
-    mpp_spinlock_unlock(&def_ioc->lock);
-
-    ret = kmpp_obj_get_f((KmppObj *)&ioc, def_ioc);
-    if (ret) {
-        mpp_loge("failed to get KmppIoc ret %d\n", ret);
-        return NULL;
-    }
-    INIT_LIST_HEAD(&ioc->list);
-    mpp_spinlock_lock(&def_ioc->lock);
-    list_add_tail(&ioc->list, &def_ioc->ioc_list_used);
-    mpp_spinlock_unlock(&def_ioc->lock);
-
-    return (KmppObj)ioc;
-}
-
-static void kmpp_ioc_put_to_objdef(KmppObj ioc)
-{
-    KmppObjDefImpl *def_ioc = kmpp_ioc_objdef();
-    KmppObjImpl *impl = (KmppObjImpl*)ioc;
-
-    if (!impl)
-        return;
-
-    memset(impl->entry, 0, impl->entry_buf_size);
-
-    mpp_spinlock_lock(&def_ioc->lock);
-    list_move_tail(&impl->list, &def_ioc->ioc_list_unused);
-    mpp_spinlock_unlock(&def_ioc->lock);
-}
-
-static rk_s32 kmpp_ioc_transfer(KmppObj ctx, rk_s32 cmd, KmppObj in,
-                                KmppShmPtr *out, const char *caller)
+static rk_s32 kmpp_ioc_call(KmppObj ctx, rk_s32 cmd, KmppObj in,
+                            KmppShmPtr *out, const char *caller)
 {
     KmppObjs *p = get_objs_f();
     KmppObjDef def_ioc = kmpp_ioc_objdef();
@@ -1514,7 +1542,7 @@ static rk_s32 kmpp_ioc_transfer(KmppObj ctx, rk_s32 cmd, KmppObj in,
     obj_dbg_ioctl("ioctl def %s:%d cmd %d ctx %p in %p out %p at %s\n",
                   def->name, def->defs_idx, cmd, ctx, in, out, caller);
 
-    ioc = kmpp_ioc_get_from_objdef();
+    kmpp_obj_get_f((KmppObj *)&ioc, def_ioc);
     if (!ioc) {
         mpp_loge("failed to get ioctl obj at %s\n", caller);
         return rk_nok;
@@ -1566,7 +1594,7 @@ static rk_s32 kmpp_ioc_transfer(KmppObj ctx, rk_s32 cmd, KmppObj in,
             kmpp_ioc_get_out(ioc, out);
     }
 
-    kmpp_ioc_put_to_objdef(ioc);
+    kmpp_obj_put_f(ioc);
 
     return ret;
 }
@@ -1574,7 +1602,7 @@ static rk_s32 kmpp_ioc_transfer(KmppObj ctx, rk_s32 cmd, KmppObj in,
 rk_s32 kmpp_obj_ioctl(KmppObj ctx, rk_s32 cmd, KmppObj in, KmppObj *out, const char *caller)
 {
     KmppShmPtr sptr;
-    rk_s32 ret = kmpp_ioc_transfer(ctx, cmd, in, out ? &sptr : NULL, caller);
+    rk_s32 ret = kmpp_ioc_call(ctx, cmd, in, out ? &sptr : NULL, caller);
 
     if (out) {
         *out = NULL;
