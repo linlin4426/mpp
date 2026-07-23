@@ -55,6 +55,10 @@ MPP_RET mpp_venc_kcfg_get_st(MppVencKcfg cfg, const char *name, void *val);
 
 void mpp_venc_kcfg_show(MppVencKcfg cfg);
 
+/* ctrl_cfg flex area helpers — only meaningful for CTRL_CFG type */
+void *mpp_venc_ctrl_flex_base(MppVencKcfg ctrl);
+MPP_RET mpp_venc_ctrl_set_flex(MppVencKcfg ctrl, const void *data, RK_U32 size);
+
 #ifdef __cplusplus
 }
 #endif

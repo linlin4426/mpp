@@ -6,12 +6,9 @@
 #define MODULE_TAG "kmpp_venc_cfg"
 
 #include <string.h>
-#include <pthread.h>
 
 #include "mpp_env.h"
-#include "mpp_mem.h"
 #include "mpp_debug.h"
-#include "mpp_common.h"
 #include "mpp_singleton.h"
 
 #include "kmpp_obj.h"
@@ -212,4 +209,41 @@ void mpp_venc_kcfg_show(MppVencKcfg cfg)
     }
 
     kmpp_obj_udump(obj);
+}
+
+void *mpp_venc_ctrl_flex_base(MppVencKcfg ctrl)
+{
+    KmppObjDef def = kcfg_defs[MPP_VENC_KCFG_TYPE_CTRL_CFG];
+
+    if (!def) {
+        mpp_loge_f("can not found KmppVencCtrlCfg objdef\n");
+        return NULL;
+    }
+
+    return (rk_u8 *)kmpp_obj_to_entry((KmppObj)ctrl) +
+           kmpp_objdef_get_entry_size(def) +
+           kmpp_obj_to_flags_size((KmppObj)ctrl);
+}
+
+MPP_RET mpp_venc_ctrl_set_flex(MppVencKcfg ctrl, const void *data, RK_U32 size)
+{
+    void *base;
+    rk_s32 ret;
+
+    mpp_venc_kcfg_set_u32(ctrl, "flags", 2); /* KMPP_CTRL_FLAG_FLEX */
+    mpp_venc_kcfg_set_u32(ctrl, "size", size);
+
+    ret = kmpp_obj_resize_f((KmppObj)ctrl, size);
+    if (ret) {
+        mpp_err("ctrl_set_flex resize to %u failed ret %d\n", size, ret);
+        return MPP_NOK;
+    }
+
+    base = mpp_venc_ctrl_flex_base(ctrl);
+    if (base) {
+        memcpy(base, data, size);
+        return MPP_OK;
+    }
+
+    return MPP_NOK;
 }
