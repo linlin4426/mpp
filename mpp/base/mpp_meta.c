@@ -363,7 +363,7 @@ static void *get_meta(const char *tag, const char *caller)
         MppMetaPriv *priv = (MppMetaPriv *)kmpp_obj_to_priv(obj);
         const char *tag_src = (tag) ? (tag) : (MODULE_TAG);
 
-        strncpy(priv->tag, tag_src, sizeof(priv->tag) - 1);
+        snprintf(priv->tag, sizeof(priv->tag), "%s", tag_src);
         priv->caller = caller;
         /* meta_id / list_meta / ref_count / node_count / vals[] set by mpp_meta_impl_init */
     } else {
