@@ -230,7 +230,7 @@ MPP_RET mpp_venc_ctrl_set_flex(MppVencKcfg ctrl, const void *data, RK_U32 size)
     void *base;
     rk_s32 ret;
 
-    mpp_venc_kcfg_set_u32(ctrl, "flags", 2); /* KMPP_CTRL_FLAG_FLEX */
+    mpp_venc_kcfg_set_u32(ctrl, "flags", KMPP_CTRL_FLAG_FLEX);
     mpp_venc_kcfg_set_u32(ctrl, "size", size);
 
     ret = kmpp_obj_resize_f((KmppObj)ctrl, size);
