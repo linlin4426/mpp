@@ -3521,6 +3521,9 @@ static MPP_RET check_enc_async_wait(MppEncImpl *enc, EncAsyncWait *wait)
             break;
         }
 
+        if (hal_task_get_count(enc->tasks, TASK_PROCESSING) > 0)
+            break;
+
         // NOTE: When condition is not fulfilled check nofify flag again
         if (!curr_wait || (curr_wait & notify))
             break;
