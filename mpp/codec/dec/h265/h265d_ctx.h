@@ -172,6 +172,7 @@ typedef struct H265dPrs_t {
     RK_S64 pts;
     RK_S64 dts;
     RK_U8  miss_ref_flag;
+    RK_U8  pre_pps_id;
     RK_U8  ps_need_upate;
     RK_U8  rps_need_upate;
 

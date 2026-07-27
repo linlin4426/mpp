@@ -238,9 +238,14 @@ static RK_S32 h265d_slice_head(H265dPrs *p)
         return MPP_ERR_STREAM;
     } else {
         slice->pps_id = pps_id;
-        /* Check if PPS changed using bitmap (mirrors sps_update_mask pattern) */
-        if (MPP_GET_BIT64(p->pps_update_mask, pps_id)) {
+        /*
+         * Update global parameters when switching PPS IDs or when the
+         * active PPS content was replaced under the same ID.
+         */
+        if (pps_id != p->pre_pps_id ||
+            MPP_GET_BIT64(p->pps_update_mask, pps_id)) {
             p->ps_need_upate = 1;
+            p->pre_pps_id = pps_id;
             MPP_CLR_BIT64(p->pps_update_mask, pps_id);
         }
     }
@@ -1645,6 +1650,8 @@ RK_S32 h265d_parser_init(H265dParser *s, H265dCtx* ctx)
 
     if (MPP_OK != mpp_packet_init(&p->input_packet, (void*)buf, size))
         return MPP_ERR_NOMEM;
+
+    p->pre_pps_id = -1;
 
     /* Initialize update bitmasks */
     p->sps_update_mask = 0;
