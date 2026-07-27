@@ -374,7 +374,7 @@ MPP_RET test_mpp_run(MpiEncMultiCtxInfo *info)
                     start_y += height;
                 }
 
-                if (cmd->kmpp_en)
+                if (cmd->kmpp_mode)
                     ret = mpi->control(ctx, MPP_ENC_SET_JPEG_ROI_CFG, &p->roi_jpeg_cfg);
                 else
                     mpp_meta_set_ptr(meta, KEY_JPEG_ROI_DATA, (void*)&p->roi_jpeg_cfg);
@@ -577,7 +577,7 @@ void *enc_test(void *arg)
         goto MPP_TEST_OUT;
     }
 
-    if (cmd->kmpp_en)
+    if (cmd->kmpp_mode)
         kmpp_cfg_init(info);
 
     ret = mpp_init(p->ctx, MPP_CTX_ENC, p->type);
@@ -586,7 +586,7 @@ void *enc_test(void *arg)
         goto MPP_TEST_OUT;
     }
 
-    if (cmd->kmpp_en)
+    if (cmd->kmpp_mode)
         ret = mpp_enc_cfg_init_k(&p->cfg);
     else
         ret = mpp_enc_cfg_init(&p->cfg);

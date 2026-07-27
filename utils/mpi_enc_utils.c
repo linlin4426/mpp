@@ -1124,8 +1124,8 @@ RK_S32 mpi_enc_opt_kmpp(void *ctx, const char *next)
     MpiEncTestArgs *cmd = (MpiEncTestArgs *)obj_set->cmd;
 
     if (next) {
-        cmd->kmpp_en = atoi(next);
-        if (cmd->kmpp_en) {
+        cmd->kmpp_mode = atoi(next);
+        if (cmd->kmpp_mode) {
             if (access("/dev/vcodec", F_OK | R_OK | W_OK)) {
                 mpp_err("failed to access /dev/vcodec, check kmpp devices\n");
                 return -1;
@@ -1336,8 +1336,8 @@ MPP_RET mpi_enc_test_objset_update_by_args(MppEncTestObjSet *obj_set, int argc, 
     }
 
     if (cmd->file_cfg) {
-        if (cmd->kmpp_en) {
-            mpp_err("file_cfg and kmpp_en can not be set at the same time\n");
+        if (cmd->kmpp_mode) {
+            mpp_err("file_cfg and kmpp_mode can not be set at the same time\n");
             ret = MPP_NOK;
             goto done;
         } else {

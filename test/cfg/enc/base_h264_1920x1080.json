@@ -188,7 +188,7 @@
     "vi_len" : 0,
     "quiet" : 0,
     "trace_fps" : 0,
-    "kmpp_en" : 0,
+    "kmpp_mode" : 0,
     "osd_enable" : 0,
     "osd_mode" : 0,
     "user_data_enable" : 0,

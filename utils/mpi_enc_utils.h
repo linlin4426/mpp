@@ -115,7 +115,7 @@ typedef struct MpiEncTestArgs_t {
     RK_U32              psnr_en;
     RK_U32              ssim_en;
     char                *file_slt;
-    RK_U32              kmpp_en;
+    RK_U32              kmpp_mode;
 
     RK_U32              split_mode;
     RK_U32              split_arg;
