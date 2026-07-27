@@ -1248,7 +1248,7 @@ typedef struct Vepu510Status_t {
     RK_U32 madi32_sum;
 
     /* 0x000040b0 reg4140 */
-    RK_U32 madp16_sum;
+    RK_U32 madp_sum;
 
     /* 0x40b4 - 0x40bc */
     RK_U32 reserved4141_4143[3];

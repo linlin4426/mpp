@@ -198,8 +198,14 @@ static void vepu510_h264e_tune_stat_update(void *p, HalEncTask *task)
             motion_level = 0;
         rc_info->motion_level = motion_level;
     }
-    hal_h264e_dbg_rc("complex_level %d motion_level %d\n",
-                     rc_info->complex_level, rc_info->motion_level);
+
+    rc_info->madi_b16 = st->madi16_sum / b16_num;
+    rc_info->madp_ctu = st->madp_sum / (b16_num / 4);
+    rc_info->dsp_y_avg = st->dsp_y_sum / (b16_num * 16);
+
+    hal_h264e_dbg_rc("complex_level %d motion_level %d madi_b16 %d madp_ctu %d dsp_y_avg %d\n",
+                     rc_info->complex_level, rc_info->motion_level,
+                     rc_info->madi_b16, rc_info->madp_ctu, rc_info->dsp_y_avg);
 
     (void)madi_th_cnt0;
     (void)madp_th_cnt0;

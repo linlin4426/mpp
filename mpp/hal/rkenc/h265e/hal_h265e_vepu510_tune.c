@@ -246,6 +246,7 @@ static void vepu510_h265e_tune_stat_update(void *p, HalEncTask *task)
     RK_S32 w32 = MPP_ALIGN(cfg->prep.width, 32);
     RK_S32 h32 = MPP_ALIGN(cfg->prep.height, 32);
     RK_U32 b16_num = MPP_ALIGN(cfg->prep.width, 16) * MPP_ALIGN(cfg->prep.height, 16) / 256;
+    RK_U32 ctu_num = w32 * h32 / 1024;
     RK_U32 madi_cnt = 0, madp_cnt = 0;
 
     RK_U32 madi_th_cnt0 = elem->st.st_madi_lt_num0.madi_th_lt_cnt0 +
@@ -333,11 +334,14 @@ static void vepu510_h265e_tune_stat_update(void *p, HalEncTask *task)
     hal_rc_ret->bit_real += fb->out_strm_size * 8;
 
     hal_rc_ret->madi = elem->st.madi16_sum / fb->st_mb_num;
-    hal_rc_ret->madp = elem->st.madp16_sum / fb->st_mb_num;
-    hal_rc_ret->dsp_y_avg = elem->st.dsp_y_sum / (w32 / 4 * h32 / 4);
+    hal_rc_ret->madp = elem->st.madp_sum / fb->st_mb_num;
+    hal_rc_ret->dsp_y_avg = elem->st.dsp_y_sum / (b16_num * 16);
+    hal_rc_ret->madi_b16 = elem->st.madi16_sum / (ctu_num * 4);
+    hal_rc_ret->madp_ctu = elem->st.madp_sum / ctu_num;
 
-    hal_h265e_dbg_st("frame %d bit_real %d quality_real %d dsp_y_avg %3d\n", ctx->frame_num - 1,
-                     hal_rc_ret->bit_real, hal_rc_ret->quality_real, hal_rc_ret->dsp_y_avg);
+    hal_h265e_dbg_st("frame %d bit_real %d quality_real %d dsp_y_avg %3d madi_b16 %d madp_ctu %d\n",
+                     ctx->frame_num - 1, hal_rc_ret->bit_real, hal_rc_ret->quality_real,
+                     hal_rc_ret->dsp_y_avg, hal_rc_ret->madi_b16, hal_rc_ret->madp_ctu);
 
     hal_h265e_dbg_func("leave\n");
 }

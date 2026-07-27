@@ -2415,6 +2415,7 @@ static void vepu511a_h265e_update_tune_stat(H265eV511AHalContext *ctx, HalEncTas
     Vepu511aStatus *st = &ctx->frm->regs_ret->st;
     EncRcTaskInfo *info = (EncRcTaskInfo *)&task->rc_task->info;
     RK_U32 b16_num = MPP_ALIGN(cfg->prep.width, 16) * MPP_ALIGN(cfg->prep.height, 16) / 256;
+    RK_U32 ctu_num = MPP_ALIGN(cfg->prep.width, 32) * MPP_ALIGN(cfg->prep.height, 32) / 1024;
     RK_U32 madi_cnt = 0, madp_cnt = 0;
 
     RK_U32 madi_th_cnt0 = st->st_madi_lt_num0.madi_th_lt_cnt0 +
@@ -2498,9 +2499,15 @@ static void vepu511a_h265e_update_tune_stat(H265eV511AHalContext *ctx, HalEncTas
     info->bit_real = fb->out_strm_size * 8;
     info->madi = fb->st_madi;
     info->madp = fb->st_madp;
+    info->madi_b16 = st->madi16_sum / (ctu_num * 4);
+    info->madp_ctu = st->madp_sum / ctu_num;
+    info->dsp_y_avg = st->dsp_y_sum / (ctu_num * 64);
 
-    hal_h265e_dbg_st("frame %d bit_real %d quality_real %d madi %d madp %d\n",
-                     ctx->frame_num - 1, info->bit_real, info->quality_real, info->madi, info->madp);
+    hal_h265e_dbg_st("frame %d bit_real %d quality_real %d madi %d madp %d "
+                     "madi_b16 %d madp_ctu %d dsp_luma_avg %d\n",
+                     ctx->frame_num - 1, info->bit_real, info->quality_real,
+                     info->madi, info->madp, info->madi_b16, info->madp_ctu,
+                     info->dsp_y_avg);
 }
 
 MPP_RET hal_h265e_vepu511a_wait(void *hal, HalEncTask *task)

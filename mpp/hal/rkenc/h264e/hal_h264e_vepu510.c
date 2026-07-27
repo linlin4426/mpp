@@ -233,6 +233,8 @@ static MPP_RET hal_h264e_vepu510_init(void *hal, MppEncHalCfg *cfg)
 
     hal_h264e_dbg_func("enter %p\n", p);
 
+    mpp_env_get_u32("hal_h264e_debug", &hal_h264e_debug, 0);
+
     p->cfg = cfg->cfg;
 
     /* update output to MppEnc */

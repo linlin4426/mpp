@@ -209,6 +209,8 @@ static MPP_RET hal_h264e_vepu511a_init(void *hal, MppEncHalCfg *cfg)
 
     hal_h264e_dbg_func("enter %p\n", p);
 
+    mpp_env_get_u32("hal_h264e_debug", &hal_h264e_debug, 0);
+
     p->cfg = cfg->cfg;
     /* update output to MppEnc */
     cfg->type = VPU_CLIENT_RKVENC;
@@ -2506,8 +2508,10 @@ static void vepu511a_h264e_update_tune_stat(HalH264eVepu511aCtx *ctx, HalEncTask
     if (madp_cnt)
         rc_info->madp = rc_info->madp / madp_cnt;
 
-    hal_h264e_dbg_rc("complex_level %d motion_level %d\n",
-                     rc_info->complex_level, rc_info->motion_level);
+    hal_h264e_dbg_rc("complex_level %d motion_level %d dsp_luma_avg %d "
+                     "madi_b16 %d madp_ctu %d\n",
+                     rc_info->complex_level, rc_info->motion_level,
+                     rc_info->dsp_y_avg, rc_info->madi_b16, rc_info->madp_ctu);
 }
 
 static MPP_RET hal_h264e_vepu511a_ret_task(void * hal, HalEncTask * task)
@@ -2578,6 +2582,9 @@ static MPP_RET hal_h264e_vepu511a_ret_task(void * hal, HalEncTask * task)
     rc_info->lvl16_intra_num = regs->reg_st.st_pnum_i16.pnum_i16;
     rc_info->lvl8_intra_num  = regs->reg_st.st_pnum_i8.pnum_i8;
     rc_info->lvl4_intra_num  = regs->reg_st.st_pnum_i4.pnum_i4;
+    rc_info->dsp_y_avg = regs->reg_st.dsp_y_sum / (mbs * 16);
+    rc_info->madi_b16 = regs->reg_st.madi16_sum / mbs;
+    rc_info->madp_ctu = regs->reg_st.madp_sum / (mbs / 4);
 
     ctx->hal_rc_cfg.bit_real = rc_info->bit_real;
     ctx->hal_rc_cfg.quality_real = rc_info->quality_real;

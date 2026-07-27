@@ -1802,7 +1802,7 @@ typedef struct Vepu511aStatus_t {
     RK_U32 madi32_sum;
 
     /* 0x000040b0 reg4140 */
-    RK_U32 madp16_sum;
+    RK_U32 madp_sum;
 
     /* 0x000040b4 reg4141 */
     struct {
