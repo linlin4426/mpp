@@ -1269,7 +1269,7 @@ typedef struct MppEncFineTuneCfg_t {
     MppEncSeMode        se_mode;
     RK_S32              deblur_en; /* qpmap_en */
     RK_S32              deblur_str; /* deblur strength */
-    RK_S32              anti_flicker_str;
+    RK_S32              anti_flicker_str; /* reserved */
     RK_S32              lambda_idx_i;
     RK_S32              lambda_idx_p;
     RK_S32              atr_str_i; /* line_en */

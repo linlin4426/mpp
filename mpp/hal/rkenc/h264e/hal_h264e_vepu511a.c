@@ -1011,7 +1011,7 @@ static void setup_vepu511a_rdo_pred(HalH264eVepu511aCtx *ctx)
                                       !pps->entropy_coding_mode;
     reg_frm->rdo_cfg.ccwa_e         = 1;
     reg_frm->rdo_cfg.scl_lst_sel    = pps->pic_scaling_matrix_present;
-    reg_frm->rdo_cfg.atf_e          = ctx->cfg->tune.anti_flicker_str > 0;
+    reg_frm->rdo_cfg.atf_e          = ctx->cfg->tune.atf_str > 0;
     reg_frm->rdo_cfg.atr_e          = ctx->cfg->tune.atr_str_i > 0;
     reg_frm->rdo_cfg.atr_mult_sel_e = 1;
 
@@ -1876,7 +1876,7 @@ static void setup_vepu511a_anti_flicker(HalH264eVepu511aCtx *ctx)
 {
     HalVepu511aRegSet *regs = ctx->regs_set;
     H264eVepu511aSqi *reg = &regs->reg_sqi;
-    RK_U32 str = ctx->cfg->tune.anti_flicker_str;
+    RK_U32 str = ctx->cfg->tune.atf_str;
     rdo_skip_par *p_skip = NULL;
     rdo_noskip_par *p_no_skip = NULL;
 

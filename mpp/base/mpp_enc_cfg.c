@@ -241,7 +241,6 @@
     ENTRY(prefix, s32,  rk_s32,     se_mode,                FLAG_INCR,                          tune, se_mode); \
     ENTRY(prefix, s32,  rk_s32,     deblur_en,              FLAG_INCR,                          tune, deblur_en); \
     ENTRY(prefix, s32,  rk_s32,     deblur_str,             FLAG_INCR,                          tune, deblur_str); \
-    ENTRY(prefix, s32,  rk_s32,     anti_flicker_str,       FLAG_INCR,                          tune, anti_flicker_str); \
     ENTRY(prefix, s32,  rk_s32,     lambda_idx_i,           FLAG_INCR,                          tune, lambda_idx_i); \
     ENTRY(prefix, s32,  rk_s32,     lambda_idx_p,           FLAG_INCR,                          tune, lambda_idx_p); \
     ENTRY(prefix, s32,  rk_s32,     atr_str_i,              FLAG_INCR,                          tune, atr_str_i); \

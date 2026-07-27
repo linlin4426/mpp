@@ -853,7 +853,7 @@ static void vepu510_h265_global_cfg_set(H265eV510HalContext *ctx, H265eV510RegSe
     H265eVepu510Param *reg_param = &regs->reg_param;
     H265eVepu510Sqi  *reg_sqi = &regs->reg_sqi;
     MppEncSceneMode sm = ctx->cfg->tune.scene_mode;
-    RK_S32 atf_str = ctx->cfg->tune.anti_flicker_str;
+    RK_S32 atf_str = ctx->cfg->tune.atf_str;
     RK_S32 lambda_idx = 0;
 
     vepu510_h265_rdo_cfg(ctx, reg_sqi, sm);

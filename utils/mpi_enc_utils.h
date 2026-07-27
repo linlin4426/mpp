@@ -92,7 +92,6 @@ typedef struct MpiEncTestArgs_t {
 
     /* -qpdd cu_qp_delta_depth */
     RK_S32              cu_qp_delta_depth;
-    RK_S32              anti_flicker_str;
     RK_S32              atf_str;
     RK_S32              atr_str_i;
     RK_S32              atr_str_p;

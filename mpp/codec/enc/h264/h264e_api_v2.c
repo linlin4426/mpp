@@ -199,7 +199,7 @@ static void init_h264e_cfg_set(MppEncCfgSet *cfg, MppClientType type)
     cfg->tune.atl_str = 1;
     cfg->tune.atr_str_i = 1;
     cfg->tune.atr_str_p = 1;
-    cfg->tune.anti_flicker_str = 1;
+    cfg->tune.atf_str = 1;
     cfg->tune.deblur_str = 3;
 
     /* smart v3 parameters */

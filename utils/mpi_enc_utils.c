@@ -911,16 +911,13 @@ RK_S32 mpi_enc_opt_atf(void *ctx, const char *next)
         RK_S32 val = atoi(next);
 
         if (val >= 0 && val <= 3 ) {
-            cmd->anti_flicker_str = val;
             cmd->atf_str = val;
         } else {
-            cmd->anti_flicker_str = 0;
             cmd->atf_str = 0;
             mpp_err("invalid atf_str %d set to default 0\n", val);
         }
         if (cfg_obj) {
             mpp_enc_cfg_set_s32(cfg_obj, "tune:atf_str", cmd->atf_str);
-            mpp_enc_cfg_set_s32(cfg_obj, "tune:anti_flicker_str", cmd->anti_flicker_str);
         }
 
         return 1;
@@ -1169,7 +1166,7 @@ static MppOptInfo enc_opts[] = {
     {"qpdd",    "cu_qp_delta_depth",    "cu_qp_delta_depth, 0:1:2",                 mpi_enc_opt_qpdd},
     {"dbe",     "deblur enable",        "deblur_en or qpmap_en, 0:close 1:open",           mpi_enc_opt_dbe},
     {"dbs",     "deblur strength",      "deblur_str 0~3: hw + sw scheme; 4~7: hw scheme",  mpi_enc_opt_dbs},
-    {"atf",     "anti_flicker_str",     "anti_flicker_str, 0:off 1 2 3",            mpi_enc_opt_atf},
+    {"atf",     "atf_str",              "anti_flicker_str, 0:off 1 2 3",            mpi_enc_opt_atf},
     {"atl",     "atl_str",              "atl_str, 0:off 1 open",                    mpi_enc_opt_atl},
     {"atr_i",   "atr_str_i",            "atr_str_i, 0:off 1 2 3",                   mpi_enc_opt_atr_i},
     {"atr_p",   "atr_str_p",            "atr_str_p, 0:off 1 2 3",                   mpi_enc_opt_atr_p},
@@ -1887,7 +1884,6 @@ MPP_RET mpi_enc_cfg_setup(MpiEncTestData *p, MpiEncTestArgs *cmd, MppEncCfg cfg_
         mpp_enc_cfg_set_u32(cfg, "rc:drop_gap", 1);         /* Do not continuous drop frame */
 
         /* setup fine tuning paramters */
-        mpp_enc_cfg_set_s32(cfg, "tune:anti_flicker_str", cmd->anti_flicker_str);
         mpp_enc_cfg_set_s32(cfg, "tune:atf_str", cmd->atf_str);
         mpp_enc_cfg_set_s32(cfg, "tune:atr_str_i", cmd->atr_str_i);
         mpp_enc_cfg_set_s32(cfg, "tune:atr_str_p", cmd->atr_str_p);

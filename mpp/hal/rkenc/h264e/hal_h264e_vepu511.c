@@ -1786,7 +1786,7 @@ static void setup_vepu511_anti_flicker(HalH264eVepu511Ctx *ctx)
 {
     HalVepu511RegSet *regs = ctx->regs_set;
     Vepu511SqiCfg *reg = &regs->reg_sqi;
-    RK_U32 str = ctx->cfg->tune.anti_flicker_str;
+    RK_U32 str = ctx->cfg->tune.atf_str;
 
     static RK_U8 pskip_atf_th0[4]  = { 0, 0, 1, 1 };
     static RK_U8 pskip_atf_th1[4]  = { 7, 7, 10, 10 };
