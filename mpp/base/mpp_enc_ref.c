@@ -14,6 +14,7 @@
 #include "mpp_cfg_io.h"
 #include "mpp_enc_ref.h"
 #include "mpp_enc_refs.h"
+#include "rk_venc_kcfg.h"
 
 /*
  * kmpp_obj definition for MppEncRefCfgImpl
@@ -202,6 +203,18 @@ MPP_RET mpp_enc_ref_cfg_init(MppEncRefCfg *ref)
         return ret;
 
     return mpp_enc_ref_cfg_reset(*ref);
+}
+
+MPP_RET mpp_enc_ref_cfg_create(MppEncRefCfg *ref, RK_U32 mode)
+{
+    if (NULL == ref)
+        return MPP_ERR_NULL_PTR;
+
+    if (mode >= 2)
+        return mpp_venc_kcfg_init((MppVencKcfg *)ref,
+                                  MPP_VENC_KCFG_TYPE_REF_CFG);
+
+    return mpp_enc_ref_cfg_init(ref);
 }
 
 MPP_RET mpp_enc_ref_cfg_deinit(MppEncRefCfg *ref)

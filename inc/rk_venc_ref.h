@@ -243,6 +243,13 @@ extern "C" {
 
 MPP_RET mpp_enc_ref_cfg_init(MppEncRefCfg *ref);
 MPP_RET mpp_enc_ref_cfg_deinit(MppEncRefCfg *ref);
+/*
+ * mpp_enc_ref_cfg_create - unified ref_cfg creation.
+ * mode 0/1: local pool object (reset to default IPPP)
+ * mode 2+:  kernel kmpp object (KmppVencRefCfg)
+ * mode matches kmpp_mode: 0=off, 1=legacy, 2=obj
+ */
+MPP_RET mpp_enc_ref_cfg_create(MppEncRefCfg *ref, RK_U32 mode);
 
 MPP_RET mpp_enc_ref_cfg_reset(MppEncRefCfg ref);
 MPP_RET mpp_enc_ref_cfg_set_cfg_cnt(MppEncRefCfg ref, RK_S32 lt_cnt, RK_S32 st_cnt);
