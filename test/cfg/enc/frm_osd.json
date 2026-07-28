@@ -6,7 +6,7 @@
     "roi_cnt"   : 0,
     "osd_cnt"   : 2,
     "osd" : [
-        { "enable" : 1, "fmt" : 1, "lt_x" : 0,   "lt_y" : 0,  "rb_x" : 320, "rb_y" : 240, "stride" : 320 },
-        { "enable" : 1, "fmt" : 1, "lt_x" : 320, "lt_y" : 240, "rb_x" : 640, "rb_y" : 480, "stride" : 320 }
+        { "enable" : 1, "fmt" : 1, "lt_x" : 0,      "lt_y" : 0,      "rb_x" : 16384, "rb_y" : 32768 },
+        { "enable" : 1, "fmt" : 1, "lt_x" : 32768,  "lt_y" : 16384,  "rb_x" : 65535, "rb_y" : 65535 }
     ]
 }

@@ -18,4 +18,5 @@ add_library(utils OBJECT
     utils_singleton.c
     mpp_enc_args.c
     mpp_enc_frm_cfg.c
+    kmpp_venc_utils.c
     )

@@ -62,28 +62,6 @@ typedef struct __attribute__((packed, aligned(4))) KmppMetaFlex_t {
     rk_s32              capacity;
 } KmppMetaFlex;
 
-/*
- * Inlined (shm) variants of MppEncUserData(Set) for KmppMeta flex area
- * serialization. kmpp_meta-internal contract between userspace and kernel;
- * the public API keeps using MppEncUserData. Pointers are KmppShmPtr so the
- * data stays valid across the user/kernel share boundary.
- */
-typedef struct __attribute__((packed, aligned(4))) MppEncUserDataShm_t {
-    RK_U32              len;
-    KmppShmPtr          data;
-} MppEncUserDataShm;
-
-typedef struct __attribute__((packed, aligned(4))) MppEncUserDataFullShm_t {
-    RK_U32              len;
-    KmppShmPtr          uuid;
-    KmppShmPtr          data;
-} MppEncUserDataFullShm;
-
-typedef struct __attribute__((packed, aligned(4))) MppEncUserDataSetShm_t {
-    RK_U32              count;
-    MppEncUserDataFullShm data[];
-} MppEncUserDataSetShm;
-
 typedef struct __attribute__((packed, aligned(4))) KmppMetaVals_t {
     KmppMetaObj         in_frm;
     KmppMetaObj         in_pkt;
