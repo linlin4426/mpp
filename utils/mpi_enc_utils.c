@@ -1762,6 +1762,9 @@ MPP_RET mpi_enc_gen_ref_cfg_legacy(MppEncRefCfg ref, MppEncRefParam *para, RK_S3
         } break;
         }
 
+        if (ret)
+            return ret;
+
         return mpp_enc_ref_cfg_check(ref);
     }
 
@@ -2290,6 +2293,19 @@ MPP_RET mpi_enc_cfg_setup(MpiEncTestData *p, MpiEncTestArgs *cmd, MppEncCfg cfg_
         goto RET;
     }
 
+    /* setup temporal SVC / smart gop reference frame config */
+    if (cmd->file_ref_cfg || cmd->gop_mode) {
+        MppEncRefCfg ref = NULL;
+
+        mpp_enc_ref_cfg_create(&ref, cmd->kmpp_mode);
+
+        ret = mpi_enc_ref_cfg_setup(p, cmd, ref);
+        if (ret)
+            mpp_loge_f("ref cfg setup failed ret %d\n", ret);
+
+        mpp_enc_ref_cfg_deinit(&ref);
+    }
+
     if (p->type == MPP_VIDEO_CodingAVC || p->type == MPP_VIDEO_CodingHEVC) {
         RcApiBrief rc_api_brief;
         rc_api_brief.type = p->type;
@@ -2331,6 +2347,9 @@ RET:
 MPP_RET mpi_enc_ref_cfg_setup(MpiEncTestData *p, MpiEncTestArgs *cmd, MppEncRefCfg ref)
 {
     MPP_RET ret = MPP_OK;
+
+    if (!cmd->file_ref_cfg && !cmd->gop_mode)
+        return MPP_OK;
 
     if (cmd->file_ref_cfg)
         ret = mpi_enc_load_ref_cfg(ref, cmd->file_ref_cfg);
