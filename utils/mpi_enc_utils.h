@@ -222,6 +222,7 @@ RK_S32 mpi_enc_width_default_stride(RK_S32 width, MppFrameFormat fmt);
  */
 MPP_RET mpi_enc_gen_ref_cfg(MppEncRefCfg ref, RK_S32 gop_mode);
 MPP_RET mpi_enc_gen_smart_gop_ref_cfg(MppEncRefCfg ref, RK_S32 gop_len, RK_S32 vi_len);
+MPP_RET mpi_enc_gen_ref_cfg_legacy(MppEncRefCfg ref, MppEncRefParam *para, RK_S32 to_ref);
 MPP_RET mpi_enc_load_ref_cfg(MppEncRefCfg ref, const char *path);
 MPP_RET mpi_enc_ref_cfg_setup(MpiEncTestData *p, MpiEncTestArgs *cmd, MppEncRefCfg ref);
 

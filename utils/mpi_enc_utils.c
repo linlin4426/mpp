@@ -1178,7 +1178,8 @@ static MppOptInfo enc_opts[] = {
     {"lmd",     "lambda idx",           "lambda_idx_p 0~8",                         mpi_enc_opt_lmd},
     {"lmdi",    "lambda i idx",         "lambda_idx_i 0~8",                         mpi_enc_opt_lmdi},
     {"speed",   "enc speed",            "speed mode",                               mpi_enc_opt_speed},
-    {"kmpp",    "kmpp path enable",     "kmpp path enable",                         mpi_enc_opt_kmpp}
+    {"kmpp",      "kmpp mode (compat)", "1=legacy (deprecated, use -kmpp_mode)",    mpi_enc_opt_kmpp},
+    {"kmpp_mode", "kmpp path mode",     "0=off 1=legacy 2=obj",                     mpi_enc_opt_kmpp}
 };
 
 static RK_U32 enc_opt_cnt = MPP_ARRAY_ELEMS(enc_opts);
@@ -1597,6 +1598,223 @@ MPP_RET mpi_enc_gen_smart_gop_ref_cfg(MppEncRefCfg ref, RK_S32 gop_len, RK_S32 v
     ret = mpp_enc_ref_cfg_check(ref);
 
     return ret;
+}
+
+/*
+ * mpi_enc_gen_ref_cfg_legacy - bidirectional MppEncRefCfg ↔ MppEncRefParam converter.
+ *
+ * Direction controlled by to_ref:
+ *   to_ref = 1 (forward)  : para -> ref   generate ref_cfg from legacy MppEncRefParam
+ *   to_ref = 0 (reverse)  : ref  -> para  extract MppEncRefParam fingerprint from ref_cfg
+ *
+ * Forward: follows the same pattern as kernel-side mpi_enc_gen_smart_gop_ref_cfg /
+ * mpi_enc_gen_hir_skip_ref.  Caller validates with mpp_enc_ref_cfg_check and passes
+ * the original MppEncRefParam through the legacy /dev/vcodec ioctl.
+ *
+ * Reverse: only supports modes that can be fully reverse-mapped:
+ *   REF_IPPP, REF_TSVC1/2/3  — fingerprint on (st_cnt, lt_cnt, max_tlayers)
+ *   REF_VI (smart gop)       — detected by lt_cfg_cnt==1 + st[0].ref_mode
+ * Returns MPP_NOK for HIR_SKIP and custom JSON configs (lossy).
+ */
+MPP_RET mpi_enc_gen_ref_cfg_legacy(MppEncRefCfg ref, MppEncRefParam *para, RK_S32 to_ref)
+{
+    if (!ref || !para)
+        return MPP_ERR_NULL_PTR;
+
+    /* ==================== forward: para -> ref ==================== */
+    if (to_ref) {
+        MppEncRefLtFrmCfg lt_ref[4];
+        MppEncRefStFrmCfg st_ref[16];
+        RK_S32 lt_cnt = 0;
+        RK_S32 st_cnt = 0;
+        RK_S32 pos = 0;
+        MPP_RET ret = MPP_OK;
+
+        memset(&lt_ref, 0, sizeof(lt_ref));
+        memset(&st_ref, 0, sizeof(st_ref));
+
+        switch (para->cfg_mode) {
+        case REF_IPPP: {
+            mpp_enc_ref_cfg_reset(ref);
+            return mpp_enc_ref_cfg_check(ref);
+        } break;
+        case REF_TSVC1:
+        case REF_TSVC2:
+        case REF_TSVC3: {
+            return mpi_enc_gen_ref_cfg(ref, para->cfg_mode);
+        } break;
+        case REF_VI: {
+            RK_S32 gop_len = para->gop_len;
+            RK_S32 vi_len = para->vi_len;
+
+            lt_cnt = 1;
+            st_cnt = 8;
+
+            ret = mpp_enc_ref_cfg_set_cfg_cnt(ref, lt_cnt, st_cnt);
+
+            lt_ref[0].lt_idx        = 0;
+            lt_ref[0].temporal_id   = 0;
+            lt_ref[0].ref_mode      = REF_TO_PREV_LT_REF;
+            lt_ref[0].lt_gap        = gop_len;
+            lt_ref[0].lt_delay      = 0;
+            ret = mpp_enc_ref_cfg_add_lt_cfg(ref, 1, lt_ref);
+
+            st_ref[pos].is_non_ref  = 0;
+            st_ref[pos].temporal_id = 0;
+            st_ref[pos].ref_mode    = REF_TO_PREV_INTRA;
+            st_ref[pos].ref_arg     = 0;
+            st_ref[pos].repeat      = 0;
+            pos++;
+
+            if (vi_len > 1) {
+                st_ref[pos].is_non_ref  = 0;
+                st_ref[pos].temporal_id = 1;
+                st_ref[pos].ref_mode    = REF_TO_PREV_REF_FRM;
+                st_ref[pos].ref_arg     = 0;
+                st_ref[pos].repeat      = vi_len - 2;
+                pos++;
+            }
+
+            st_ref[pos].is_non_ref  = 0;
+            st_ref[pos].temporal_id = 0;
+            st_ref[pos].ref_mode    = REF_TO_PREV_INTRA;
+            st_ref[pos].ref_arg     = 0;
+            st_ref[pos].repeat      = 0;
+            pos++;
+
+            ret = mpp_enc_ref_cfg_add_st_cfg(ref, pos, st_ref);
+        } break;
+        case REF_HIR_SKIP: {
+            RK_S32 gop_len = para->gop_len;
+            RK_U32 base_N = para->base_N;
+            RK_U32 enh_M = para->enh_M;
+            RK_U32 pre_en = para->pre_en;
+
+            lt_cnt = 1;
+            st_cnt = 8;
+
+            ret = mpp_enc_ref_cfg_set_cfg_cnt(ref, lt_cnt, st_cnt);
+
+            if (pre_en) {
+                lt_ref[0].lt_idx        = 0;
+                lt_ref[0].temporal_id   = 0;
+                lt_ref[0].ref_mode      = REF_TO_PREV_LT_REF;
+                lt_ref[0].lt_gap        = base_N * (enh_M + 1);
+                lt_ref[0].lt_delay      = 0;
+
+                st_ref[pos].is_non_ref  = 0;
+                st_ref[pos].temporal_id = 0;
+                st_ref[pos].ref_mode    = REF_TO_PREV_REF_FRM;
+                st_ref[pos].ref_arg     = 0;
+                st_ref[pos].repeat      = 0;
+                pos++;
+                if (enh_M > 1) {
+                    st_ref[pos].is_non_ref    = 0;
+                    st_ref[pos].temporal_id   = 1;
+                    st_ref[pos].ref_mode      = REF_TO_PREV_REF_FRM;
+                    st_ref[pos].ref_arg       = 0;
+                    st_ref[pos].repeat        = enh_M - 1;
+                    pos++;
+                }
+                st_ref[pos].is_non_ref  = 0;
+                st_ref[pos].temporal_id = 0;
+                st_ref[pos].ref_mode    = REF_TO_PREV_LT_REF;
+                st_ref[pos].ref_arg     = 0;
+                st_ref[pos].repeat      = 0;
+                pos++;
+            } else {
+                lt_ref[0].lt_idx        = 0;
+                lt_ref[0].temporal_id   = 0;
+                lt_ref[0].ref_mode      = REF_TO_PREV_LT_REF;
+                lt_ref[0].lt_gap        = gop_len;
+                lt_ref[0].lt_delay      = 0;
+
+                st_ref[pos].is_non_ref  = 0;
+                st_ref[pos].temporal_id = 0;
+                st_ref[pos].ref_mode    = REF_TO_PREV_LT_REF;
+                st_ref[pos].ref_arg     = 0;
+                st_ref[pos].repeat      = 0;
+                pos++;
+
+                st_ref[pos].is_non_ref    = 0;
+                st_ref[pos].temporal_id   = 1;
+                st_ref[pos].ref_mode      = REF_TO_PREV_REF_FRM;
+                st_ref[pos].ref_arg       = 0;
+                st_ref[pos].repeat        = enh_M - 1;
+                pos++;
+
+                st_ref[pos].is_non_ref  = 0;
+                st_ref[pos].temporal_id = 0;
+                st_ref[pos].ref_mode    = REF_TO_PREV_INTRA;
+                st_ref[pos].ref_arg     = 0;
+                st_ref[pos].repeat      = 0;
+                pos++;
+            }
+
+            if (lt_cnt)
+                ret = mpp_enc_ref_cfg_add_lt_cfg(ref, lt_cnt, lt_ref);
+            if (pos)
+                ret = mpp_enc_ref_cfg_add_st_cfg(ref, pos, st_ref);
+        } break;
+        default: {
+            mpp_loge_f("unsupported ref cfg mode %d\n", para->cfg_mode);
+            return MPP_NOK;
+        } break;
+        }
+
+        return mpp_enc_ref_cfg_check(ref);
+    }
+
+    /* ==================== reverse: ref -> para ==================== */
+    {
+        MppEncRefCfgImpl *cfg;
+        MppEncRefStFrmCfg *st;
+        MppEncRefLtFrmCfg *lt;
+
+        cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry((KmppObj)ref);
+        if (!cfg || !cfg->ready)
+            return MPP_NOK;
+
+        memset(para, 0, sizeof(*para));
+
+        /* fingerprint match: TSVC / IPPP modes */
+        if (cfg->st_cfg_cnt == 1 && cfg->lt_cfg_cnt == 0 && cfg->max_tlayers == 1) {
+            para->cfg_mode = REF_IPPP;
+            para->vi_len   = 1;
+            return MPP_OK;
+        }
+        if (cfg->st_cfg_cnt == 3 && cfg->lt_cfg_cnt == 0 && cfg->max_tlayers == 2) {
+            para->cfg_mode = REF_TSVC1;
+            para->vi_len   = 2;
+            return MPP_OK;
+        }
+        if (cfg->st_cfg_cnt == 5 && cfg->lt_cfg_cnt == 0 && cfg->max_tlayers == 3) {
+            para->cfg_mode = REF_TSVC2;
+            para->vi_len   = 3;
+            return MPP_OK;
+        }
+        if (cfg->st_cfg_cnt == 9 && cfg->lt_cfg_cnt == 1 && cfg->max_tlayers == 4) {
+            para->cfg_mode = REF_TSVC3;
+            para->vi_len   = 4;
+            return MPP_OK;
+        }
+
+        /* smart gop (REF_VI): lt_cfg_cnt==1 + first st is PREV_INTRA */
+        if (cfg->lt_cfg_cnt == 1 && cfg->st_cfg_cnt >= 2) {
+            st = MPP_REF_ST_ARR(cfg);
+            lt = MPP_REF_LT_ARR(cfg);
+
+            if (st[0].ref_mode == REF_TO_PREV_INTRA && st[0].temporal_id == 0) {
+                para->cfg_mode = REF_VI;
+                para->gop_len  = lt[0].lt_gap;
+                para->vi_len   = cfg->max_tlayers;
+                return MPP_OK;
+            }
+        }
+
+        /* HIR_SKIP and custom JSON: cannot be fully reversed */
+        return MPP_NOK;
+    }
 }
 
 MPP_RET mpi_enc_gen_osd_plt(MppEncOSDPlt *osd_plt, RK_U32 frame_cnt)
@@ -2121,8 +2339,27 @@ MPP_RET mpi_enc_ref_cfg_setup(MpiEncTestData *p, MpiEncTestArgs *cmd, MppEncRefC
     else
         ret = mpi_enc_gen_smart_gop_ref_cfg(ref, cmd->gop_len, cmd->vi_len);
 
-    if (!ret)
+    if (ret)
+        return ret;
+
+    /*
+     * route to control():
+     *   kmpp_mode >= 2 (obj)   -> pass ref_cfg directly (kmpp_venc_obj.c expects kobj)
+     *   kmpp_mode == 1         -> reverse-extract MppEncRefParam for legacy ioctl
+     *   kmpp_mode == 0         -> pass through (pure MPP path)
+     */
+    if (cmd->kmpp_mode >= 2) {
         ret = p->mpi->control(p->ctx, MPP_ENC_SET_REF_CFG, ref);
+    } else if (cmd->kmpp_mode == 1) {
+        MppEncRefParam ref_param;
+
+        ret = mpi_enc_gen_ref_cfg_legacy(ref, &ref_param, 0);
+        if (!ret)
+            ret = p->mpi->control(p->ctx, MPP_ENC_SET_REF_CFG, &ref_param);
+    } else {
+        /* kmpp_mode == 0: pure MPP, pass ref_cfg directly */
+        ret = p->mpi->control(p->ctx, MPP_ENC_SET_REF_CFG, ref);
+    }
 
     return ret;
 }

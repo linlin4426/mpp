@@ -81,7 +81,6 @@ static rk_s32 mpp_enc_args_impl_dump(void *entry)
     ENTRY(prefix, s32,  rk_s32,     vi_len,           FLAG_NONE,       vi_len) \
     ENTRY(prefix, s32,  rk_s32,     quiet,            FLAG_NONE,       quiet) \
     ENTRY(prefix, s32,  rk_s32,     trace_fps,        FLAG_NONE,       trace_fps) \
-    ENTRY(prefix, u32,  rk_u32,     kmpp_en,          FLAG_NONE,       kmpp_mode) \
     ENTRY(prefix, u32,  rk_u32,     kmpp_mode,        FLAG_NONE,       kmpp_mode) \
     ENTRY(prefix, u32,  rk_u32,     osd_enable,       FLAG_NONE,       osd_enable) \
     ENTRY(prefix, u32,  rk_u32,     osd_mode,         FLAG_NONE,       osd_mode) \
