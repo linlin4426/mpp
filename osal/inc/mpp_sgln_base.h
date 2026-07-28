@@ -27,6 +27,7 @@ typedef struct MppSglnBase_t {
     rk_u32 array_count;
     rk_u32 max_name_len;
     rk_u32 debug;
+    rk_u32 init_done;
 } MppSglnBase;
 
 #define MPP_SGLN_STR(x)      #x

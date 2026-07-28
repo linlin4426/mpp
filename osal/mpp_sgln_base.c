@@ -43,6 +43,22 @@ rk_s32 mpp_sgln_base_add(MppSglnBase *base, MppSglnInfo *info, const char *calle
         }
         arr->count = MPP_MAX(arr->count, (rk_u32)id + 1);
     } else {
+        /* A second copy of this library may be loaded into the same
+         * process (e.g. statically linked into one .so and dlopen-ed
+         * again as another). Symbol interposition then routes its
+         * registrations to this base and would overflow this list.
+         *
+         * The dynamic loader runs all constructors of one library
+         * (including the final run_init) before any constructor of
+         * another library, so a registration arriving after init_done
+         * is set always comes from such a second copy and duplicates
+         * an existing entry. Reject it and keep the list frozen.
+         */
+        if (base->init_done) {
+            SGLN_ERR(base, "reject duplicated entry %s at %s\n",
+                     info->name ? info->name : "?", caller);
+            return rk_ok;
+        }
         if (arr->count >= arr->capacity) {
             SGLN_ERR(base, "no-id list full at %s\n", caller);
             abort();
@@ -118,6 +134,8 @@ void mpp_sgln_base_run_init(MppSglnBase *base)
             }
         }
     }
+
+    base->init_done = 1;
 
     SGLN_LOG(base, "init leave total %lld us\n", sum);
 }
