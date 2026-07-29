@@ -17,4 +17,5 @@ add_library(utils OBJECT
     osd3_test.c
     utils_singleton.c
     mpp_enc_args.c
+    mpp_enc_frm_cfg.c
     )

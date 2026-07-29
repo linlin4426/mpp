@@ -11,9 +11,10 @@
 #define UTILS_SGLN_MAX_CNT 64
 
 typedef enum UtilsSingletonId_e {
-    UTILS_SGLN_BASE           = 0,
+    UTILS_SGLN_BASE         = 0,
     /* utils module */
-    UTILS_SGLN_ENC_ARGS       = UTILS_SGLN_BASE,
+    UTILS_SGLN_ENC_ARGS     = UTILS_SGLN_BASE,
+    UTILS_SGLN_ENC_FRM_CFG,
 } UtilsSingletonId;
 
 #define UTILS_SINGLETON(id, name, init, deinit) \
