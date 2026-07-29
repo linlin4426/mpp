@@ -25,3 +25,6 @@ add_kmpp_test(kmpp_venc)
 # kmpp vdec unit test
 add_kmpp_test(kmpp_vdec)
 
+# mpp_enc_frm_cfg objdef + JSON round-trip test
+add_kmpp_test(mpp_enc_frm_cfg)
+

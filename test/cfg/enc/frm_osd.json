@@ -1,0 +1,12 @@
+{
+    "frame_idx" : 1,
+    "userdata"  : 0,
+    "userdatas" : 0,
+    "repeat"    : 10,
+    "roi_cnt"   : 0,
+    "osd_cnt"   : 2,
+    "osd" : [
+        { "enable" : 1, "fmt" : 1, "lt_x" : 0,   "lt_y" : 0,  "rb_x" : 320, "rb_y" : 240, "stride" : 320 },
+        { "enable" : 1, "fmt" : 1, "lt_x" : 320, "lt_y" : 240, "rb_x" : 640, "rb_y" : 480, "stride" : 320 }
+    ]
+}
