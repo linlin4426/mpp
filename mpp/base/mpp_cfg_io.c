@@ -2040,7 +2040,7 @@ static rk_s32 store_vla_complex(MppCfgIoImpl *parent, MppCfgIoImpl *elem)
         rk_s32 init_cnt = VLA_INIT_CNT;
         void **elems_buf = NULL;
 
-        elems_buf = mpp_calloc_size(void *, init_cnt);
+        elems_buf = mpp_calloc(void *, init_cnt);
         if (!elems_buf) {
             mpp_loge_f("vla %-16s calloc elems_buf failed\n", parent->name);
             return rk_nok;
