@@ -632,7 +632,7 @@ rk_s32 kmpp_objdef_register(KmppObjDef *def, rk_s32 priv_size, rk_s32 size, cons
     impl->name = buf;
     impl->priv_size = MPP_ALIGN(priv_size, sizeof(void *));
     impl->entry_size = size;
-    impl->buf_size = size + sizeof(KmppObjImpl);
+    impl->buf_size = size;
     impl->ref_cnt = 1;
 
     INIT_LIST_HEAD(&impl->list_used);
@@ -1371,19 +1371,12 @@ rk_s32 kmpp_obj_resize(KmppObj obj, rk_s32 vla_size, const char *caller)
     }
 
     /* base_size = entry struct + flags, vla_size = variable-length data after flags */
-    base_size = def->entry_size + kmpp_obj_to_flags_size(obj);
+    if (def->flex_entry)
+        base_size = def->buf_size;
+    else
+        base_size = def->entry_size + kmpp_obj_to_flags_size(obj);
+
     buf_size = base_size + vla_size;
-
-    /* skip realloc if existing buffer is large enough */
-    if (buf_size <= impl->entry_buf_size) {
-        obj_dbg_flow("flex obj %-16s resize skip %d <= %d at %s\n",
-                     def->name, buf_size, impl->entry_buf_size, caller);
-
-        if (def->resize)
-            def->resize(impl->entry, impl, caller);
-
-        return rk_ok;
-    }
 
     if (impl->shm) {
         /* shm-backed obj: ioctl resize via kmpp_ioc_call (no obj alloc).
@@ -1414,8 +1407,20 @@ rk_s32 kmpp_obj_resize(KmppObj obj, rk_s32 vla_size, const char *caller)
     } else {
         /* local flex entry: realloc entry buffer, handle stays stable */
         rk_s32 old_buf_size = impl->entry_buf_size;
-        void *new_entry = mpp_realloc_size(impl->entry, rk_u8, buf_size);
+        void *new_entry = NULL;
 
+        /* skip realloc if existing buffer is large enough */
+        if (buf_size <= impl->entry_buf_size) {
+            obj_dbg_flow("flex obj %-16s resize skip %d <= %d at %s\n",
+                         def->name, buf_size, impl->entry_buf_size, caller);
+
+            if (def->resize)
+                def->resize(impl->entry, impl, caller);
+
+            return rk_ok;
+        }
+
+        new_entry = mpp_realloc_size(impl->entry, rk_u8, buf_size);
         if (!new_entry) {
             mpp_loge_f("obj %s resize entry to %d failed at %s\n",
                        def->name, buf_size, caller);
