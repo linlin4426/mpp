@@ -30,14 +30,14 @@
     ENTRY(prefix, s32,  rk_s32,     st_cfg_cnt,     FLAG_INCR,      st_cfg_cnt) \
     ENTRY(prefix, s32,  rk_s32,     max_tlayers,    FLAG_INCR,      max_tlayers) \
     ENTRY(prefix, s32,  rk_s32,     ready,          FLAG_INCR,      ready) \
-    ARRAY_START_FLEX_CNT_OFF(st_cfg, MppEncRefStFrmCfg, FLAG_INCR,  st_cfg_cnt, st_cfg_off) \
+    ARRAY_START_FLEX_CNT_OFF(st_cfg, MppEncRefStFrmCfg, FLAG_INCR,  st_cfg_cap, st_cfg_off) \
     ARRAY_ENTRY(s32,                is_non_ref,     FLAG_PREV,      is_non_ref) \
     ARRAY_ENTRY(s32,                temporal_id,    FLAG_PREV,      temporal_id) \
     ARRAY_ENTRY(s32,                ref_mode,       FLAG_PREV,      ref_mode) \
     ARRAY_ENTRY(s32,                ref_arg,        FLAG_PREV,      ref_arg) \
     ARRAY_ENTRY(s32,                repeat,         FLAG_PREV,      repeat) \
     ARRAY_END(st_cfg) \
-    ARRAY_START_FLEX_CNT_OFF(lt_cfg, MppEncRefLtFrmCfg, FLAG_INCR,  lt_cfg_cnt, lt_cfg_off) \
+    ARRAY_START_FLEX_CNT_OFF(lt_cfg, MppEncRefLtFrmCfg, FLAG_INCR,  lt_cfg_cap, lt_cfg_off) \
     ARRAY_ENTRY(s32,                lt_idx,         FLAG_PREV,      lt_idx) \
     ARRAY_ENTRY(s32,                temporal_id,    FLAG_PREV,      temporal_id) \
     ARRAY_ENTRY(s32,                ref_mode,       FLAG_PREV,      ref_mode) \
@@ -98,7 +98,8 @@ static rk_s32 mpp_enc_ref_cfg_impl_resize(void *entry, KmppObj obj,
 
     /* relocate lt cfg data when offset shifts */
     {
-        rk_s32 move_cnt = MPP_MIN(cfg->lt_cfg_cnt, cfg->new_lt_cfg_cap);
+        rk_s32 old_lt_cfg_cap = cfg->lt_cfg_cap;
+        rk_s32 move_cnt = MPP_MIN3(cfg->lt_cfg_cnt, cfg->new_lt_cfg_cap, old_lt_cfg_cap);
 
         if (old_lt_off && cfg->lt_cfg_off != old_lt_off && move_cnt > 0)
             memmove((char *)cfg + cfg->lt_cfg_off, (char *)cfg + old_lt_off,
