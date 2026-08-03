@@ -63,6 +63,9 @@ void mpp_venc_kcfg_show(MppVencKcfg cfg);
 void *mpp_venc_ctrl_flex_base(MppVencKcfg ctrl);
 MPP_RET mpp_venc_ctrl_set_flex(MppVencKcfg ctrl, const void *data, RK_U32 size);
 
+/* ref_cfg kobj ioctl: dispatch "check" to kernel */
+MPP_RET kmpp_venc_ref_cfg_check(MppVencKcfg ref);
+
 #ifdef __cplusplus
 }
 #endif

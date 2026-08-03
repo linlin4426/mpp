@@ -350,6 +350,9 @@ MPP_RET mpp_enc_ref_cfg_check(MppEncRefCfg ref)
     if (!ref)
         return MPP_ERR_VALUE;
 
+    if (kmpp_obj_is_kobj((KmppObj)ref))
+        return kmpp_venc_ref_cfg_check((MppVencKcfg)ref);
+
     MppEncRefCfgImpl *p = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref);
     RK_S32 lt_cfg_cnt = p->lt_cfg_cnt;
     RK_S32 st_cfg_cnt = p->st_cfg_cnt;

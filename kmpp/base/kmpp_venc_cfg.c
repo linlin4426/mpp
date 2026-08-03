@@ -35,6 +35,7 @@ typedef struct KmppVencKcfgInfo_t  {
 
 static RK_U32 venc_kcfg_debug = 0;
 static KmppObjDef kcfg_defs[MPP_VENC_KCFG_TYPE_BUTT] = {NULL};
+static rk_s32 ref_cfg_check_cmd = -1;
 
 static rk_s32 kcfg_ctrl_cache_init(void *entry, KmppObj obj, const char *caller);
 
@@ -81,6 +82,12 @@ static void mpp_venc_kcfg_def_init(void)
         }
 
         kcfg_defs[i] = def;
+    }
+
+    if (kcfg_defs[MPP_VENC_KCFG_TYPE_REF_CFG]) {
+        KmppObjDef def = kcfg_defs[MPP_VENC_KCFG_TYPE_REF_CFG];
+
+        ref_cfg_check_cmd = kmpp_objdef_get_cmd(def, "check");
     }
 }
 
@@ -246,4 +253,12 @@ MPP_RET mpp_venc_ctrl_set_flex(MppVencKcfg ctrl, const void *data, RK_U32 size)
     }
 
     return MPP_NOK;
+}
+
+rk_s32 kmpp_venc_ref_cfg_check(MppVencKcfg ref)
+{
+    if (ref_cfg_check_cmd < 0 || !ref)
+        return rk_nok;
+
+    return kmpp_obj_ioctl_f((KmppObj)ref, ref_cfg_check_cmd, NULL, NULL);
 }
