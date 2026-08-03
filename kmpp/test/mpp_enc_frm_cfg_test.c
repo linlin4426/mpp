@@ -283,7 +283,7 @@ static rk_s32 test_multi(rk_s32 n, char **paths)
             TEST_PASS("apply %s ok", paths[i]);
             obj[i] = o;
             entry_ptrs[i] = (const MppEncFrmCfg *)kmpp_obj_to_entry(o);
-            strncpy(names[i], name, sizeof(names[i]) - 1);
+            snprintf(names[i], sizeof(names[i]), "%s", name);
         }
 
         munmap(buf, size);
