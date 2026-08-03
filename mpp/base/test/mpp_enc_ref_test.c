@@ -283,11 +283,11 @@ static rk_s32 test_vla_api(void)
     MPP_ASSERT_FALSEm("pos_get lt_cfg:0:lt_idx", _mpp_ret);
     MPP_ASSERT_EQm("lt_cfg:0:lt_idx", 5, val);
 
-    /* 5. out of range: st_cfg:3:is_non_ref, cnt=3 (should fail) */
+    /* 5. out of range: st_cfg, cap=4 (should fail) */
     kmpp_obj_pos_init(&pos);
     {
-        rk_s32 ret_seek = kmpp_obj_pos_seek(obj, &pos, "st_cfg", 3);
-        MPP_ASSERTm("pos_seek st_cfg 3 should fail (out of range)", ret_seek);
+        rk_s32 ret_seek = kmpp_obj_pos_seek(obj, &pos, "st_cfg", 4);
+        MPP_ASSERTm("pos_seek st_cfg 4 should fail (out of range)", ret_seek);
     }
 
     mpp_logi("test_vla_api success\n");
