@@ -1015,6 +1015,54 @@ rk_s32 mpp_trie_get_entry(MppTrie trie, MppTrieStatus *st,
     return index >= 0 ? MPP_TRIE_SUBROOT : MPP_TRIE_LEAF;
 }
 
+rk_s32 mpp_trie_for_each_entry(MppTrie trie, MppTrieInfoCb cb, void *ctx)
+{
+    MppTrieImpl *p = (MppTrieImpl *)trie;
+    char *base;
+    rk_s32 i;
+
+    if (!p || !cb)
+        return rk_nok;
+
+    base = p->info_buf ? (char *)p->info_buf : (char *)p->nodes;
+
+    for (i = 0; i < p->node_used; i++) {
+        MppTrieNode *n = &p->nodes[i];
+
+        if (i && !n->idx)
+            continue;
+
+        if (n->id < 0)
+            continue;
+
+        MppTrieInfo *info = (MppTrieInfo *)(base + n->id);
+        const char *name = mpp_trie_info_name(info);
+        void *data = mpp_trie_info_ctx(info);
+
+        if (mpp_trie_info_is_self(info))
+            continue;
+
+        rk_s32 walk;
+        rk_s32 subroot = 0;
+
+        if (n->sub_root) {
+            subroot = n->idx;
+        } else if (mpp_trie_get_node_at(p->nodes, 0, name) != n) {
+            walk = n->idx;
+            while (walk > 0 && !p->nodes[walk].sub_root)
+                walk = p->nodes[walk].prev;
+
+            if (walk > 0)
+                subroot = walk;
+        }
+
+        if (cb(name, data, subroot, ctx))
+            return rk_nok;
+    }
+
+    return rk_ok;
+}
+
 rk_s32 mpp_trie_get_node_count(MppTrie trie)
 {
     MppTrieImpl *p = (MppTrieImpl *)trie;

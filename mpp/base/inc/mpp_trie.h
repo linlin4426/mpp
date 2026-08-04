@@ -152,6 +152,27 @@ MppTrieInfo *mpp_trie_get_info_from_root(void *root, const char *name);
 rk_s32 mpp_trie_add_entry(MppTrie trie, MppTrieStatus *st, const char *name, KmppEntry *entry);
 rk_s32 mpp_trie_get_entry(MppTrie trie, MppTrieStatus *st, const char *name, KmppEntry *entry);
 
+/*
+ * mpp_trie_for_each_entry - iterate every node carrying an info payload.
+ *
+ * The callback receives:
+ * name     - info name string (single segment for subroot children,
+ *            full colon-path for top-level / struct fields)
+ * info     - pointer to the info's context data (mpp_trie_info_ctx).
+ *            Typed as void* since the payload type is caller-defined
+ *            (KmppEntry for objdef fields, but other types for self-info).
+ * subroot  - node index of the nearest sub_root ancestor, or 0 if none.
+ *            A non-zero value means this entry lives under a VLA/array
+ *            subroot; zero means it is a top-level or struct field
+ *            addressable by its full path from the trie root.
+ * ctx      - opaque caller context.
+ *
+ * Returning non-zero from the callback aborts the iteration.
+ * Self-describing info nodes (names starting with "__") are skipped.
+ */
+typedef rk_s32 (*MppTrieInfoCb)(const char *name, void *info, rk_s32 subroot, void *ctx);
+rk_s32 mpp_trie_for_each_entry(MppTrie trie, MppTrieInfoCb cb, void *ctx);
+
 void mpp_trie_dump(MppTrie trie, const char *func);
 #define mpp_trie_dump_f(trie)   mpp_trie_dump(trie, __FUNCTION__)
 
