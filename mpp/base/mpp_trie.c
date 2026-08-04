@@ -1043,6 +1043,13 @@ rk_s32 mpp_trie_get_name_max(MppTrie trie)
     return (p) ? p->info_name_max : 0;
 }
 
+const char *mpp_trie_get_name(MppTrie trie)
+{
+    MppTrieImpl *p = (MppTrieImpl *)trie;
+
+    return (p) ? p->name : NULL;
+}
+
 void *mpp_trie_get_node_root(MppTrie trie)
 {
     MppTrieImpl *p = (MppTrieImpl *)trie;

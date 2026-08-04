@@ -93,6 +93,7 @@ rk_s32 mpp_trie_get_node_count(MppTrie trie);
 rk_s32 mpp_trie_get_info_count(MppTrie trie);
 rk_s32 mpp_trie_get_buf_size(MppTrie trie);
 rk_s32 mpp_trie_get_name_max(MppTrie trie);
+const char *mpp_trie_get_name(MppTrie trie);
 void *mpp_trie_get_node_root(MppTrie trie);
 
 static inline const char *mpp_trie_info_name(MppTrieInfo *info)
