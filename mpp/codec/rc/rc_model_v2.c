@@ -1309,8 +1309,8 @@ MPP_RET check_re_enc(RcModelV2Ctx *ctx, EncRcTaskInfo *cfg)
     RK_S32 ret = MPP_OK;
 
     rc_dbg_func("enter %p\n", ctx);
-    rc_dbg_rc("reenc check target_bps %d last_ins_bps %d ins_bps %d",
-              usr_cfg->bps_target, last_ins_bps, ins_bps);
+    rc_dbg_rc("reenc check target_bps %d last_ins_bps %d ins_bps %d frm_bit_real %d",
+              usr_cfg->bps_target, last_ins_bps, ins_bps, cfg->bit_real);
 
     if (ctx->reenc_cnt >= usr_cfg->max_reencode_times)
         return MPP_OK;
@@ -1809,10 +1809,9 @@ MPP_RET rc_model_v2_end(void *ctx, EncRcTask *task)
     if (usr_cfg->mode == RC_FIXQP)
         goto DONE;
 
-    rc_dbg_rc("motion_level %u, complex_level %u\n", cfg->motion_level, cfg->complex_level);
     mpp_data_update_v2(p->motion_level, cfg->motion_level);
     mpp_data_update_v2(p->complex_level, cfg->complex_level);
-    cfg->rt_bits = p->ins_bps;
+
     p->last_inst_bps = p->ins_bps;
     p->first_frm_flg = 0;
 
@@ -1822,6 +1821,10 @@ MPP_RET rc_model_v2_end(void *ctx, EncRcTask *task)
         bit_statics_update(p, cfg->bit_real);
     }
 
+    rc_dbg_rc("motion_level %u, complex_level %u rt_bits %d\n\n",
+              cfg->motion_level, cfg->complex_level, p->ins_bps);
+
+    cfg->rt_bits = p->ins_bps;
     p->gop_frm_cnt++;
     p->gop_qp_sum += p->start_qp;
 
