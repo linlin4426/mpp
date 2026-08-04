@@ -87,6 +87,8 @@ rk_s32 mpp_cfg_get_val(MppCfgObj obj, MppCfgType type, MppCfgVal *val);
 void mpp_cfg_dump(MppCfgObj obj, const char *func);
 #define mpp_cfg_dump_f(obj) mpp_cfg_dump(obj, __FUNCTION__)
 
+/* reconstruct a cfg tree from a trie (root named by the trie's name) */
+MppCfgObj mpp_cfg_from_trie(MppTrie trie);
 /* mark all MppCfgObject ready and build trie for string access */
 MppTrie mpp_cfg_to_trie(MppCfgObj obj);
 

@@ -72,6 +72,21 @@ typedef enum MppCfgParserType_e {
 typedef struct MppCfgIoImpl_t MppCfgIoImpl;
 typedef void (*MppCfgIoFunc)(MppCfgIoImpl *obj, void *data);
 
+/*
+ * cfg node tree roles: data trees keep fields in child, template trees keep
+ * them in detail.
+ *
+ *   data tree (child)                      template tree (detail)
+ *   +----------------------------+         +-----------------------------+
+ *   | mpp_cfg_from_string parse  |         | objdef macro-built cfg_root |
+ *   | hand-built via mpp_cfg_add |         | mpp_cfg_from_trie output    |
+ *   |                            |         |                             |
+ *   | used by: mpp_cfg_to_string |         | used by: apply / extract    |
+ *   | (serialize)                |         | read_struct walks detail    |
+ *   |                            |         | type_find_child walks       |
+ *   +----------------------------+         |   child then detail         |
+ *                                          +-----------------------------+
+ */
 struct MppCfgIoImpl_t {
     /* list for bothers */
     struct list_head        list;
@@ -192,6 +207,57 @@ static rk_u32 sizeof_type(MppCfgType type)
     return sizes[type];
 }
 
+static ElemType mpp_cfg_type_to_elem_type(MppCfgType type)
+{
+    static const ElemType elem_types[MPP_CFG_TYPE_BUTT + 1] = {
+        [MPP_CFG_TYPE_INVALID] = ELEM_TYPE_BUTT,
+        [MPP_CFG_TYPE_NULL]    = ELEM_TYPE_BUTT,
+        [MPP_CFG_TYPE_BOOL]    = ELEM_TYPE_BUTT,
+        [MPP_CFG_TYPE_s8]      = ELEM_TYPE_s8,
+        [MPP_CFG_TYPE_u8]      = ELEM_TYPE_u8,
+        [MPP_CFG_TYPE_s16]     = ELEM_TYPE_s16,
+        [MPP_CFG_TYPE_u16]     = ELEM_TYPE_u16,
+        [MPP_CFG_TYPE_s32]     = ELEM_TYPE_s32,
+        [MPP_CFG_TYPE_u32]     = ELEM_TYPE_u32,
+        [MPP_CFG_TYPE_s64]     = ELEM_TYPE_s64,
+        [MPP_CFG_TYPE_u64]     = ELEM_TYPE_u64,
+        [MPP_CFG_TYPE_f32]     = ELEM_TYPE_BUTT,
+        [MPP_CFG_TYPE_f64]     = ELEM_TYPE_BUTT,
+        [MPP_CFG_TYPE_STRING]  = ELEM_TYPE_BUTT,
+        [MPP_CFG_TYPE_RAW]     = ELEM_TYPE_BUTT,
+        [MPP_CFG_TYPE_OBJECT]  = ELEM_TYPE_BUTT,
+        [MPP_CFG_TYPE_ARRAY]   = ELEM_TYPE_arr,
+        [MPP_CFG_TYPE_BUTT]    = ELEM_TYPE_BUTT,
+    };
+
+    if (type < 0 || type > MPP_CFG_TYPE_BUTT)
+        type = MPP_CFG_TYPE_BUTT;
+
+    return elem_types[type];
+}
+
+MppCfgType mpp_cfg_type_from_elem_type(ElemType type)
+{
+    static const MppCfgType cfg_types[ELEM_TYPE_BUTT] = {
+        [ELEM_TYPE_s32] = MPP_CFG_TYPE_s32,
+        [ELEM_TYPE_u32] = MPP_CFG_TYPE_u32,
+        [ELEM_TYPE_s64] = MPP_CFG_TYPE_s64,
+        [ELEM_TYPE_u64] = MPP_CFG_TYPE_u64,
+        [ELEM_TYPE_arr] = MPP_CFG_TYPE_ARRAY,
+        [ELEM_TYPE_s8]  = MPP_CFG_TYPE_s8,
+        [ELEM_TYPE_u8]  = MPP_CFG_TYPE_u8,
+        [ELEM_TYPE_s16] = MPP_CFG_TYPE_s16,
+        [ELEM_TYPE_u16] = MPP_CFG_TYPE_u16,
+    };
+
+    if (type < 0 || type >= ELEM_TYPE_BUTT)
+        return MPP_CFG_TYPE_BUTT;
+
+    /* unmapped entries default to MPP_CFG_TYPE_INVALID (0), which behaves the
+     * same as BUTT for callers (both fail the valid-type range check) */
+    return cfg_types[type];
+}
+
 static void mpp_cfg_set_flag(void *st, rk_u32 flag_offset)
 {
     rk_u32 *flag_ptr = (rk_u32 *)((rk_u8 *)st + (((rk_u32)flag_offset & ~31U) / 8));
@@ -226,8 +292,10 @@ static rk_s32 get_full_name(MppCfgIoImpl *obj, char *buf, rk_s32 buf_size)
     while (curr && curr->parent) {
         /* skip the root */
         if (curr->name) {
-            /* Add delimiter on object */
-            if (curr->type >= MPP_CFG_TYPE_OBJECT)
+            /* Add delimiter on object / array only when it has a named
+             * descendant already in the stack, so leaf arrays (simple arrays
+             * with unnamed elements) do not end up with a trailing ':' */
+            if (i > 0 && curr->type >= MPP_CFG_TYPE_OBJECT)
                 name[i++] = delmiter;
 
             name[i++] = curr->name;
@@ -735,40 +803,246 @@ rk_s32 mpp_cfg_find(MppCfgObj *obj, MppCfgObj root, char *name, rk_s32 type)
     return rk_ok;
 }
 
-MppCfgType mpp_cfg_type_from_elem_type(ElemType type)
+static rk_s32 mpp_cfg_lookup(MppCfgObj *obj, MppCfgObj root, const char *name)
 {
-    switch (type) {
-    case ELEM_TYPE_s8 : {
-        return MPP_CFG_TYPE_s8;
-    } break;
-    case ELEM_TYPE_u8 : {
-        return MPP_CFG_TYPE_u8;
-    } break;
-    case ELEM_TYPE_s16 : {
-        return MPP_CFG_TYPE_s16;
-    } break;
-    case ELEM_TYPE_u16 : {
-        return MPP_CFG_TYPE_u16;
-    } break;
-    case ELEM_TYPE_s32 : {
-        return MPP_CFG_TYPE_s32;
-    } break;
-    case ELEM_TYPE_u32 : {
-        return MPP_CFG_TYPE_u32;
-    } break;
-    case ELEM_TYPE_s64 : {
-        return MPP_CFG_TYPE_s64;
-    } break;
-    case ELEM_TYPE_u64 : {
-        return MPP_CFG_TYPE_u64;
-    } break;
-    case ELEM_TYPE_arr : {
-        return MPP_CFG_TYPE_ARRAY;
-    } break;
-    default : {
-        return MPP_CFG_TYPE_BUTT;
-    } break;
+    MppCfgIoImpl *impl = (MppCfgIoImpl *)root;
+    MppCfgIoImpl *pos, *n;
+
+    if (!obj || !root || !name) {
+        mpp_loge_f("invalid param obj %p root %p name %s\n", obj, root, name);
+        return rk_nok;
     }
+
+    *obj = NULL;
+
+    list_for_each_entry_safe(pos, n, &impl->child, MppCfgIoImpl, list) {
+        if (pos->name && !strcmp(pos->name, name)) {
+            *obj = pos;
+            return rk_ok;
+        }
+    }
+
+    list_for_each_entry_safe(pos, n, &impl->detail, MppCfgIoImpl, list) {
+        if (pos->name && !strcmp(pos->name, name)) {
+            *obj = pos;
+            return rk_ok;
+        }
+    }
+
+    return rk_nok;
+}
+
+#define CFG_ARRAY_MIN     8
+
+typedef struct CfgArraySlot_t {
+    rk_s32          subroot;
+    MppCfgObj       node;
+} CfgArraySlot;
+
+typedef struct CfgFromTrieCtx_t {
+    MppCfgObj       root;
+
+    rk_s32          path_len;
+    char            *path;
+
+    rk_s32          array_cnt;
+    rk_s32          array_cap;
+    CfgArraySlot    *arrays;
+} CfgFromTrieCtx;
+
+static MppCfgObj cfg_get_path_node(MppCfgObj root, char *path)
+{
+    MppCfgObj cur = root;
+    char *seg = path;
+    char *next;
+
+    while (seg && *seg) {
+        MppCfgObj found = NULL;
+
+        next = strchr(seg, ':');
+        if (next)
+            *next = '\0';
+
+        if (mpp_cfg_lookup(&found, cur, seg) || !found) {
+            if (mpp_cfg_get_object(&found, seg, MPP_CFG_TYPE_OBJECT, NULL))
+                return NULL;
+
+            mpp_cfg_add_detail(cur, found);
+        }
+
+        cur = found;
+        if (next)
+            *next = ':';
+
+        seg = next ? next + 1 : NULL;
+    }
+
+    return cur;
+}
+
+static rk_s32 cfg_prepare_path(CfgFromTrieCtx *c, rk_s32 len)
+{
+    char *path = c->path;
+    rk_s32 path_len = c->path_len;
+    rk_s32 new_len;
+
+    if (path && len < path_len)
+        return rk_ok;
+
+    new_len = path_len ? path_len * 2 : 128;
+    while (new_len <= len)
+        new_len *= 2;
+
+    path = mpp_realloc(c->path, char, new_len);
+
+    if (!path)
+        return rk_nok;
+
+    c->path = path;
+    c->path_len = new_len;
+
+    return rk_ok;
+}
+
+/* split name into the parent path and leaf segment, creating missing parents */
+static rk_s32 cfg_split_path(CfgFromTrieCtx *c, const char *name,
+                             MppCfgObj *parent, const char **leaf)
+{
+    char *path;
+    char *seg;
+
+    if (cfg_prepare_path(c, strlen(name))) {
+        mpp_loge_f("name %s too long to buffer\n", name);
+        return rk_nok;
+    }
+
+    /* path is stable after cfg_prepare_path */
+    path = c->path;
+    strcpy(path, name);
+
+    *parent = c->root;
+    seg = strrchr(path, ':');
+    if (seg) {
+        *seg = '\0';
+        *parent = cfg_get_path_node(c->root, path);
+        if (!*parent)
+            return rk_nok;
+        *leaf = seg + 1;
+    } else {
+        *leaf = path;
+    }
+
+    return rk_ok;
+}
+
+/* find-or-create the array node for a subroot index */
+static MppCfgObj cfg_get_array(CfgFromTrieCtx *c, rk_s32 subroot,
+                               const char *name, KmppEntry *entry)
+{
+    CfgArraySlot *array = c->arrays;
+    MppCfgObj parent;
+    MppCfgObj obj;
+    const char *leaf;
+    rk_s32 cnt = c->array_cnt;
+    rk_s32 i;
+
+    for (i = 0; i < cnt; i++) {
+        if (array[i].subroot == subroot)
+            return array[i].node;
+    }
+
+    if (cnt >= c->array_cap) {
+        rk_s32 new_cap = c->array_cap ? c->array_cap * 2 : CFG_ARRAY_MIN;
+
+        array = mpp_realloc(c->arrays, CfgArraySlot, new_cap);
+        if (!array)
+            return NULL;
+
+        c->arrays = array;
+        c->array_cap = new_cap;
+    }
+
+    if (cfg_split_path(c, name, &parent, &leaf))
+        return NULL;
+
+    if (mpp_cfg_get_array(&obj, leaf))
+        return NULL;
+
+    /* VLA element type is not in the trie; conversion only reads entry/vla */
+    mpp_cfg_set_vla(obj, entry, MPP_CFG_TYPE_OBJECT);
+    mpp_cfg_add_detail(parent, obj);
+
+    array[cnt].subroot = subroot;
+    array[cnt].node = obj;
+    c->array_cnt = cnt + 1;
+
+    return obj;
+}
+
+/* create a leaf cfg node with the given entry, attached under parent */
+static rk_s32 cfg_add_leaf(MppCfgObj parent, const char *leaf, KmppEntry *entry)
+{
+    MppCfgObj obj = NULL;
+
+    if (mpp_cfg_get_object(&obj, leaf, MPP_CFG_TYPE_OBJECT, NULL))
+        return rk_nok;
+
+    mpp_cfg_set_entry(obj, entry);
+    mpp_cfg_add_detail(parent, obj);
+
+    return rk_ok;
+}
+
+static rk_s32 cfg_build_cb(const char *name, void *info, rk_s32 subroot, void *arg)
+{
+    CfgFromTrieCtx *c = (CfgFromTrieCtx *)arg;
+    KmppEntry *entry = (KmppEntry *)info;
+    MppCfgObj parent;
+    const char *leaf;
+
+    /* subroot entries belong to a vla: the vla node or its element fields */
+    if (subroot) {
+        parent = cfg_get_array(c, subroot, name, entry);
+        if (!parent)
+            return rk_nok;
+
+        if (entry->type == ENTRY_TYPE_VLA_INFO)
+            return rk_ok;   /* vla node itself, element fields attach later */
+
+        leaf = name;
+    } else if (cfg_split_path(c, name, &parent, &leaf)) {
+        return rk_nok;
+    }
+
+    return cfg_add_leaf(parent, leaf, entry);
+}
+
+MppCfgObj mpp_cfg_from_trie(MppTrie trie)
+{
+    const char *name = mpp_trie_get_name(trie);
+    CfgFromTrieCtx c;
+    rk_s32 ret;
+
+    if (!name)
+        return NULL;
+
+    memset(&c, 0, sizeof(c));
+
+    if (mpp_cfg_get_object(&c.root, name, MPP_CFG_TYPE_OBJECT, NULL))
+        return NULL;
+
+    ret = mpp_trie_for_each_entry(trie, cfg_build_cb, &c);
+
+    MPP_FREE(c.arrays);
+    MPP_FREE(c.path);
+
+    if (ret) {
+        mpp_loge_f("build cfg from trie %s failed\n", name);
+        mpp_cfg_put_all(c.root);
+        return NULL;
+    }
+
+    return c.root;
 }
 
 rk_s32 mpp_cfg_set_entry(MppCfgObj obj, KmppEntry *entry)
@@ -868,20 +1142,61 @@ rk_s32 mpp_cfg_set_vla(MppCfgObj obj, KmppEntry *entry, MppCfgType type)
     return rk_nok;
 }
 
-typedef struct MppCfgFullNameCtx_t {
+typedef struct CfgToTrieCtx_t {
     MppTrie trie;
     char *buf;
     rk_s32 buf_size;
-} MppCfgFullNameCtx;
+} CfgToTrieCtx;
 
-static void add_obj_info(MppCfgIoImpl *impl, void *data)
+/* register a cfg node into the trie, mirroring the objdef macro layout */
+static void add_obj_info_loop(MppCfgIoImpl *impl, CfgToTrieCtx *ctx, rk_s32 vla_root)
 {
-    /* NOTE: skip the root object and the invalid object */
-    if (impl->entry.tbl.elem_type < ELEM_TYPE_BUTT && impl->parent) {
-        MppCfgFullNameCtx *ctx = (MppCfgFullNameCtx *)data;
+    MppCfgIoImpl *pos, *n;
 
-        get_full_name(impl, ctx->buf, ctx->buf_size);
-        mpp_trie_add_info(ctx->trie, ctx->buf, &impl->entry, sizeof(impl->entry));
+    if (impl->type > MPP_CFG_TYPE_INVALID && impl->type < MPP_CFG_TYPE_BUTT &&
+        impl->parent && impl->name) {
+        KmppEntry *entry;
+        KmppEntry e = { .val = 0 };
+
+        if (impl->vla.vla.type == ENTRY_TYPE_VLA_INFO) {
+            entry = &impl->vla;
+        } else if (impl->entry.tbl.elem_type < ELEM_TYPE_BUTT) {
+            entry = &impl->entry;
+        } else {
+            /* hand-built / parsed nodes carry no entry: synthesize one */
+            e.tbl.type = ENTRY_TYPE_LOC_TBL;
+            e.tbl.elem_type = mpp_cfg_type_to_elem_type(impl->type);
+            e.tbl.elem_size = (rk_u16)sizeof_type(impl->type);
+            entry = &e;
+        }
+
+        if (vla_root) {
+            MppTrieStatus st = { .root_idx = vla_root };
+
+            mpp_trie_add_entry(ctx->trie, &st, impl->name, entry);
+            if (entry->type == ENTRY_TYPE_VLA_INFO)
+                vla_root = st.node_idx;
+        } else {
+            get_full_name(impl, ctx->buf, ctx->buf_size);
+
+            if (entry->type == ENTRY_TYPE_VLA_INFO) {
+                MppTrieStatus st = { .root_idx = 0 };
+
+                mpp_trie_add_entry(ctx->trie, &st, ctx->buf, entry);
+                vla_root = st.node_idx;
+            } else {
+                mpp_trie_add_info(ctx->trie, ctx->buf, entry, sizeof(KmppEntry));
+            }
+        }
+    }
+
+    /* detail first (objdef macro trees), then child (hand-built trees) */
+    list_for_each_entry_safe(pos, n, &impl->detail, MppCfgIoImpl, list) {
+        add_obj_info_loop(pos, ctx, vla_root);
+    }
+
+    list_for_each_entry_safe(pos, n, &impl->child, MppCfgIoImpl, list) {
+        add_obj_info_loop(pos, ctx, vla_root);
     }
 }
 
@@ -891,7 +1206,7 @@ MppTrie mpp_cfg_to_trie(MppCfgObj obj)
     MppTrie p = NULL;
 
     do {
-        MppCfgFullNameCtx ctx;
+        CfgToTrieCtx ctx;
         rk_s32 ret = rk_nok;
         char name[256];
 
@@ -921,7 +1236,9 @@ MppTrie mpp_cfg_to_trie(MppCfgObj obj)
         ctx.buf = name;
         ctx.buf_size = sizeof(name) - 1;
 
-        loop_all_children(impl, add_obj_info, &ctx);
+        /* data trees keep fields in child, template trees (objdef cfg_roots)
+         * keep them in detail - walk both so to_trie works on either */
+        add_obj_info_loop(impl, &ctx, 0);
         mpp_trie_add_info(p, NULL, NULL, 0);
         impl->trie = p;
     } while (0);
