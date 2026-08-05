@@ -11,21 +11,15 @@
 
 #include <string.h>
 #include <math.h>
-#include "rk_mpi.h"
-#include "rk_venc_kcfg.h"
+#include "mpp_enc_ref.h"
 
-#include "mpp_env.h"
 #include "mpp_mem.h"
 #include "mpp_time.h"
 #include "mpp_debug.h"
 #include "mpp_common.h"
 #include "mpp_soc.h"
 
-#include "utils.h"
 #include "mpi_enc_utils.h"
-#include "camera_source.h"
-#include "mpp_enc_roi_utils.h"
-#include "mpp_rc_api.h"
 #include "osd3_test.h"
 #include "kmpp_obj.h"
 
@@ -605,6 +599,20 @@ void *enc_test(void *arg)
     if (ret) {
         mpp_err_f("test mpp setup failed ret %d\n", ret);
         goto MPP_TEST_OUT;
+    }
+
+    if (cmd->gop_mode || cmd->file_ref_cfg) {
+        MppEncRefCfg ref = NULL;
+
+        ret = mpp_enc_ref_cfg_create(&ref, cmd->kmpp_mode);
+        if (ref) {
+            ret = mpi_enc_ref_cfg_setup(p, cmd, ref);
+
+            mpp_enc_ref_cfg_deinit(&ref);
+
+            if (ret)
+                mpp_err_f("set ref cfg failed ret %d\n", ret);
+        }
     }
 
     t_s = mpp_time();
