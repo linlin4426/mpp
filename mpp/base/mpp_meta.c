@@ -276,7 +276,7 @@ static void mpp_meta_srv_init()
         rk_s32 impl_size = sizeof(MppMetaVal) * meta_key_count;
 
         kmpp_objdef_register(&mpp_meta_def, sizeof(MppMetaPriv),
-                             impl_size, "MppMeta");
+                             impl_size, "MppMeta", 0);
         if (mpp_meta_def) {
             kmpp_objdef_add_init(mpp_meta_def, mpp_meta_impl_init);
             kmpp_objdef_add_deinit(mpp_meta_def, mpp_meta_impl_deinit);

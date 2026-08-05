@@ -28,9 +28,9 @@
 
 typedef struct KmppVencKcfgInfo_t  {
     const char      *name;
-    rk_s32          cache_en;
     KmppObjInit     cache_init;
     KmppObjInit     cache_deinit;
+    rk_u32          flags;
 } KmppVencKcfgInfo;
 
 static RK_U32 venc_kcfg_debug = 0;
@@ -40,14 +40,16 @@ static rk_s32 ref_cfg_check_cmd = -1;
 static rk_s32 kcfg_ctrl_cache_init(void *entry, KmppObj obj, const char *caller);
 
 KmppVencKcfgInfo kcfg_info[MPP_VENC_KCFG_TYPE_BUTT] = {
-    [MPP_VENC_KCFG_TYPE_INIT]       = { "KmppVencInitCfg",   0, NULL, NULL },
-    [MPP_VENC_KCFG_TYPE_DEINIT]     = { "KmppVencDeinitCfg", 0, NULL, NULL },
-    [MPP_VENC_KCFG_TYPE_RESET]      = { "KmppVencResetCfg",  0, NULL, NULL },
-    [MPP_VENC_KCFG_TYPE_START]      = { "KmppVencStartCfg",  0, NULL, NULL },
-    [MPP_VENC_KCFG_TYPE_STOP]       = { "KmppVencStopCfg",   0, NULL, NULL },
-    [MPP_VENC_KCFG_TYPE_ST_CFG]     = { "KmppVencStCfg",     0, NULL, NULL },
-    [MPP_VENC_KCFG_TYPE_REF_CFG]    = { "KmppVencRefCfg",    0, NULL, NULL },
-    [MPP_VENC_KCFG_TYPE_CTRL_CFG]   = { "KmppVencCtrlCfg",   1, kcfg_ctrl_cache_init, NULL },
+    [MPP_VENC_KCFG_TYPE_INIT]       = { "KmppVencInitCfg",   NULL, NULL, KMPP_OBJDEF_HIERARCHY },
+    [MPP_VENC_KCFG_TYPE_DEINIT]     = { "KmppVencDeinitCfg", NULL, NULL, 0 },
+    [MPP_VENC_KCFG_TYPE_RESET]      = { "KmppVencResetCfg",  NULL, NULL, 0 },
+    [MPP_VENC_KCFG_TYPE_START]      = { "KmppVencStartCfg",  NULL, NULL, 0 },
+    [MPP_VENC_KCFG_TYPE_STOP]       = { "KmppVencStopCfg",   NULL, NULL, 0 },
+    [MPP_VENC_KCFG_TYPE_ST_CFG]     = { "KmppVencStCfg",     NULL, NULL, KMPP_OBJDEF_HIERARCHY },
+    [MPP_VENC_KCFG_TYPE_REF_CFG]    = { "KmppVencRefCfg",    NULL, NULL, KMPP_OBJDEF_HIERARCHY },
+    [MPP_VENC_KCFG_TYPE_CTRL_CFG]   = {
+        "KmppVencCtrlCfg",   kcfg_ctrl_cache_init, NULL, KMPP_OBJDEF_HIERARCHY | KMPP_OBJDEF_CACHED
+    },
 };
 
 static rk_s32 kcfg_ctrl_cache_init(void *entry, KmppObj obj, const char *caller)
@@ -72,9 +74,8 @@ static void mpp_venc_kcfg_def_init(void)
         KmppVencKcfgInfo *info = &kcfg_info[i];
         KmppObjDef def = NULL;
 
-        kmpp_objdef_get(&def, 0, info->name);
-        if (def && info->cache_en) {
-            kmpp_objdef_set_prop(def, "cached", 1);
+        kmpp_objdef_get(&def, 0, info->name, info->flags);
+        if (def && (info->flags & KMPP_OBJDEF_CACHED)) {
             if (info->cache_init)
                 kmpp_objdef_add_cache_init(def, info->cache_init);
             if (info->cache_deinit)

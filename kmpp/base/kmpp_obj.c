@@ -157,6 +157,8 @@ typedef struct KmppObjDefImpl_t {
 
     /* properties */
     rk_s32 disable_mismatch_log;
+    /* objdef flags, see KMPP_OBJDEF_* */
+    rk_u32 flags;
 
     rk_s32              cached;         /* objdef uses put-to-cache instead of deinit */
     KmppObjInit         cache_init;     /* optional: called on cache hit (get) */
@@ -398,6 +400,11 @@ static void kmpp_objs_deinit(void)
                 impl->pool = NULL;
             }
 
+            if (impl->cfg) {
+                mpp_cfg_put_all(impl->cfg);
+                impl->cfg = NULL;
+            }
+
             if (impl->trie) {
                 mpp_trie_deinit(impl->trie);
                 impl->trie = NULL;
@@ -590,6 +597,11 @@ rk_s32 kmpp_objdef_put(KmppObjDef def)
                 impl->pool = NULL;
             }
 
+            if (impl->cfg) {
+                mpp_cfg_put_all(impl->cfg);
+                impl->cfg = NULL;
+            }
+
             if (impl->trie) {
                 mpp_trie_deinit(impl->trie);
                 impl->trie = NULL;
@@ -605,7 +617,8 @@ rk_s32 kmpp_objdef_put(KmppObjDef def)
     return ret;
 }
 
-rk_s32 kmpp_objdef_register(KmppObjDef *def, rk_s32 priv_size, rk_s32 size, const char *name)
+rk_s32 kmpp_objdef_register(KmppObjDef *def, rk_s32 priv_size, rk_s32 size,
+                            const char *name, rk_u32 flags)
 {
     KmppObjDefImpl *impl = NULL;
     rk_s32 name_len;
@@ -634,6 +647,10 @@ rk_s32 kmpp_objdef_register(KmppObjDef *def, rk_s32 priv_size, rk_s32 size, cons
     impl->entry_size = size;
     impl->buf_size = size;
     impl->ref_cnt = 1;
+    impl->flags = flags;
+    impl->flex_entry = (flags & KMPP_OBJDEF_FLEX_ENTRY) ? 1 : 0;
+    impl->cached = (flags & KMPP_OBJDEF_CACHED) ? 1 : 0;
+    impl->disable_mismatch_log = (flags & KMPP_OBJDEF_MISMATCH_LOG_DISABLE) ? 1 : 0;
 
     INIT_LIST_HEAD(&impl->list_used);
     INIT_LIST_HEAD(&impl->list_unused);
@@ -710,7 +727,7 @@ static rk_s32 create_objdef_mem_pool(KmppObjDefImpl *impl)
     return impl->pool ? rk_ok : rk_nok;
 }
 
-rk_s32 kmpp_objdef_get(KmppObjDef *def, rk_s32 priv_size, const char *name)
+rk_s32 kmpp_objdef_get(KmppObjDef *def, rk_s32 priv_size, const char *name, rk_u32 flags)
 {
     KmppObjDefImpl *impl = NULL;
 
@@ -726,6 +743,13 @@ rk_s32 kmpp_objdef_get(KmppObjDef *def, rk_s32 priv_size, const char *name)
 
     mpp_assert(impl);
     impl->priv_size = priv_size;
+    impl->flags = flags;
+    impl->cached = (flags & KMPP_OBJDEF_CACHED) ? 1 : 0;
+    impl->disable_mismatch_log = (flags & KMPP_OBJDEF_MISMATCH_LOG_DISABLE) ? 1 : 0;
+    /* build cfg_root for hierarchy objdefs so cfg<->struct conversions on
+     * kobj use the kernel struct layout offsets */
+    if ((flags & KMPP_OBJDEF_HIERARCHY) && !impl->cfg)
+        impl->cfg = mpp_cfg_from_trie(impl->trie);
     create_objdef_mem_pool(impl);
     if (impl->ref_cnt)
         mpp_logw_f("objdef %-16s already get ref %d\n", name, impl->ref_cnt);
@@ -892,28 +916,6 @@ rk_s32 kmpp_objdef_add_cache_deinit(KmppObjDef def, KmppObjDeinit cache_deinit)
         impl->cache_deinit = cache_deinit;
         return rk_ok;
     }
-    return rk_nok;
-}
-
-rk_s32 kmpp_objdef_set_prop(KmppObjDef def, const char *op, rk_s32 value)
-{
-    if (def && op) {
-        KmppObjDefImpl *impl = (KmppObjDefImpl *)def;
-
-        if (!strcmp(op, "disable_mismatch_log")) {
-            impl->disable_mismatch_log = (value != 0) ? 1 : 0;
-        } else if (!strcmp(op, "flex_entry")) {
-            impl->flex_entry = (value != 0) ? 1 : 0;
-        } else if (!strcmp(op, "cached")) {
-            impl->cached = (value != 0) ? 1 : 0;
-        } else {
-            mpp_loge_f("unknown property %s value %d\n", op, value);
-            return rk_nok;
-        }
-
-        return rk_ok;
-    }
-
     return rk_nok;
 }
 

@@ -509,12 +509,28 @@ KMPP_OBJ_ENTRY_TABLE(KMPP_OBJ_NAME, VAL_ENTRY_TBL, VAL_ENTRY_TBL,
 static void CONCAT_US(KMPP_OBJ_NAME, register)(void)
 {
     rk_u32 once __maybe_unused = 1;
+    rk_u32 flags = 0;
 
     mpp_env_get_u32(TO_STR(CONCAT_US(KMPP_OBJ_NAME, debug)), &KMPP_OBJ_DEF_DEUBG(KMPP_OBJ_NAME), 0);
 
+    /* objdef flags for kmpp_objdef_get() / kmpp_objdef_register() */
+#ifdef KMPP_OBJ_HIERARCHY_ENABLE
+    flags |= KMPP_OBJDEF_HIERARCHY;
+#endif
+#ifdef KMPP_OBJ_FLEX_ENTRY_ENABLE
+    flags |= KMPP_OBJDEF_FLEX_ENTRY;
+#endif
+#ifdef KMPP_OBJ_CACHE_ENABLE
+    flags |= KMPP_OBJDEF_CACHED;
+#endif
+#ifdef KMPP_OBJ_MISMATCH_LOG_DISABLE
+    flags |= KMPP_OBJDEF_MISMATCH_LOG_DISABLE;
+#endif
+
     KMPP_OBJ_DBG_LOG("register enter\n");
 
-    kmpp_objdef_get(&KMPP_OBJ_DEF(KMPP_OBJ_NAME), KMPP_OBJ_PRIV_SIZE, TO_STR(KMPP_OBJ_INTF_TYPE));
+    kmpp_objdef_get(&KMPP_OBJ_DEF(KMPP_OBJ_NAME), KMPP_OBJ_PRIV_SIZE,
+                    TO_STR(KMPP_OBJ_INTF_TYPE), flags);
     if (KMPP_OBJ_DEF(KMPP_OBJ_NAME)) {
         KMPP_OBJ_DBG_LOG(TO_STR(KMPP_OBJ_NAME) " found at kernel\n");
     } else {
@@ -526,7 +542,7 @@ static void CONCAT_US(KMPP_OBJ_NAME, register)(void)
         rk_s32 __flag_record[ELEM_FLAG_RECORD_MAX] __maybe_unused;
 
         kmpp_objdef_register(&KMPP_OBJ_DEF(KMPP_OBJ_NAME), KMPP_OBJ_PRIV_SIZE,
-                             impl_size, TO_STR(KMPP_OBJ_INTF_TYPE));
+                             impl_size, TO_STR(KMPP_OBJ_INTF_TYPE), flags);
 
         if (!KMPP_OBJ_DEF(KMPP_OBJ_NAME)) {
             mpp_loge_f(TO_STR(KMPP_OBJ_NAME) " init failed\n");
@@ -537,9 +553,6 @@ static void CONCAT_US(KMPP_OBJ_NAME, register)(void)
 
         KMPP_OBJ_ENTRY_TABLE(KMPP_OBJ_NAME, ENTRY_TO_TRIE, ENTRY_TO_TRIE,
                              ENTRY_TO_TRIE, ENTRY_TO_TRIE, ENTRY_TO_TRIE)
-#if defined(KMPP_OBJ_FLEX_ENTRY_ENABLE)
-        kmpp_objdef_set_prop(KMPP_OBJ_DEF(KMPP_OBJ_NAME), "flex_entry", 1);
-#endif
         kmpp_objdef_add_entry(KMPP_OBJ_DEF(KMPP_OBJ_NAME), 0, NULL, NULL);
         once = 0;
 
@@ -548,13 +561,6 @@ static void CONCAT_US(KMPP_OBJ_NAME, register)(void)
         return;
 #endif
     }
-
-#if defined(KMPP_OBJ_MISMATCH_LOG_DISABLE)
-    kmpp_objdef_set_prop(KMPP_OBJ_DEF(KMPP_OBJ_NAME), "disable_mismatch_log", 1);
-#endif
-#if defined(KMPP_OBJ_CACHE_ENABLE)
-    kmpp_objdef_set_prop(KMPP_OBJ_DEF(KMPP_OBJ_NAME), "cached", 1);
-#endif
 
     KMPP_OBJ_ENTRY_TABLE(KMPP_OBJ_NAME, ENTRY_QUERY, ENTRY_QUERY,
                          HOOK_QUERY, HOOK_QUERY, ENTRY_NOTHING);

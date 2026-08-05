@@ -213,14 +213,13 @@ static void kmpp_meta_init(void)
 
     INIT_LIST_HEAD(&srv->list);
     srv->meta_id = 1;
-    kmpp_objdef_get(&srv->def, sizeof(KmppMetaPriv), "KmppMeta");
+    kmpp_objdef_get(&srv->def, sizeof(KmppMetaPriv), "KmppMeta",
+                    KMPP_OBJDEF_MISMATCH_LOG_DISABLE);
     if (!srv->def) {
         kmeta_dbg_func("kmpp meta get objdef failed\n");
         MPP_FREE(srv);
         return;
     }
-
-    kmpp_objdef_set_prop(srv->def, "disable_mismatch_log", 1);
 
     kmpp_objdef_add_init(srv->def, kmpp_meta_impl_init);
     kmpp_objdef_add_deinit(srv->def, kmpp_meta_impl_deinit);

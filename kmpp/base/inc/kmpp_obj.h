@@ -42,6 +42,16 @@
 
 #include "mpp_internal.h"
 
+/* objdef flags for kmpp_objdef_get() / kmpp_objdef_register() */
+/* keep cfg tree for cfg<->struct conversion */
+#define KMPP_OBJDEF_HIERARCHY             (1 << 0)
+/* split entry allocation (userspace-registered defs) */
+#define KMPP_OBJDEF_FLEX_ENTRY            (1 << 1)
+/* put-to-cache instead of deinit */
+#define KMPP_OBJDEF_CACHED                (1 << 2)
+/* disable mismatch log */
+#define KMPP_OBJDEF_MISMATCH_LOG_DISABLE  (1 << 3)
+
 typedef rk_s32 (*KmppObjInit)(void *entry, KmppObj obj, const char *caller);
 typedef rk_s32 (*KmppObjDeinit)(void *entry, KmppObj obj, const char *caller);
 typedef rk_s32 (*KmppObjPreset)(void *entry, KmppObj obj, const char *val, const char *caller);
@@ -53,9 +63,10 @@ extern "C" {
 #endif
 
 /* userspace objdef register */
-rk_s32 kmpp_objdef_register(KmppObjDef *def, rk_s32 priv_size, rk_s32 size, const char *name);
+rk_s32 kmpp_objdef_register(KmppObjDef *def, rk_s32 priv_size, rk_s32 size,
+                            const char *name, rk_u32 flags);
 /* kernel objdef query from /dev/kmpp_objs */
-rk_s32 kmpp_objdef_get(KmppObjDef *def, rk_s32 priv_size, const char *name);
+rk_s32 kmpp_objdef_get(KmppObjDef *def, rk_s32 priv_size, const char *name, rk_u32 flags);
 /* find kernel objdef by name */
 rk_s32 kmpp_objdef_find(KmppObjDef *def, const char *name);
 /* kernel objdef from /dev/kmpp_objs reduce refcnt */
@@ -81,8 +92,6 @@ rk_s32 kmpp_objdef_add_resize(KmppObjDef def, KmppObjResizeCb resize);
 /* cached objdef callbacks: cache_init on get-hit, cache_deinit on put-return */
 rk_s32 kmpp_objdef_add_cache_init(KmppObjDef def, KmppObjInit cache_init);
 rk_s32 kmpp_objdef_add_cache_deinit(KmppObjDef def, KmppObjDeinit cache_deinit);
-
-rk_s32 kmpp_objdef_set_prop(KmppObjDef def, const char *op, rk_s32 value);
 
 rk_s32 kmpp_objdef_get_entry(KmppObjDef def, const char *name, KmppEntry **tbl);
 rk_s32 kmpp_objdef_get_offset(KmppObjDef def, const char *name);

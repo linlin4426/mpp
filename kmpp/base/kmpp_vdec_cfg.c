@@ -40,12 +40,17 @@ static char *kcfg_names[] = {
 };
 static KmppObjDef kcfg_defs[MPP_VDEC_KCFG_TYPE_BUTT] = {NULL};
 
+/* objdef flags, see KMPP_OBJDEF_* */
+static rk_u32 kcfg_flags[MPP_VDEC_KCFG_TYPE_BUTT] = {
+    [MPP_VDEC_KCFG_TYPE_INIT]   = KMPP_OBJDEF_HIERARCHY,
+};
+
 static void mpp_vdec_kcfg_def_init(void)
 {
     RK_U32 i;
 
     for (i = 0; i < MPP_VDEC_KCFG_TYPE_BUTT; i++) {
-        kmpp_objdef_get(&kcfg_defs[i], 0, kcfg_names[i]);
+        kmpp_objdef_get(&kcfg_defs[i], 0, kcfg_names[i], kcfg_flags[i]);
     }
 }
 

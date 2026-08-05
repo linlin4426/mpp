@@ -640,7 +640,10 @@ MPP_RET mpp_enc_ref_cfg_apply(MppEncRefCfg ref, MppCfgStrFmt fmt, char *buf)
     if (!ref || !buf)
         return MPP_NOK;
 
-    root = kmpp_objdef_get_cfg_root(mpp_enc_ref_cfg_def);
+    /* use the obj's own objdef so kobj entries carry kernel-layout offsets */
+    root = kmpp_objdef_get_cfg_root(kmpp_obj_to_objdef((KmppObj)ref));
+    if (!root)
+        root = kmpp_objdef_get_cfg_root(mpp_enc_ref_cfg_def);
     impl = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref);
 
     if (mpp_cfg_from_string(&obj, fmt, buf) || !obj) {
@@ -727,7 +730,9 @@ MPP_RET mpp_enc_ref_cfg_extract(MppEncRefCfg ref, MppCfgStrFmt fmt, char **buf)
     *buf = NULL;
 
     impl = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref);
-    root = kmpp_objdef_get_cfg_root(mpp_enc_ref_cfg_def);
+    root = kmpp_objdef_get_cfg_root(kmpp_obj_to_objdef((KmppObj)ref));
+    if (!root)
+        root = kmpp_objdef_get_cfg_root(mpp_enc_ref_cfg_def);
 
     ret = mpp_cfg_from_struct(&obj, root, impl);
     if (ret || !obj) {

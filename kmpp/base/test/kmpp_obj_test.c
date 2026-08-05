@@ -295,15 +295,13 @@ static rk_s32 kmpp_obj_resize_test(const char *name, rk_u32 flag)
     rk_s32 i;
     (void)name;
 
-    /* register objdef with split mode */
-    ret = kmpp_objdef_register(&def, 0, sizeof(KmppObjResizeTest), "resize_test");
+    /* register objdef with split mode (flex entry for resize support) */
+    ret = kmpp_objdef_register(&def, 0, sizeof(KmppObjResizeTest),
+                               "resize_test", KMPP_OBJDEF_FLEX_ENTRY);
     if (ret || !def) {
         mpp_log("kmpp_objdef_register resize_test failed ret %d\n", ret);
         goto done;
     }
-
-    /* enable flexible entry for resize support */
-    kmpp_objdef_set_prop(def, "flex_entry", 1);
 
     /* register resize callback */
     kmpp_objdef_add_resize(def, resize_test_impl_resize);
@@ -591,13 +589,13 @@ static rk_s32 kmpp_obj_vla_test(const char *name, rk_u32 flag)
     (void)flag;
 
     /* 1. register objdef */
-    ret = kmpp_objdef_register(&def, 0, sizeof(VlaTestTop), "vla_test");
+    ret = kmpp_objdef_register(&def, 0, sizeof(VlaTestTop),
+                               "vla_test", KMPP_OBJDEF_FLEX_ENTRY);
     if (ret || !def) {
         mpp_log("vla_test register failed ret %d\n", ret);
         goto done;
     }
 
-    kmpp_objdef_set_prop(def, "flex_entry", 1);
     kmpp_objdef_add_resize(def, vla_test_resize);
 
     /* 2. add trie entries */
