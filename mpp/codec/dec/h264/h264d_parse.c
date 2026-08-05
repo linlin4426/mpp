@@ -739,7 +739,14 @@ MPP_RET parse_prepare(H264dInputCtx_t *p_Inp, H264dCurCtx_t *p_Cur)
         p_strm->prefixdata = (p_strm->prefixdata << 8) | (*p_strm->curdata);
         if (p_strm->startcode_found) {
             if (p_strm->nalu_len >= p_strm->nalu_max_size) {
-                FUN_CHECK(ret = realloc_buffer(&p_strm->nalu_buf, &p_strm->nalu_max_size, NALU_BUF_ADD_SIZE));
+                RK_U32 new_size = p_strm->nalu_max_size;
+                RK_U32 add_size;
+
+                while (new_size <= p_strm->nalu_len) {
+                    new_size *= 2;
+                }
+                add_size = new_size - p_strm->nalu_max_size;
+                FUN_CHECK(ret = realloc_buffer(&p_strm->nalu_buf, &p_strm->nalu_max_size, add_size));
             }
             p_strm->nalu_buf[p_strm->nalu_len++] = *p_strm->curdata;
             if ((p_strm->nalu_len == NALU_TYPE_NORMAL_LENGTH)
