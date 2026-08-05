@@ -32,8 +32,9 @@ extern RK_U8 venc_test_uuid[16];
 /* Set USER_DATA test pattern into frame meta (single buffer variant). */
 MPP_RET kmpp_venc_gen_userdata(KmppMeta meta, RK_U8 *ud_buf, RK_U32 ud_buf_size);
 
-/* Set USER_DATAS test pattern into frame meta (uuid + data). */
-MPP_RET kmpp_venc_gen_userdatas(KmppMeta meta, RK_U8 *ud_buf, RK_U32 ud_buf_size);
+/* Set USER_DATAS into frame meta (uuid + data). */
+MPP_RET kmpp_venc_gen_userdatas(KmppMeta meta, const RK_U8 *uuid,
+                                RK_U8 *ud_buf, RK_U32 ud_buf_size);
 
 /*
  * Set ROI regions from stable config — converts MppEncFrmRoi

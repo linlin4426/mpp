@@ -1318,6 +1318,8 @@ typedef struct __attribute__((packed, aligned(4))) MppEncUserDataShm_t {
     KmppShmPtr          data;
 } MppEncUserDataShm;
 
+#define MPP_ENC_USER_DATA_UUID_LEN  (16)
+
 typedef struct __attribute__((packed, aligned(4))) MppEncUserDataFullShm_t {
     RK_U32              len;
     KmppShmPtr          uuid;

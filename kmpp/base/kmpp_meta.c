@@ -615,7 +615,7 @@ static rk_s32 meta_flex_data_len(void *val, rk_s32 is_usr_datas)
             MppEncUserDataFullShm *e = &uds->data[i];
 
             if (e->uuid.uptr)
-                sum += strlen((const char *)e->uuid.uptr) + 1;
+                sum += MPP_ENC_USER_DATA_UUID_LEN;
             sum += e->len;
         }
 
@@ -754,11 +754,9 @@ static rk_s32 meta_flex_set_var(KmppMeta meta, void *entry, KmppEntry *tbl,
 
                 entries[i].len = e->len;
                 if (e->uuid.uptr) {
-                    rk_s32 uuid_len = strlen((const char *)e->uuid.uptr) + 1;
-
                     entries[i].uuid.uaddr = (rk_u64)(uintptr_t)ptr;
-                    memcpy(ptr, e->uuid.uptr, uuid_len);
-                    ptr += uuid_len;
+                    memcpy(ptr, e->uuid.uptr, MPP_ENC_USER_DATA_UUID_LEN);
+                    ptr += MPP_ENC_USER_DATA_UUID_LEN;
                 } else {
                     entries[i].uuid.uaddr = 0;
                 }

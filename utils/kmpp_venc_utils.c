@@ -125,11 +125,12 @@ MPP_RET kmpp_venc_gen_userdata(KmppMeta meta, RK_U8 *ud_buf, RK_U32 ud_buf_size)
     return MPP_OK;
 }
 
-MPP_RET kmpp_venc_gen_userdatas(KmppMeta meta, RK_U8 *ud_buf, RK_U32 ud_buf_size)
+MPP_RET kmpp_venc_gen_userdatas(KmppMeta meta, const RK_U8 *uuid,
+                                RK_U8 *ud_buf, RK_U32 ud_buf_size)
 {
     MPP_ENC_UDS1(uds_s);
     MppEncUserDataFullShm *entry = uds_s.set.data;
-    rk_u8 uuid_buf[] = "test-uuid";
+    RK_U8 uuid_buf[MPP_ENC_USER_DATA_UUID_LEN];
 
     if (!meta)
         return MPP_ERR_NULL_PTR;
@@ -137,11 +138,14 @@ MPP_RET kmpp_venc_gen_userdatas(KmppMeta meta, RK_U8 *ud_buf, RK_U32 ud_buf_size
     memset(&uds_s, 0, sizeof(uds_s));
     uds_s.set.count = 1;
     entry->len = ud_buf_size;
-    entry->uuid.uptr = uuid_buf;
+    if (uuid) {
+        memcpy(uuid_buf, uuid, sizeof(uuid_buf));
+        entry->uuid.uptr = uuid_buf;
+    }
     entry->data.uptr = ud_buf;
 
     kmpp_meta_set_ptr(meta, KEY_USER_DATAS, &uds_s.set);
-    venc_utils_dbg("set KEY_USER_DATAS\n");
+    venc_utils_dbg("set KEY_USER_DATAS len %d\n", ud_buf_size);
 
     return MPP_OK;
 }
@@ -295,7 +299,8 @@ MPP_RET kmpp_venc_gen_frame_meta(KmppMeta meta, RK_U32 w, RK_U32 h,
     mpp_env_get_u32("kmpp_venc_utils_debug", &venc_utils_debug, 0);
 
     if (entry->userdatas)
-        kmpp_venc_gen_userdatas(meta, entry->ud_buf, entry->ud_buf_size);
+        kmpp_venc_gen_userdatas(meta, entry->ud_uuid,
+                                entry->ud_buf, entry->ud_buf_size);
 
     if (entry->userdata)
         kmpp_venc_gen_userdata(meta, entry->ud_buf, entry->ud_buf_size);

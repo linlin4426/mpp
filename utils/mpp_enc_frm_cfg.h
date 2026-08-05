@@ -79,6 +79,7 @@ typedef struct MppEncFrmCfg_t {
     rk_s32  new_osd_cap;
     rk_s32  osd_cap;
 
+    rk_u8   *ud_uuid;
     rk_u8   *ud_buf;
     rk_u32  ud_buf_size;
 } MppEncFrmCfg;
