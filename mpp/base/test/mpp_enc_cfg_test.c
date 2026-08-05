@@ -10,6 +10,7 @@
 #include "mpp_test.h"
 
 #include "rk_venc_cfg.h"
+#include "rk_venc_kcfg.h"
 #include "mpp_enc_cfg.h"
 #include "mpp_cfg_io.h"
 
@@ -333,6 +334,71 @@ done:
     return _mpp_ret;
 }
 
+/*
+ * test_kobj_roundtrip — verify apply/extract on a kernel-backed cfg object.
+ *
+ * Unlike the user-space cfg used by other cases, a kobj's entry lives in kernel
+ * shared memory (KmppVencStCfg layout).  If mpp_enc_cfg_apply/extract use the
+ * user-space objdef's cfg_root (MppEncCfgSet layout), the field offsets mismatch
+ * and the round-trip corrupts data.  This case exposes that.
+ */
+MPP_TEST(test_kobj_roundtrip)
+{
+    MPP_RET_VARS;
+    TestCtx *tc = (TestCtx *)ctx;
+    rk_u32 flag = tc->flag;
+    MppEncCfg kcfg = NULL;
+    char *buf = NULL;
+    rk_s32 mode_before = 0;
+    rk_s32 bps_before = 0;
+    rk_s32 mode_after = 0;
+    rk_s32 bps_after = 0;
+    rk_s32 ret;
+
+    /* create a kernel-backed st_cfg object */
+    ret = mpp_venc_kcfg_init((MppVencKcfg *)&kcfg, MPP_VENC_KCFG_TYPE_ST_CFG);
+    if (ret || !kcfg) {
+        mpp_logi("kobj path skipped (no kmpp st_cfg objdef)\n");
+        MPP_PASS();
+    }
+    MPP_ASSERT(kcfg != NULL);
+
+    /* seed via ioctl-backed accessors (kernel-correct offsets) */
+    mpp_enc_cfg_set_s32(kcfg, "rc:mode", 7);
+    mpp_enc_cfg_set_s32(kcfg, "rc:bps_target", 654321);
+
+    mpp_enc_cfg_get_s32(kcfg, "rc:mode", &mode_before);
+    mpp_enc_cfg_get_s32(kcfg, "rc:bps_target", &bps_before);
+    MPP_VERBOSE(flag, "kobj before: rc:mode=%d bps_target=%d\n", mode_before, bps_before);
+
+    /* extract to JSON — uses cfg_root, may read wrong offsets on kobj */
+    ret = mpp_enc_cfg_extract(kcfg, MPP_CFG_STR_FMT_JSON, &buf);
+    MPP_ASSERT(ret == 0 && buf != NULL);
+    MPP_VERBOSE(flag, "kobj extracted JSON:\n%s\n", buf);
+
+    /* perturb, then restore from the saved JSON via apply */
+    mpp_enc_cfg_set_s32(kcfg, "rc:mode", 0);
+    mpp_enc_cfg_set_s32(kcfg, "rc:bps_target", 0);
+
+    ret = mpp_enc_cfg_apply(kcfg, MPP_CFG_STR_FMT_JSON, buf);
+    MPP_FREE(buf);
+    MPP_ASSERT(!ret);
+
+    mpp_enc_cfg_get_s32(kcfg, "rc:mode", &mode_after);
+    mpp_enc_cfg_get_s32(kcfg, "rc:bps_target", &bps_after);
+    MPP_VERBOSE(flag, "kobj after restore: rc:mode=%d (expect %d) bps_target=%d (expect %d)\n",
+                mode_after, mode_before, bps_after, bps_before);
+
+    MPP_ASSERT_EQ(mode_before, mode_after);
+    MPP_ASSERT_EQ(bps_before, bps_after);
+
+    MPP_PASS();
+done:
+    if (kcfg)
+        mpp_enc_cfg_deinit(kcfg);
+    return _mpp_ret;
+}
+
 static rk_s32 test_apply_from_file(MppEncCfg cfg, rk_u32 flag, const char *path)
 {
     FILE *f;
@@ -406,6 +472,7 @@ static MppTestCase test_cases[] = {
     { "apply array (qbias)",       MPP_FLAG_VERBOSE, 1, test_apply_qbias    },
     { "roundtrip extract/apply",   MPP_FLAG_VERBOSE, 2, test_roundtrip      },
     { "JSON string apply",         MPP_FLAG_VERBOSE, 2, test_json_string    },
+    { "kobj roundtrip",            MPP_FLAG_VERBOSE, 2, test_kobj_roundtrip },
 };
 
 int main(int argc, char *argv[])

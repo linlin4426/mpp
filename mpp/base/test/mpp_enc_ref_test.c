@@ -27,6 +27,7 @@
 #include "mpp_cfg_io.h"
 #include "mpp_enc_ref.h"
 #include "mpp_internal.h"
+#include "rk_venc_kcfg.h"
 
 extern KmppObjDef mpp_enc_ref_cfg_objdef(void);
 
@@ -758,6 +759,72 @@ done:
     return _mpp_ret;
 }
 
+/*
+ * test_ref_cfg_kobj — verify JSON apply + check on both kernel and
+ * user-space ref_cfg objects.  Kernel path uses ioctl dispatch to
+ * kernel; user-space path uses local struct access.
+ */
+static rk_s32 test_ref_cfg_kobj(void)
+{
+    const char *json =
+        "{ \"keep_cpb\" : 0, \"st_cfg_cnt\" : 5, \"lt_cfg_cnt\" : 0,"
+        "  \"st_cfg\" : ["
+        "    { \"is_non_ref\": 0, \"temporal_id\": 0, \"ref_mode\": 4, \"ref_arg\": 0, \"repeat\": 0 },"
+        "    { \"is_non_ref\": 1, \"temporal_id\": 2, \"ref_mode\": 0, \"ref_arg\": 0, \"repeat\": 0 },"
+        "    { \"is_non_ref\": 0, \"temporal_id\": 1, \"ref_mode\": 0, \"ref_arg\": 0, \"repeat\": 0 },"
+        "    { \"is_non_ref\": 1, \"temporal_id\": 2, \"ref_mode\": 0, \"ref_arg\": 0, \"repeat\": 0 },"
+        "    { \"is_non_ref\": 0, \"temporal_id\": 0, \"ref_mode\": 4, \"ref_arg\": 0, \"repeat\": 0 }"
+        "  ],"
+        "  \"lt_cfg\" : [] }";
+    rk_s32 ret = MPP_OK;
+
+    mpp_logi("test_ref_cfg_kobj start\n");
+
+    /* path 1: kernel-side ref_cfg (ioctl check to kernel) */
+    {
+        MppEncRefCfg kref = NULL;
+
+        if (!mpp_venc_kcfg_init((MppVencKcfg *)&kref,
+                                MPP_VENC_KCFG_TYPE_REF_CFG) && kref) {
+            rk_s32 r = mpp_enc_ref_cfg_apply(kref, MPP_CFG_STR_FMT_JSON,
+                                             (char *)json);
+            if (!r)
+                r = kmpp_venc_ref_cfg_check((MppVencKcfg)kref);
+            mpp_enc_ref_cfg_deinit(&kref);
+            if (r) {
+                mpp_loge_f("kernel check FAILED\n");
+                ret = MPP_NOK;
+            } else {
+                mpp_logi("kernel check ok\n");
+            }
+        } else {
+            mpp_logi("kernel path skipped (no kmpp)\n");
+        }
+    }
+
+    /* path 2: user-space ref_cfg (local check) */
+    {
+        MppEncRefCfg uref = NULL;
+
+        mpp_enc_ref_cfg_init(&uref);
+        if (!uref) {
+            mpp_loge_f("create uref failed\n");
+            return MPP_NOK;
+        }
+
+        if (mpp_enc_ref_cfg_apply(uref, MPP_CFG_STR_FMT_JSON, (char *)json) ||
+            mpp_enc_ref_cfg_check(uref)) {
+            mpp_loge_f("mpp check FAILED\n");
+            ret = MPP_NOK;
+        } else {
+            mpp_logi("mpp check ok\n");
+        }
+        mpp_enc_ref_cfg_deinit(&uref);
+    }
+
+    return ret;
+}
+
 int main(void)
 {
     MPP_RET ret = MPP_OK;
@@ -803,6 +870,10 @@ int main(void)
         goto done;
 
     ret = test_cfg_roundtrip();
+    if (ret)
+        goto done;
+
+    ret = test_ref_cfg_kobj();
     if (ret)
         goto done;
 

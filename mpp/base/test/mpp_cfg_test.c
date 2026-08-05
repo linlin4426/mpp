@@ -16,6 +16,8 @@
 #include "mpp_debug.h"
 
 #include "mpp_cfg_io.h"
+#include "mpp_trie.h"
+#include "kmpp_obj.h"
 
 #define RUN_AND_CHECK(_tag, _call) do { \
         ret = (_call);                    \
@@ -357,6 +359,305 @@ static rk_s32 test_nested_array(MppCfgObj root)
 DONE:
     if (inner_array)
         mpp_cfg_put_all(inner_array);
+    return ret;
+}
+
+/*
+ * Build a tree the way objdef macros do: every field carries a KmppEntry
+ * (mpp_cfg_set_entry) and every array carries a VLA entry (mpp_cfg_set_vla).
+ * This is the "simple objdef" shape mpp_cfg_to_trie / mpp_cfg_from_trie are
+ * designed for, before dealing with hand-built (entry-less) trees.
+ */
+static rk_s32 test_trie_entryful(MppCfgObj *root_out)
+{
+    MppCfgObj root = NULL;
+    MppCfgObj obj = NULL;
+    MppCfgObj array = NULL;
+    KmppEntry e;
+    MppCfgVal val;
+    rk_s32 ret = rk_nok;
+    rk_s32 i;
+
+    mpp_logi("test trie entryful build\n");
+
+    ret = mpp_cfg_get_object(&root, NULL, MPP_CFG_TYPE_OBJECT, NULL);
+    if (ret)
+        goto DONE;
+
+    /* scalar fields with entries */
+    ret = mpp_cfg_get_object(&obj, "width", MPP_CFG_TYPE_s32, NULL);
+    if (ret)
+        goto DONE;
+    e.val = 0;
+    e.tbl.type = ENTRY_TYPE_LOC_TBL;
+    e.tbl.elem_type = ELEM_TYPE_s32;
+    e.tbl.elem_size = sizeof(rk_s32);
+    mpp_cfg_set_entry(obj, &e);
+    mpp_cfg_add(root, obj);
+    obj = NULL;
+
+    ret = mpp_cfg_get_object(&obj, "height", MPP_CFG_TYPE_u32, NULL);
+    if (ret)
+        goto DONE;
+    e.val = 0;
+    e.tbl.type = ENTRY_TYPE_LOC_TBL;
+    e.tbl.elem_type = ELEM_TYPE_u32;
+    e.tbl.elem_size = sizeof(rk_u32);
+    mpp_cfg_set_entry(obj, &e);
+    mpp_cfg_add(root, obj);
+    obj = NULL;
+
+    /* nested struct with entries */
+    ret = mpp_cfg_get_object(&obj, "prep", MPP_CFG_TYPE_OBJECT, NULL);
+    if (ret)
+        goto DONE;
+    {
+        MppCfgObj sub = NULL;
+
+        ret = mpp_cfg_get_object(&sub, "width", MPP_CFG_TYPE_s32, NULL);
+        if (ret)
+            goto DONE;
+        e.val = 0;
+        e.tbl.type = ENTRY_TYPE_LOC_TBL;
+        e.tbl.elem_type = ELEM_TYPE_s32;
+        e.tbl.elem_size = sizeof(rk_s32);
+        mpp_cfg_set_entry(sub, &e);
+        mpp_cfg_add(obj, sub);
+    }
+    mpp_cfg_add(root, obj);
+    obj = NULL;
+
+    /* simple array with vla entry */
+    ret = mpp_cfg_get_array(&array, "values");
+    if (ret)
+        goto DONE;
+    e.val = 0;
+    e.vla.type = ENTRY_TYPE_VLA_INFO;
+    e.vla.elem_size = sizeof(rk_s32);
+    e.vla.elem_count = 4;
+    ret = mpp_cfg_set_vla(array, &e, MPP_CFG_TYPE_s32);
+    if (ret)
+        goto DONE;
+    for (i = 0; i < 4; i++) {
+        val.s32 = i * 10;
+        ret = mpp_cfg_vla_add_raw(array, i, &val);
+        if (ret)
+            goto DONE;
+    }
+    mpp_cfg_add(root, array);
+    array = NULL;
+
+    *root_out = root;
+    root = NULL;
+    ret = rk_ok;
+
+DONE:
+    if (root)
+        mpp_cfg_put_all(root);
+    if (array)
+        mpp_cfg_put_all(array);
+
+    return ret;
+}
+
+/* real objdef getters built by the objdef macros (declared in .c) */
+extern KmppObjDef mpp_enc_ref_cfg_objdef(void);
+extern KmppObjDef mpp_enc_cfg_objdef(void);
+
+/*
+ * Step 2: verify to/from trie on real, macro-built objdef cfg_roots
+ * (entry-complete, VLA arrays, nested structs). The trie is structure-only,
+ * so compare the entry sets (name + type) of the two to_trie passes.
+ */
+typedef struct {
+    char    name[128];
+    rk_s32  type;
+} TrieEntryRec;
+
+typedef struct {
+    TrieEntryRec *recs;
+    rk_s32       cnt;
+    rk_s32       cap;
+} TrieEntrySet;
+
+static rk_s32 trie_collect_cb(const char *name, void *info, rk_s32 subroot, void *arg)
+{
+    TrieEntrySet *set = (TrieEntrySet *)arg;
+    KmppEntry *entry = (KmppEntry *)info;
+    TrieEntryRec *grown;
+    rk_s32 len;
+
+    if (set->cnt >= set->cap) {
+        rk_s32 new_cap = set->cap ? set->cap * 2 : 32;
+
+        grown = mpp_realloc(set->recs, TrieEntryRec, new_cap);
+        if (!grown)
+            return rk_nok;
+        set->recs = grown;
+        set->cap = new_cap;
+    }
+
+    len = strlen(name);
+    if (len >= (rk_s32)sizeof(set->recs[set->cnt].name))
+        len = sizeof(set->recs[set->cnt].name) - 1;
+    memcpy(set->recs[set->cnt].name, name, len);
+    set->recs[set->cnt].name[len] = '\0';
+    set->recs[set->cnt].type = entry->type;
+    set->cnt++;
+
+    (void)subroot;
+    return rk_ok;
+}
+
+static rk_s32 test_objdef_trie_roundtrip(KmppObjDef def, const char *defname)
+{
+    MppCfgObj root = NULL;
+    MppCfgObj rebuilt = NULL;
+    MppTrie trie1 = NULL;
+    MppTrie trie2 = NULL;
+    TrieEntrySet set1 = {0};
+    TrieEntrySet set2 = {0};
+    rk_s32 ret = rk_nok;
+    rk_s32 i, j;
+
+    mpp_logi("test objdef %s trie roundtrip\n", defname);
+
+    root = kmpp_objdef_get_cfg_root(def);
+    if (!root) {
+        mpp_loge("objdef %s cfg_root is NULL\n", defname);
+        goto DONE;
+    }
+
+    trie1 = mpp_cfg_to_trie(root);
+    if (!trie1) {
+        mpp_loge("objdef %s to_trie failed\n", defname);
+        goto DONE;
+    }
+
+    rebuilt = mpp_cfg_from_trie(trie1);
+    if (!rebuilt) {
+        mpp_loge("objdef %s from_trie failed\n", defname);
+        goto DONE;
+    }
+
+    trie2 = mpp_cfg_to_trie(rebuilt);
+    if (!trie2) {
+        mpp_loge("objdef %s rebuilt to_trie failed\n", defname);
+        goto DONE;
+    }
+
+    mpp_trie_for_each_entry(trie1, trie_collect_cb, &set1);
+    mpp_trie_for_each_entry(trie2, trie_collect_cb, &set2);
+
+    mpp_logi("objdef %s entries: %d -> %d\n", defname, set1.cnt, set2.cnt);
+
+    if (set1.cnt != set2.cnt) {
+        mpp_loge("objdef %s entry count mismatch\n", defname);
+        goto DONE;
+    }
+
+    /* simple O(n^2) match: every entry in set1 must exist in set2 */
+    for (i = 0; i < set1.cnt; i++) {
+        rk_s32 found = 0;
+
+        for (j = 0; j < set2.cnt; j++) {
+            if (!strcmp(set1.recs[i].name, set2.recs[j].name) &&
+                set1.recs[i].type == set2.recs[j].type) {
+                found = 1;
+                break;
+            }
+        }
+
+        if (!found) {
+            mpp_loge("objdef %s entry %s type %d missing in rebuilt\n",
+                     defname, set1.recs[i].name, set1.recs[i].type);
+            goto DONE;
+        }
+    }
+
+    mpp_logi("objdef %s to/from trie roundtrip success (%d entries)\n",
+             defname, set1.cnt);
+    ret = rk_ok;
+
+DONE:
+    MPP_FREE(set1.recs);
+    MPP_FREE(set2.recs);
+    /* NOTE: trie1/trie2 are cached on their owning cfg trees; root is the
+     * objdef's cfg_root (owned by the objdef), only rebuilt is ours */
+    mpp_cfg_put_all(rebuilt);
+
+    return ret;
+}
+
+static rk_s32 test_trie_roundtrip(MppCfgObj obj)
+{
+    MppCfgObj out = NULL;
+    MppTrie trie1 = NULL;
+    MppTrie trie2 = NULL;
+    TrieEntrySet set1 = {0};
+    TrieEntrySet set2 = {0};
+    rk_s32 ret = rk_nok;
+    rk_s32 i, j;
+
+    mpp_logi("test to / from trie\n");
+
+    trie1 = mpp_cfg_to_trie(obj);
+    if (!trie1) {
+        mpp_loge("mpp_cfg_to_trie failed\n");
+        ret = rk_nok;
+        goto DONE;
+    }
+
+    out = mpp_cfg_from_trie(trie1);
+    if (!out) {
+        mpp_loge("mpp_cfg_from_trie failed\n");
+        ret = rk_nok;
+        goto DONE;
+    }
+
+    trie2 = mpp_cfg_to_trie(out);
+    if (!trie2) {
+        mpp_loge("rebuilt to_trie failed\n");
+        ret = rk_nok;
+        goto DONE;
+    }
+
+    mpp_trie_for_each_entry(trie1, trie_collect_cb, &set1);
+    mpp_trie_for_each_entry(trie2, trie_collect_cb, &set2);
+
+    if (set1.cnt != set2.cnt) {
+        mpp_loge("entry count mismatch %d -> %d\n", set1.cnt, set2.cnt);
+        goto DONE;
+    }
+
+    for (i = 0; i < set1.cnt; i++) {
+        rk_s32 found = 0;
+
+        for (j = 0; j < set2.cnt; j++) {
+            if (!strcmp(set1.recs[i].name, set2.recs[j].name) &&
+                set1.recs[i].type == set2.recs[j].type) {
+                found = 1;
+                break;
+            }
+        }
+
+        if (!found) {
+            mpp_loge("entry %s type %d missing in rebuilt\n",
+                     set1.recs[i].name, set1.recs[i].type);
+            goto DONE;
+        }
+    }
+
+    mpp_logi("mpp_cfg to/from trie structural roundtrip success (%d entries)\n",
+             set1.cnt);
+    ret = rk_ok;
+
+DONE:
+    MPP_FREE(set1.recs);
+    MPP_FREE(set2.recs);
+    /* NOTE: trie1/trie2 are cached on their owning cfg trees */
+    mpp_cfg_put_all(out);
+
     return ret;
 }
 
@@ -822,6 +1123,43 @@ int main(int argc, char *argv[])
     ret = test_flex_elem_array(root);
     if (ret) {
         mpp_loge("test_flex_elem_array failed\n");
+        goto DONE;
+    }
+
+    {
+        /* step 1: entry-ful tree (objdef-shaped) to/from trie */
+        MppCfgObj entryful = NULL;
+
+        ret = test_trie_entryful(&entryful);
+        if (ret) {
+            mpp_loge("test_trie_entryful build failed\n");
+            goto DONE;
+        }
+        ret = test_trie_roundtrip(entryful);
+        mpp_cfg_put_all(entryful);
+        if (ret) {
+            mpp_loge("test_trie_roundtrip (entryful) failed\n");
+            goto DONE;
+        }
+    }
+
+    /* step 2: hand-built (entry-less) tree to/from trie */
+    ret = test_trie_roundtrip(root);
+    if (ret) {
+        mpp_loge("test_trie_roundtrip failed\n");
+        goto DONE;
+    }
+
+    /* step 3: real objdef cfg_roots to/from trie */
+    ret = test_objdef_trie_roundtrip(mpp_enc_ref_cfg_objdef(), "ref_cfg");
+    if (ret) {
+        mpp_loge("test_objdef_trie_roundtrip ref_cfg failed\n");
+        goto DONE;
+    }
+
+    ret = test_objdef_trie_roundtrip(mpp_enc_cfg_objdef(), "enc_cfg");
+    if (ret) {
+        mpp_loge("test_objdef_trie_roundtrip enc_cfg failed\n");
         goto DONE;
     }
 
