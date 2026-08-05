@@ -28,3 +28,6 @@ add_kmpp_test(kmpp_vdec)
 # mpp_enc_frm_cfg objdef + JSON round-trip test
 add_kmpp_test(mpp_enc_frm_cfg)
 
+# kmpp ctrl_cfg test
+add_kmpp_test(kmpp_ctrl)
+
