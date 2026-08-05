@@ -199,16 +199,15 @@ const MppEncFrmCfg *mpp_enc_frm_cfg_lookup(const MppEncFrmCfgSet *cfgs, rk_s32 f
     return NULL;
 }
 
+/* only one or two frames carry userdata: enough to verify the
+ * user/kernel boundary crossing without adding UD SEI to every frame */
 static const MppEncFrmCfg mpp_enc_test_entries[] = {
-    { .frame_idx = 0, .userdatas = 1, .repeat = 0  },
-    { .frame_idx = 1, .userdata  = 1, .repeat = 0  },
-    { .frame_idx = 2, .userdata  = 1, .repeat = 0  },
-    { .frame_idx = 3, .userdata  = 1, .repeat = -1 },
+    { .frame_idx = 0, .userdatas = 1, .repeat = 0 },
+    { .frame_idx = 1, .userdata  = 1, .repeat = 0 },
 };
 
 static const MppEncFrmCfg *mpp_enc_test_entry_ptrs[] = {
     &mpp_enc_test_entries[0], &mpp_enc_test_entries[1],
-    &mpp_enc_test_entries[2], &mpp_enc_test_entries[3],
 };
 
 const MppEncFrmCfgSet mpp_enc_test_frm_cfg = {
