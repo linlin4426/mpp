@@ -940,9 +940,9 @@ static MppCfgObj cfg_get_array(CfgFromTrieCtx *c, rk_s32 subroot,
                                const char *name, KmppEntry *entry)
 {
     CfgArraySlot *array = c->arrays;
-    MppCfgObj parent;
-    MppCfgObj obj;
-    const char *leaf;
+    MppCfgObj parent = NULL;
+    MppCfgObj obj = NULL;
+    const char *leaf = NULL;
     rk_s32 cnt = c->array_cnt;
     rk_s32 i;
 
@@ -997,8 +997,8 @@ static rk_s32 cfg_build_cb(const char *name, void *info, rk_s32 subroot, void *a
 {
     CfgFromTrieCtx *c = (CfgFromTrieCtx *)arg;
     KmppEntry *entry = (KmppEntry *)info;
-    MppCfgObj parent;
-    const char *leaf;
+    MppCfgObj parent = NULL;
+    const char *leaf = NULL;
 
     /* subroot entries belong to a vla: the vla node or its element fields */
     if (subroot) {
