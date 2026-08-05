@@ -489,6 +489,8 @@ MPP_RET mpp_enc_ref_cfg_check(MppEncRefCfg ref)
         MppEncRefs refs = NULL;
         MPP_RET ret = MPP_OK;
 
+        p->max_tlayers = max_st_tid + 1;
+
         cpb_info->dpb_size = 0;
         cpb_info->max_lt_cnt = max_lt_ref_cnt;
         cpb_info->max_st_cnt = max_st_ref_cnt;

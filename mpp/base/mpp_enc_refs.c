@@ -581,12 +581,8 @@ MPP_RET mpp_enc_refs_dryrun(MppEncRefs refs)
     RK_S32 st_idx;
     RK_S32 walk_len = MPP_MAX(lt_cfg_pos, st_cfg_pos);
 
-    if (cfg->ready)
-        goto DONE;
-
     cleanup_cpb_refs(cpb);
 
-    cfg->max_tlayers = cpb->info.max_st_tid + 1;
     enc_refs_dbg_flow("dryrun start: lt_cfg %d st_cfg %d\n",
                       lt_cfg_pos, st_cfg_pos);
 
