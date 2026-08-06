@@ -78,8 +78,8 @@ rk_s32 mpp_enc_ref_cfg_dump(MppEncRefCfg obj, const char *caller);
 /* objdef schema dump (no instance needed) */
 void mpp_enc_ref_cfg_show(void);
 
-/* object init with specified capacities */
-MPP_RET mpp_enc_ref_cfg_setup(MppEncRefCfg *obj, RK_S32 lt_cnt, RK_S32 st_cnt);
+/* setup ref cfg with specified capacities */
+MPP_RET mpp_enc_ref_cfg_setup(MppEncRefCfg obj, RK_S32 lt_cnt, RK_S32 st_cnt);
 
 /* internal helpers */
 MPP_RET mpp_enc_ref_cfg_copy(MppEncRefCfg dst, MppEncRefCfg src);

@@ -27,9 +27,97 @@
 #include "mpp_cfg_io.h"
 #include "mpp_enc_ref.h"
 #include "mpp_internal.h"
-#include "rk_venc_kcfg.h"
 
 extern KmppObjDef mpp_enc_ref_cfg_objdef(void);
+
+/*
+ * st_cfg / lt_cfg schema access helpers.
+ *
+ * Array name is bound inside the macro so callers only pass the element
+ * index.  The first seek on a fresh pos must be index 0 (it carries the
+ * array name), following seeks reuse the same array with NULL.
+ */
+#define REF_TEST_ST_SEEK(obj, pos, idx) do {                                  \
+    _mpp_ret = kmpp_obj_pos_seek((obj), (pos), (idx) ? NULL : "st_cfg", (idx)); \
+    if (_mpp_ret) {                                                          \
+        mpp_loge("  FAIL: seek st_cfg[%d] ret %d at %s:%d\n",                \
+                 (idx), _mpp_ret, __FUNCTION__, __LINE__);                   \
+        goto MPP_RET_LABEL;                                                  \
+    }                                                                        \
+} while (0)
+
+#define REF_TEST_ST_GET_FIELD(obj, pos, idx, field, pval) do {                \
+    _mpp_ret = kmpp_obj_pos_get_s32((obj), (pos), #field, (pval));           \
+    if (_mpp_ret) {                                                          \
+        mpp_loge("  FAIL: get st_cfg[%d]:" #field " ret %d at %s:%d\n",      \
+                 (idx), _mpp_ret, __FUNCTION__, __LINE__);                   \
+        goto MPP_RET_LABEL;                                                  \
+    }                                                                        \
+} while (0)
+
+#define REF_TEST_ST_SET_FIELD(obj, pos, idx, field, val) do {                 \
+    _mpp_ret = kmpp_obj_pos_set_s32((obj), (pos), #field, (val));            \
+    if (_mpp_ret) {                                                          \
+        mpp_loge("  FAIL: set st_cfg[%d]:" #field " ret %d at %s:%d\n",      \
+                 (idx), _mpp_ret, __FUNCTION__, __LINE__);                   \
+        goto MPP_RET_LABEL;                                                  \
+    }                                                                        \
+} while (0)
+
+#define REF_TEST_LT_SEEK(obj, pos, idx) do {                                  \
+    _mpp_ret = kmpp_obj_pos_seek((obj), (pos), (idx) ? NULL : "lt_cfg", (idx)); \
+    if (_mpp_ret) {                                                          \
+        mpp_loge("  FAIL: seek lt_cfg[%d] ret %d at %s:%d\n",                \
+                 (idx), _mpp_ret, __FUNCTION__, __LINE__);                   \
+        goto MPP_RET_LABEL;                                                  \
+    }                                                                        \
+} while (0)
+
+#define REF_TEST_LT_GET_FIELD(obj, pos, idx, field, pval) do {                \
+    _mpp_ret = kmpp_obj_pos_get_s32((obj), (pos), #field, (pval));           \
+    if (_mpp_ret) {                                                          \
+        mpp_loge("  FAIL: get lt_cfg[%d]:" #field " ret %d at %s:%d\n",      \
+                 (idx), _mpp_ret, __FUNCTION__, __LINE__);                   \
+        goto MPP_RET_LABEL;                                                  \
+    }                                                                        \
+} while (0)
+
+#define REF_TEST_LT_SET_FIELD(obj, pos, idx, field, val) do {                 \
+    _mpp_ret = kmpp_obj_pos_set_s32((obj), (pos), #field, (val));            \
+    if (_mpp_ret) {                                                          \
+        mpp_loge("  FAIL: set lt_cfg[%d]:" #field " ret %d at %s:%d\n",      \
+                 (idx), _mpp_ret, __FUNCTION__, __LINE__);                   \
+        goto MPP_RET_LABEL;                                                  \
+    }                                                                        \
+} while (0)
+
+#define REF_TEST_ST_SEEK_FAIL(obj, pos, idx, msg) do {                        \
+    rk_s32 _ret_seek;                                                        \
+    kmpp_obj_pos_init(pos);                                                  \
+    _ret_seek = kmpp_obj_pos_seek((obj), (pos), "st_cfg", (idx));            \
+    MPP_ASSERTm(msg, _ret_seek);                                             \
+} while (0)
+
+static rk_s32 ref_cfg_setup(MppEncRefCfg *obj, int use_kobj,
+                            rk_s32 lt_cnt, rk_s32 st_cnt)
+{
+    rk_s32 ret;
+
+    ret = mpp_enc_ref_cfg_create(obj, use_kobj ? 2 : 0);
+    if (ret) {
+        mpp_loge_f("create failed ret %d\n", ret);
+        return ret;
+    }
+
+    ret = mpp_enc_ref_cfg_setup(*obj, lt_cnt, st_cnt);
+    if (ret) {
+        mpp_loge_f("setup failed ret %d\n", ret);
+        mpp_enc_ref_cfg_deinit(obj);
+        return ret;
+    }
+
+    return rk_ok;
+}
 
 /*
  * test_objdef_access - verify objdef trie entries (metadata only)
@@ -112,18 +200,17 @@ static rk_s32 test_objdef_access(void)
  * Uses kmpp_obj_pos for field navigation,
  * uses MPP_REF_ST_ARR/LT_ARR for array base address.
  */
-static rk_s32 test_obj_access(void)
+static rk_s32 test_obj_access_impl(const char *tag, int use_kobj)
 {
     MPP_RET_VARS;
     KmppObjDef def = mpp_enc_ref_cfg_objdef();
     KmppEntry *st_cfg_arr = NULL;
     KmppEntry *lt_cfg_arr = NULL;
     MppEncRefCfg obj = NULL;
-    MppEncRefCfgImpl *cfg;
     KmppObjPos pos;
     rk_s32 val;
 
-    mpp_logi("test_obj_access start\n");
+    mpp_logi("test_obj_access [%s] start\n", tag);
 
     /* get array entries from objdef for stride */
     kmpp_objdef_get_entry(def, "st_cfg", &st_cfg_arr);
@@ -132,81 +219,146 @@ static rk_s32 test_obj_access(void)
     MPP_ASSERT_NOT_NULL(lt_cfg_arr);
 
     /* create obj with known data */
-    _mpp_ret = mpp_enc_ref_cfg_setup(&obj, 1, 4);
+    _mpp_ret = ref_cfg_setup(&obj, use_kobj, 1, 4);
     MPP_ASSERT_FALSEm("setup failed", _mpp_ret);
 
-    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(obj);
-    MppEncRefStFrmCfg *st_arr = MPP_REF_ST_ARR(cfg);
-
-    st_arr[0].is_non_ref   = 0;
-    st_arr[0].temporal_id  = 0;
-    st_arr[0].ref_arg      = 10;
-    st_arr[1].is_non_ref   = 1;
-    st_arr[1].temporal_id  = 3;
-    st_arr[1].ref_arg      = 20;
-    st_arr[2].is_non_ref   = 0;
-    st_arr[2].temporal_id  = 1;
-    st_arr[2].ref_arg      = 30;
-    st_arr[3].is_non_ref   = 1;
-    st_arr[3].temporal_id  = 2;
-    st_arr[3].ref_arg      = 40;
-    cfg->st_cfg_cnt = 4;
-
-    MppEncRefLtFrmCfg *lt_arr = MPP_REF_LT_ARR(cfg);
-    lt_arr[0].lt_idx = 2;
-    lt_arr[0].lt_gap = 100;
-    cfg->lt_cfg_cnt = 1;
-
-    /* st_cfg:0:is_non_ref -> 0 */
+    /* fill st_cfg[0..3] and lt_cfg[0] via schema (valid for uobj and kobj) */
     kmpp_obj_pos_init(&pos);
-    _mpp_ret = kmpp_obj_pos_seek(obj, &pos, "st_cfg", 0);
-    MPP_ASSERT_FALSEm("pos_seek st_cfg 0", _mpp_ret);
-    _mpp_ret = kmpp_obj_pos_get_s32(obj, &pos, "is_non_ref", &val);
-    MPP_ASSERT_FALSEm("pos_get st_cfg:0:is_non_ref", _mpp_ret);
+    REF_TEST_ST_SEEK(obj, &pos, 0);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 0, is_non_ref,  0);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 0, temporal_id, 0);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 0, ref_arg,     10);
+    REF_TEST_ST_SEEK(obj, &pos, 1);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 1, is_non_ref,  1);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 1, temporal_id, 3);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 1, ref_arg,     20);
+    REF_TEST_ST_SEEK(obj, &pos, 2);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 2, is_non_ref,  0);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 2, temporal_id, 1);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 2, ref_arg,     30);
+    REF_TEST_ST_SEEK(obj, &pos, 3);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 3, is_non_ref,  1);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 3, temporal_id, 2);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 3, ref_arg,     40);
+    kmpp_obj_set_s32(obj, "st_cfg_cnt", 4);
+
+    kmpp_obj_pos_init(&pos);
+    REF_TEST_LT_SEEK(obj, &pos, 0);
+    REF_TEST_LT_SET_FIELD(obj, &pos, 0, lt_idx, 2);
+    REF_TEST_LT_SET_FIELD(obj, &pos, 0, lt_gap, 100);
+    kmpp_obj_set_s32(obj, "lt_cfg_cnt", 1);
+
+    /* readback via schema array access (valid for uobj and kobj) */
+    kmpp_obj_pos_init(&pos);
+    REF_TEST_ST_SEEK(obj, &pos, 0);
+    REF_TEST_ST_GET_FIELD(obj, &pos, 0, is_non_ref, &val);
     MPP_ASSERT_EQm("st_cfg:0:is_non_ref", 0, val);
 
-    /* st_cfg:1:is_non_ref -> 1 */
-    _mpp_ret = kmpp_obj_pos_seek(obj, &pos, NULL, 1);
-    MPP_ASSERT_FALSEm("pos_seek st_cfg 1", _mpp_ret);
-    _mpp_ret = kmpp_obj_pos_get_s32(obj, &pos, "is_non_ref", &val);
-    MPP_ASSERT_FALSEm("pos_get st_cfg:1:is_non_ref", _mpp_ret);
+    REF_TEST_ST_SEEK(obj, &pos, 1);
+    REF_TEST_ST_GET_FIELD(obj, &pos, 1, is_non_ref, &val);
     MPP_ASSERT_EQm("st_cfg:1:is_non_ref", 1, val);
 
-    /* st_cfg:2:temporal_id -> 1 */
-    _mpp_ret = kmpp_obj_pos_seek(obj, &pos, NULL, 2);
-    MPP_ASSERT_FALSEm("pos_seek st_cfg 2", _mpp_ret);
-    _mpp_ret = kmpp_obj_pos_get_s32(obj, &pos, "temporal_id", &val);
-    MPP_ASSERT_FALSEm("pos_get st_cfg:2:temporal_id", _mpp_ret);
+    REF_TEST_ST_SEEK(obj, &pos, 2);
+    REF_TEST_ST_GET_FIELD(obj, &pos, 2, temporal_id, &val);
     MPP_ASSERT_EQm("st_cfg:2:temporal_id", 1, val);
 
-    /* st_cfg:3:ref_arg -> 40 */
-    _mpp_ret = kmpp_obj_pos_seek(obj, &pos, NULL, 3);
-    MPP_ASSERT_FALSEm("pos_seek st_cfg 3", _mpp_ret);
-    _mpp_ret = kmpp_obj_pos_get_s32(obj, &pos, "ref_arg", &val);
-    MPP_ASSERT_FALSEm("pos_get st_cfg:3:ref_arg", _mpp_ret);
+    REF_TEST_ST_SEEK(obj, &pos, 3);
+    REF_TEST_ST_GET_FIELD(obj, &pos, 3, ref_arg, &val);
     MPP_ASSERT_EQm("st_cfg:3:ref_arg", 40, val);
 
-    /* lt_cfg:0:lt_idx -> 2 */
     kmpp_obj_pos_init(&pos);
-    _mpp_ret = kmpp_obj_pos_seek(obj, &pos, "lt_cfg", 0);
-    MPP_ASSERT_FALSEm("pos_seek lt_cfg 0", _mpp_ret);
-    _mpp_ret = kmpp_obj_pos_get_s32(obj, &pos, "lt_idx", &val);
-    MPP_ASSERT_FALSEm("pos_get lt_cfg:0:lt_idx", _mpp_ret);
+    REF_TEST_LT_SEEK(obj, &pos, 0);
+    REF_TEST_LT_GET_FIELD(obj, &pos, 0, lt_idx, &val);
     MPP_ASSERT_EQm("lt_cfg:0:lt_idx", 2, val);
 
-    /* lt_cfg:0:lt_gap -> 100 */
-    _mpp_ret = kmpp_obj_pos_get_s32(obj, &pos, "lt_gap", &val);
-    MPP_ASSERT_FALSEm("pos_get lt_cfg:0:lt_gap", _mpp_ret);
+    REF_TEST_LT_GET_FIELD(obj, &pos, 0, lt_gap, &val);
     MPP_ASSERT_EQm("lt_cfg:0:lt_gap", 100, val);
 
-    /* st_cfg:4:is_non_ref -> out of range (should fail) */
-    kmpp_obj_pos_init(&pos);
-    {
-        rk_s32 ret_seek = kmpp_obj_pos_seek(obj, &pos, "st_cfg", 4);
-        MPP_ASSERTm("pos_seek st_cfg 4 should fail (out of range)", ret_seek);
-    }
+    /* st_cfg:4 -> out of range (should fail) */
+    REF_TEST_ST_SEEK_FAIL(obj, &pos, 4, "pos_seek st_cfg 4 should fail (out of range)");
 
-    mpp_logi("test_obj_access success\n");
+    mpp_logi("test_obj_access [%s] success\n", tag);
+    MPP_PASS();
+
+done:
+    if (obj)
+        mpp_enc_ref_cfg_deinit(&obj);
+    return _mpp_ret;
+}
+
+static rk_s32 test_obj_access(void)
+{
+    rk_s32 ret;
+
+    ret = test_obj_access_impl("uobj", 0);
+    if (ret)
+        return ret;
+
+    return test_obj_access_impl("kobj", 1);
+}
+
+static rk_s32 test_vla_api_impl(const char *tag, int use_kobj)
+{
+    MPP_RET_VARS;
+    MppEncRefCfg obj = NULL;
+    KmppObjPos pos;
+    rk_s32 val;
+
+    mpp_logi("test_vla_api [%s] start\n", tag);
+
+    /* create obj with known data */
+    _mpp_ret = ref_cfg_setup(&obj, use_kobj, 1, 4);
+    MPP_ASSERT_FALSEm("setup failed", _mpp_ret);
+
+    /* fill st_cfg[0..2] and lt_cfg[0] via schema (valid for uobj and kobj) */
+    kmpp_obj_pos_init(&pos);
+    REF_TEST_ST_SEEK(obj, &pos, 0);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 0, is_non_ref,  0);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 0, temporal_id, 0);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 0, ref_arg,     10);
+    REF_TEST_ST_SEEK(obj, &pos, 1);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 1, is_non_ref,  1);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 1, temporal_id, 3);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 1, ref_arg,     20);
+    REF_TEST_ST_SEEK(obj, &pos, 2);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 2, is_non_ref,  0);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 2, temporal_id, 1);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 2, ref_arg,     30);
+    kmpp_obj_set_s32(obj, "st_cfg_cnt", 3);
+
+    kmpp_obj_pos_init(&pos);
+    REF_TEST_LT_SEEK(obj, &pos, 0);
+    REF_TEST_LT_SET_FIELD(obj, &pos, 0, lt_idx, 5);
+    REF_TEST_LT_SET_FIELD(obj, &pos, 0, lt_gap, 200);
+    kmpp_obj_set_s32(obj, "lt_cfg_cnt", 1);
+
+    /* readback via schema array access (valid for uobj and kobj) */
+    kmpp_obj_pos_init(&pos);
+    REF_TEST_ST_SEEK(obj, &pos, 0);
+    REF_TEST_ST_GET_FIELD(obj, &pos, 0, is_non_ref, &val);
+    MPP_ASSERT_EQm("st_cfg:0:is_non_ref", 0, val);
+
+    /* get + set + readback st_cfg:1:is_non_ref */
+    REF_TEST_ST_SEEK(obj, &pos, 1);
+    REF_TEST_ST_GET_FIELD(obj, &pos, 1, is_non_ref, &val);
+    MPP_ASSERT_EQm("st_cfg:1:is_non_ref", 1, val);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 1, is_non_ref, 42);
+    REF_TEST_ST_GET_FIELD(obj, &pos, 1, is_non_ref, &val);
+    MPP_ASSERT_EQm("st_cfg:1:is_non_ref after set", 42, val);
+
+    REF_TEST_ST_SEEK(obj, &pos, 2);
+    REF_TEST_ST_GET_FIELD(obj, &pos, 2, temporal_id, &val);
+    MPP_ASSERT_EQm("st_cfg:2:temporal_id", 1, val);
+
+    kmpp_obj_pos_init(&pos);
+    REF_TEST_LT_SEEK(obj, &pos, 0);
+    REF_TEST_LT_GET_FIELD(obj, &pos, 0, lt_idx, &val);
+    MPP_ASSERT_EQm("lt_cfg:0:lt_idx", 5, val);
+
+    /* out of range: st_cfg, cap=4 (should fail) */
+    REF_TEST_ST_SEEK_FAIL(obj, &pos, 4, "pos_seek st_cfg 4 should fail (out of range)");
+
+    mpp_logi("test_vla_api [%s] success\n", tag);
     MPP_PASS();
 
 done:
@@ -217,87 +369,13 @@ done:
 
 static rk_s32 test_vla_api(void)
 {
-    MPP_RET_VARS;
-    MppEncRefCfg obj = NULL;
-    MppEncRefCfgImpl *cfg;
-    MppEncRefStFrmCfg *st_arr;
-    MppEncRefLtFrmCfg *lt_arr;
-    KmppObjPos pos;
-    rk_s32 val;
+    rk_s32 ret;
 
-    mpp_logi("test_vla_api start\n");
+    ret = test_vla_api_impl("uobj", 0);
+    if (ret)
+        return ret;
 
-    /* create obj with known data */
-    _mpp_ret = mpp_enc_ref_cfg_setup(&obj, 1, 4);
-    MPP_ASSERT_FALSEm("setup failed", _mpp_ret);
-
-    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(obj);
-    st_arr = MPP_REF_ST_ARR(cfg);
-    st_arr[0].is_non_ref   = 0;
-    st_arr[0].temporal_id  = 0;
-    st_arr[0].ref_arg      = 10;
-    st_arr[1].is_non_ref   = 1;
-    st_arr[1].temporal_id  = 3;
-    st_arr[1].ref_arg      = 20;
-    st_arr[2].is_non_ref   = 0;
-    st_arr[2].temporal_id  = 1;
-    st_arr[2].ref_arg      = 30;
-    cfg->st_cfg_cnt = 3;
-
-    lt_arr = MPP_REF_LT_ARR(cfg);
-    lt_arr[0].lt_idx = 5;
-    lt_arr[0].lt_gap = 200;
-    cfg->lt_cfg_cnt = 1;
-
-    /* 1. get st_cfg:0:is_non_ref -> 0 */
-    kmpp_obj_pos_init(&pos);
-    _mpp_ret = kmpp_obj_pos_seek(obj, &pos, "st_cfg", 0);
-    MPP_ASSERT_FALSEm("pos_seek st_cfg 0", _mpp_ret);
-    _mpp_ret = kmpp_obj_pos_get_s32(obj, &pos, "is_non_ref", &val);
-    MPP_ASSERT_FALSEm("pos_get st_cfg:0:is_non_ref", _mpp_ret);
-    MPP_ASSERT_EQm("st_cfg:0:is_non_ref", 0, val);
-
-    /* 2. get + set + readback st_cfg:1:is_non_ref */
-    _mpp_ret = kmpp_obj_pos_seek(obj, &pos, NULL, 1);
-    MPP_ASSERT_FALSEm("pos_seek st_cfg 1", _mpp_ret);
-    _mpp_ret = kmpp_obj_pos_get_s32(obj, &pos, "is_non_ref", &val);
-    MPP_ASSERT_FALSEm("pos_get st_cfg:1:is_non_ref", _mpp_ret);
-    MPP_ASSERT_EQm("st_cfg:1:is_non_ref", 1, val);
-    _mpp_ret = kmpp_obj_pos_set_s32(obj, &pos, "is_non_ref", 42);
-    MPP_ASSERT_FALSEm("pos_set st_cfg:1:is_non_ref", _mpp_ret);
-    _mpp_ret = kmpp_obj_pos_get_s32(obj, &pos, "is_non_ref", &val);
-    MPP_ASSERT_FALSEm("pos_get after set", _mpp_ret);
-    MPP_ASSERT_EQm("st_cfg:1:is_non_ref after set", 42, val);
-
-    /* 3. st_cfg:2:temporal_id -> 1 */
-    _mpp_ret = kmpp_obj_pos_seek(obj, &pos, NULL, 2);
-    MPP_ASSERT_FALSEm("pos_seek st_cfg 2", _mpp_ret);
-    _mpp_ret = kmpp_obj_pos_get_s32(obj, &pos, "temporal_id", &val);
-    MPP_ASSERT_FALSEm("pos_get st_cfg:2:temporal_id", _mpp_ret);
-    MPP_ASSERT_EQm("st_cfg:2:temporal_id", 1, val);
-
-    /* 4. lt_cfg:0:lt_idx -> 5 */
-    kmpp_obj_pos_init(&pos);
-    _mpp_ret = kmpp_obj_pos_seek(obj, &pos, "lt_cfg", 0);
-    MPP_ASSERT_FALSEm("pos_seek lt_cfg 0", _mpp_ret);
-    _mpp_ret = kmpp_obj_pos_get_s32(obj, &pos, "lt_idx", &val);
-    MPP_ASSERT_FALSEm("pos_get lt_cfg:0:lt_idx", _mpp_ret);
-    MPP_ASSERT_EQm("lt_cfg:0:lt_idx", 5, val);
-
-    /* 5. out of range: st_cfg, cap=4 (should fail) */
-    kmpp_obj_pos_init(&pos);
-    {
-        rk_s32 ret_seek = kmpp_obj_pos_seek(obj, &pos, "st_cfg", 4);
-        MPP_ASSERTm("pos_seek st_cfg 4 should fail (out of range)", ret_seek);
-    }
-
-    mpp_logi("test_vla_api success\n");
-    MPP_PASS();
-
-done:
-    if (obj)
-        mpp_enc_ref_cfg_deinit(&obj);
-    return _mpp_ret;
+    return test_vla_api_impl("kobj", 1);
 }
 
 /*
@@ -305,19 +383,23 @@ done:
  * Without the cnt=0 fix in copy, resize callback memmove would overflow when
  * dst has more lt entries than src's lt_cap.
  */
-static rk_s32 test_mpp_enc_ref_cfg_copy_shrink(void)
+static rk_s32 test_mpp_enc_ref_cfg_copy_shrink_impl(const char *tag, int use_kobj)
 {
     MppEncRefCfg src = NULL;
     MppEncRefCfg dst = NULL;
-    MppEncRefCfgImpl *cfg;
     MppEncRefLtFrmCfg lt_ref;
     MppEncRefStFrmCfg st_ref;
+    rk_s32 lt_cap;
+    rk_s32 st_cap;
+    rk_s32 lt_cnt;
+    rk_s32 st_cnt;
     rk_s32 ret;
+    rk_s32 i;
 
-    mpp_logi("test_mpp_enc_ref_cfg_copy_shrink start\n");
+    mpp_logi("test_mpp_enc_ref_cfg_copy_shrink [%s] start\n", tag);
 
     /* src: small config - 1 lt, 1 st */
-    ret = mpp_enc_ref_cfg_setup(&src, 1, 1);
+    ret = ref_cfg_setup(&src, use_kobj, 1, 1);
     if (ret) {
         mpp_loge("setup src failed ret %d\n", ret);
         goto done;
@@ -333,32 +415,35 @@ static rk_s32 test_mpp_enc_ref_cfg_copy_shrink(void)
     ret = mpp_enc_ref_cfg_add_st_cfg(src, 1, &st_ref);
 
     /* dst: large config - 8 lt, 8 st, all filled */
-    ret = mpp_enc_ref_cfg_setup(&dst, 8, 8);
+    ret = ref_cfg_setup(&dst, use_kobj, 8, 8);
     if (ret) {
         mpp_loge("setup dst failed ret %d\n", ret);
         goto done;
     }
 
-    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(dst);
-    mpp_logi("dst before copy: lt_cap %d lt_cnt %d\n",
-             cfg->lt_cfg_cap, cfg->lt_cfg_cnt);
+    kmpp_obj_get_s32(dst, "lt_cfg_cap", &lt_cap);
+    kmpp_obj_get_s32(dst, "lt_cfg_cnt", &lt_cnt);
+    mpp_logi("dst before copy: lt_cap %d lt_cnt %d\n", lt_cap, lt_cnt);
 
     memset(&lt_ref, 0, sizeof(lt_ref));
     lt_ref.lt_idx      = 0;
     lt_ref.ref_mode    = REF_TO_PREV_LT_REF;
-    for (rk_s32 i = 0; i < 8; i++) {
+    for (i = 0; i < 8; i++) {
         lt_ref.lt_idx = i;
         mpp_enc_ref_cfg_add_lt_cfg(dst, 1, &lt_ref);
     }
 
     memset(&st_ref, 0, sizeof(st_ref));
     st_ref.ref_mode = REF_TO_PREV_REF_FRM;
-    for (rk_s32 i = 0; i < 8; i++)
+    for (i = 0; i < 8; i++)
         mpp_enc_ref_cfg_add_st_cfg(dst, 1, &st_ref);
 
-    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(dst);
+    kmpp_obj_get_s32(dst, "lt_cfg_cap", &lt_cap);
+    kmpp_obj_get_s32(dst, "lt_cfg_cnt", &lt_cnt);
+    kmpp_obj_get_s32(dst, "st_cfg_cap", &st_cap);
+    kmpp_obj_get_s32(dst, "st_cfg_cnt", &st_cnt);
     mpp_logi("dst filled: lt_cap %d lt_cnt %d st_cap %d st_cnt %d\n",
-             cfg->lt_cfg_cap, cfg->lt_cfg_cnt, cfg->st_cfg_cap, cfg->st_cfg_cnt);
+             lt_cap, lt_cnt, st_cap, st_cnt);
 
     /* copy small src to large dst - shrinks dst from 8+8 to 1+1 */
     ret = mpp_enc_ref_cfg_copy(dst, src);
@@ -368,21 +453,22 @@ static rk_s32 test_mpp_enc_ref_cfg_copy_shrink(void)
     }
 
     /* verify dst now matches src */
-    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(dst);
-    if (cfg->lt_cfg_cap != 1 || cfg->st_cfg_cap != 1) {
-        mpp_loge("copy shrink cap mismatch: lt %d st %d\n",
-                 cfg->lt_cfg_cap, cfg->st_cfg_cap);
+    kmpp_obj_get_s32(dst, "lt_cfg_cap", &lt_cap);
+    kmpp_obj_get_s32(dst, "st_cfg_cap", &st_cap);
+    if (lt_cap != 1 || st_cap != 1) {
+        mpp_loge("copy shrink cap mismatch: lt %d st %d\n", lt_cap, st_cap);
         ret = rk_nok;
         goto done;
     }
-    if (cfg->lt_cfg_cnt != 1 || cfg->st_cfg_cnt != 1) {
-        mpp_loge("copy shrink cnt mismatch: lt %d st %d\n",
-                 cfg->lt_cfg_cnt, cfg->st_cfg_cnt);
+    kmpp_obj_get_s32(dst, "lt_cfg_cnt", &lt_cnt);
+    kmpp_obj_get_s32(dst, "st_cfg_cnt", &st_cnt);
+    if (lt_cnt != 1 || st_cnt != 1) {
+        mpp_loge("copy shrink cnt mismatch: lt %d st %d\n", lt_cnt, st_cnt);
         ret = rk_nok;
         goto done;
     }
 
-    mpp_logi("test_mpp_enc_ref_cfg_copy_shrink success\n");
+    mpp_logi("test_mpp_enc_ref_cfg_copy_shrink [%s] success\n", tag);
 
 done:
     if (src)
@@ -393,21 +479,54 @@ done:
     return ret;
 }
 
-static rk_s32 test_mpp_enc_ref_cfg_tsvc4(void)
+static rk_s32 test_mpp_enc_ref_cfg_copy_shrink(void)
+{
+    rk_s32 ret;
+
+    ret = test_mpp_enc_ref_cfg_copy_shrink_impl("uobj", 0);
+    if (ret)
+        return ret;
+
+    return test_mpp_enc_ref_cfg_copy_shrink_impl("kobj", 1);
+}
+
+static rk_s32 tsvc4_impl(const char *tag, int use_kobj)
 {
     MppEncRefCfg ref = NULL;
     MppEncRefLtFrmCfg lt_ref[4];
     MppEncRefStFrmCfg st_ref[16];
-    rk_s32 ret;
-
-    mpp_logi("test_mpp_enc_ref_cfg_tsvc4 start\n");
+    rk_s32 ret = rk_ok;
 
     memset(&lt_ref, 0, sizeof(lt_ref));
     memset(&st_ref, 0, sizeof(st_ref));
 
-    ret = mpp_enc_ref_cfg_init(&ref);
+    /* create ref_cfg: kobj via create(mode=2), uobj via create(mode=0) */
+    if (use_kobj) {
+        ret = mpp_enc_ref_cfg_create(&ref, 2);
+        if (ret) {
+            mpp_logi("test_mpp_enc_ref_cfg_tsvc4: SKIP %s (kobj not available)\n", tag);
+            return rk_ok;
+        }
+    } else {
+        ret = mpp_enc_ref_cfg_create(&ref, 0);
+        if (ret) {
+            mpp_loge("test_mpp_enc_ref_cfg_tsvc4: %s create failed ret %d\n", tag, ret);
+            return ret;
+        }
+    }
+
+    /* dump right after init to compare mpp(uobj) vs kmpp(kobj) paths */
+    ret = mpp_enc_ref_cfg_dump(ref, __FUNCTION__);
+    if (ret) {
+        mpp_loge("test_mpp_enc_ref_cfg_tsvc4: %s init dump failed ret %d\n", tag, ret);
+        goto done;
+    }
 
     ret = mpp_enc_ref_cfg_set_cfg_cnt(ref, 1, 9);
+    if (ret) {
+        mpp_loge("test_mpp_enc_ref_cfg_tsvc4: %s set_cfg_cnt failed ret %d\n", tag, ret);
+        goto done;
+    }
 
     /* set 8 frame lt-ref gap */
     lt_ref[0].lt_idx        = 0;
@@ -417,6 +536,10 @@ static rk_s32 test_mpp_enc_ref_cfg_tsvc4(void)
     lt_ref[0].lt_delay      = 0;
 
     ret = mpp_enc_ref_cfg_add_lt_cfg(ref, 1, lt_ref);
+    if (ret) {
+        mpp_loge("test_mpp_enc_ref_cfg_tsvc4: %s add_lt_cfg failed ret %d\n", tag, ret);
+        goto done;
+    }
 
     /* set tsvc4 st-ref struct */
     /* st 0 layer 0 - ref */
@@ -475,273 +598,399 @@ static rk_s32 test_mpp_enc_ref_cfg_tsvc4(void)
     st_ref[8].repeat        = 0;
 
     ret = mpp_enc_ref_cfg_add_st_cfg(ref, 9, st_ref);
+    if (ret) {
+        mpp_loge("test_mpp_enc_ref_cfg_tsvc4: %s add_st_cfg failed ret %d\n", tag, ret);
+        goto done;
+    }
 
     ret = mpp_enc_ref_cfg_check(ref);
-    mpp_logi("test_mpp_enc_ref_cfg_tsvc4 check ret %d\n", ret);
+    mpp_logi("test_mpp_enc_ref_cfg_tsvc4: %s check ret %d\n", tag, ret);
 
     ret = mpp_enc_ref_cfg_dump(ref, __FUNCTION__);
 
-    mpp_enc_ref_cfg_deinit(&ref);
+done:
+    if (ref)
+        mpp_enc_ref_cfg_deinit(&ref);
+    return ret;
+}
+
+static rk_s32 test_mpp_enc_ref_cfg_tsvc4(void)
+{
+    rk_s32 ret = rk_ok;
+
+    mpp_logi("test_mpp_enc_ref_cfg_tsvc4 start\n");
+
+    ret = tsvc4_impl("kobj", 1);
+    if (ret)
+        return ret;
+
+    ret = tsvc4_impl("uobj", 0);
+    if (ret)
+        return ret;
 
     mpp_logi("test_mpp_enc_ref_cfg_tsvc4 %s\n", ret ? "failed" : "success");
     return ret;
 }
 
-static rk_s32 test_mpp_enc_ref_cfg_obj(void)
+static rk_s32 test_mpp_enc_ref_cfg_obj_impl(const char *tag, int use_kobj)
 {
     MppEncRefCfg obj = NULL;
-    MppEncRefCfgImpl *cfg;
-    MppEncRefStFrmCfg *st_arr;
-    MppEncRefLtFrmCfg *lt_arr;
+    KmppObjPos pos;
     rk_s32 lt_cnt = 1;
     rk_s32 st_cnt = 9;
-    rk_s32 ret;
+    rk_s32 st_cfg_cap;
+    rk_s32 lt_cfg_cap;
+    rk_s32 st_cfg_off;
+    rk_s32 lt_cfg_off;
+    rk_s32 val;
+    MPP_RET_VARS;
     rk_s32 i;
 
-    mpp_logi("test_mpp_enc_ref_cfg_obj start\n");
+    mpp_logi("test_mpp_enc_ref_cfg_obj [%s] start\n", tag);
 
     /* test 1: tsvc4 layout (1 lt + 9 st) */
-    ret = mpp_enc_ref_cfg_setup(&obj, lt_cnt, st_cnt);
-    if (ret) {
-        mpp_loge("ref_cfg_obj_init failed ret %d\n", ret);
+    _mpp_ret = ref_cfg_setup(&obj, use_kobj, lt_cnt, st_cnt);
+    if (_mpp_ret) {
+        mpp_loge("ref_cfg_obj_init failed _mpp_ret %d\n", _mpp_ret);
         goto done;
     }
 
-    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(obj);
-
-    /* verify offsets */
-    if (cfg->st_cfg_cap != st_cnt || cfg->lt_cfg_cap != lt_cnt) {
+    /* verify offsets (read header scalars via schema, works for uobj and kobj) */
+    kmpp_obj_get_s32(obj, "st_cfg_cap", &st_cfg_cap);
+    kmpp_obj_get_s32(obj, "lt_cfg_cap", &lt_cfg_cap);
+    if (st_cfg_cap != st_cnt || lt_cfg_cap != lt_cnt) {
         mpp_loge("ref_cfg_obj cap mismatch: lt %d/%d st %d/%d\n",
-                 cfg->lt_cfg_cap, lt_cnt, cfg->st_cfg_cap, st_cnt);
-        ret = rk_nok;
+                 lt_cfg_cap, lt_cnt, st_cfg_cap, st_cnt);
+        _mpp_ret = rk_nok;
         goto done;
     }
 
-    if (cfg->lt_cfg_off != cfg->st_cfg_off + st_cnt * sizeof(MppEncRefStFrmCfg)) {
-        mpp_loge("ref_cfg_obj offset mismatch: lt_cfg_off %u expected %u\n",
-                 cfg->lt_cfg_off, cfg->st_cfg_off + (rk_u32)(st_cnt * sizeof(MppEncRefStFrmCfg)));
-        ret = rk_nok;
+    kmpp_obj_get_s32(obj, "st_cfg_off", &st_cfg_off);
+    kmpp_obj_get_s32(obj, "lt_cfg_off", &lt_cfg_off);
+    if (lt_cfg_off != st_cfg_off + st_cnt * (rk_s32)sizeof(MppEncRefStFrmCfg)) {
+        mpp_loge("ref_cfg_obj offset mismatch: lt_cfg_off %d expected %d\n",
+                 lt_cfg_off, st_cfg_off + (rk_s32)(st_cnt * sizeof(MppEncRefStFrmCfg)));
+        _mpp_ret = rk_nok;
         goto done;
     }
 
-    /* write and verify st_cfg */
-    st_arr = MPP_REF_ST_ARR(cfg);
+    /* write and verify st_cfg via schema (valid for uobj and kobj) */
+    kmpp_obj_pos_init(&pos);
     for (i = 0; i < st_cnt; i++) {
-        st_arr[i].temporal_id = i % 4;
-        st_arr[i].is_non_ref  = (i % 4 == 3) ? 1 : 0;
-        st_arr[i].ref_mode    = REF_TO_PREV_REF_FRM;
-        st_arr[i].ref_arg     = 0;
-        st_arr[i].repeat      = 0;
+        REF_TEST_ST_SEEK(obj, &pos, i);
+        REF_TEST_ST_SET_FIELD(obj, &pos, i, temporal_id, i % 4);
+        REF_TEST_ST_SET_FIELD(obj, &pos, i, is_non_ref,  (i % 4 == 3) ? 1 : 0);
+        REF_TEST_ST_SET_FIELD(obj, &pos, i, ref_mode,    REF_TO_PREV_REF_FRM);
+        REF_TEST_ST_SET_FIELD(obj, &pos, i, ref_arg,     0);
+        REF_TEST_ST_SET_FIELD(obj, &pos, i, repeat,      0);
     }
 
+    kmpp_obj_pos_init(&pos);
     for (i = 0; i < st_cnt; i++) {
-        if (st_arr[i].temporal_id != i % 4 || st_arr[i].is_non_ref != ((i % 4 == 3) ? 1 : 0)) {
-            mpp_loge("ref_cfg_obj st[%d] data mismatch\n", i);
-            ret = rk_nok;
+        REF_TEST_ST_SEEK(obj, &pos, i);
+        REF_TEST_ST_GET_FIELD(obj, &pos, i, temporal_id, &val);
+        if (val != i % 4) {
+            mpp_loge("ref_cfg_obj st[%d] temporal_id mismatch %d\n", i, val);
+            _mpp_ret = rk_nok;
+            goto done;
+        }
+        REF_TEST_ST_GET_FIELD(obj, &pos, i, is_non_ref, &val);
+        if (val != ((i % 4 == 3) ? 1 : 0)) {
+            mpp_loge("ref_cfg_obj st[%d] is_non_ref mismatch %d\n", i, val);
+            _mpp_ret = rk_nok;
             goto done;
         }
     }
 
-    /* write and verify lt_cfg */
-    lt_arr = MPP_REF_LT_ARR(cfg);
-    lt_arr[0].lt_idx      = 0;
-    lt_arr[0].temporal_id = 0;
-    lt_arr[0].ref_mode    = REF_TO_PREV_LT_REF;
-    lt_arr[0].ref_arg     = 0;
-    lt_arr[0].lt_gap      = 8;
-    lt_arr[0].lt_delay    = 0;
+    /* write and verify lt_cfg via schema */
+    kmpp_obj_pos_init(&pos);
+    REF_TEST_LT_SEEK(obj, &pos, 0);
+    REF_TEST_LT_SET_FIELD(obj, &pos, 0, lt_idx,      0);
+    REF_TEST_LT_SET_FIELD(obj, &pos, 0, temporal_id, 0);
+    REF_TEST_LT_SET_FIELD(obj, &pos, 0, ref_mode,    REF_TO_PREV_LT_REF);
+    REF_TEST_LT_SET_FIELD(obj, &pos, 0, ref_arg,     0);
+    REF_TEST_LT_SET_FIELD(obj, &pos, 0, lt_gap,      8);
+    REF_TEST_LT_SET_FIELD(obj, &pos, 0, lt_delay,    0);
 
-    if (lt_arr[0].lt_gap != 8 || lt_arr[0].lt_idx != 0) {
-        mpp_loge("ref_cfg_obj lt[0] data mismatch\n");
-        ret = rk_nok;
+    REF_TEST_LT_GET_FIELD(obj, &pos, 0, lt_gap, &val);
+    if (val != 8) {
+        mpp_loge("ref_cfg_obj lt[0] lt_gap mismatch %d\n", val);
+        _mpp_ret = rk_nok;
+        goto done;
+    }
+    REF_TEST_LT_GET_FIELD(obj, &pos, 0, lt_idx, &val);
+    if (val != 0) {
+        mpp_loge("ref_cfg_obj lt[0] lt_idx mismatch %d\n", val);
+        _mpp_ret = rk_nok;
         goto done;
     }
 
-    mpp_logi("test ref_cfg_obj tsvc4 layout success\n");
+    mpp_logi("test ref_cfg_obj [%s] tsvc4 layout success\n", tag);
     mpp_enc_ref_cfg_deinit(&obj);
 
     /* test 2: zero lt/st */
-    ret = mpp_enc_ref_cfg_setup(&obj, 0, 0);
-    if (ret) {
-        mpp_loge("ref_cfg_obj_init(0,0) failed ret %d\n", ret);
+    _mpp_ret = ref_cfg_setup(&obj, use_kobj, 0, 0);
+    if (_mpp_ret) {
+        mpp_loge("ref_cfg_obj_init(0,0) failed _mpp_ret %d\n", _mpp_ret);
         goto done;
     }
 
-    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(obj);
-    if (cfg->st_cfg_off != cfg->lt_cfg_off) {
-        mpp_loge("ref_cfg_obj(0,0) offset mismatch: st %u lt %u\n",
-                 cfg->st_cfg_off, cfg->lt_cfg_off);
-        ret = rk_nok;
+    kmpp_obj_get_s32(obj, "st_cfg_off", &st_cfg_off);
+    kmpp_obj_get_s32(obj, "lt_cfg_off", &lt_cfg_off);
+    if (st_cfg_off != lt_cfg_off) {
+        mpp_loge("ref_cfg_obj(0,0) offset mismatch: st %d lt %d\n",
+                 st_cfg_off, lt_cfg_off);
+        _mpp_ret = rk_nok;
         goto done;
     }
 
-    mpp_logi("test ref_cfg_obj zero layout success\n");
+    mpp_logi("test ref_cfg_obj [%s] zero layout success\n", tag);
     mpp_enc_ref_cfg_deinit(&obj);
 
-    /* test 3: invalid params */
-    ret = mpp_enc_ref_cfg_setup(NULL, 0, 0);
-    if (!ret) {
-        mpp_loge("ref_cfg_obj_init(NULL) should fail\n");
-        ret = rk_nok;
+    /* test 3: invalid params — this setup variant must reject them */
+    _mpp_ret = ref_cfg_setup(NULL, use_kobj, 0, 0);
+    if (!_mpp_ret) {
+        mpp_loge("setup(NULL) should fail\n");
+        _mpp_ret = rk_nok;
         goto done;
     }
 
-    ret = mpp_enc_ref_cfg_setup(&obj, -1, 0);
-    if (!ret) {
-        mpp_loge("ref_cfg_obj_init(-1,0) should fail\n");
-        ret = rk_nok;
+    _mpp_ret = ref_cfg_setup(&obj, use_kobj, -1, 0);
+    if (!_mpp_ret) {
+        mpp_loge("setup(-1,0) should fail\n");
+        mpp_enc_ref_cfg_deinit(&obj);
+        _mpp_ret = rk_nok;
         goto done;
     }
 
-    mpp_logi("test ref_cfg_obj invalid params success\n");
-    ret = rk_ok;
+    mpp_logi("test ref_cfg_obj [%s] invalid params success\n", tag);
+    _mpp_ret = rk_ok;
 
 done:
     if (obj)
         mpp_enc_ref_cfg_deinit(&obj);
 
-    mpp_logi("test_mpp_enc_ref_cfg_obj %s\n", ret ? "failed" : "success");
-    return ret;
+    mpp_logi("test_mpp_enc_ref_cfg_obj [%s] %s\n", tag, _mpp_ret ? "failed" : "success");
+    return _mpp_ret;
+}
+
+static rk_s32 test_mpp_enc_ref_cfg_obj(void)
+{
+    rk_s32 ret;
+
+    ret = test_mpp_enc_ref_cfg_obj_impl("uobj", 0);
+    if (ret)
+        return ret;
+
+    return test_mpp_enc_ref_cfg_obj_impl("kobj", 1);
 }
 
 /*
  * test_cfg_roundtrip - verify extract + apply roundtrip
  *
+ * Dual path test for user-space (uobj) and kernel (kobj) ref_cfg objects.
+ * All field access goes through the entry table schema so that both
+ * object types are handled with identical code:
+ *
  * 1. Create obj with known scalar and VLA data
  * 2. Extract: struct -> cfg tree -> JSON string
  * 3. Apply: JSON string -> cfg tree -> new struct
  * 4. Verify scalar values match
+ * 5. Check config: uobj local check / kobj ioctl to kernel
  */
-static rk_s32 test_cfg_roundtrip(void)
+static rk_s32 test_cfg_roundtrip_impl(const char *tag, int use_kobj)
 {
     MPP_RET_VARS;
     MppEncRefCfg obj = NULL;
     MppEncRefCfg obj2 = NULL;
     MppEncRefCfg obj3 = NULL;
-    KmppObjDef def = mpp_enc_ref_cfg_objdef();
-    MppCfgObj cfg_root = kmpp_objdef_get_cfg_root(def);
     MppCfgObj obj_from = NULL;
     MppCfgObj obj_from_json = NULL;
-    MppEncRefCfgImpl *cfg;
-    MppEncRefCfgImpl *cfg2;
-    MppEncRefCfgImpl *cfg3;
     char *json = NULL;
+    KmppObjPos pos;
+    rk_s32 val;
 
-    mpp_logi("test_cfg_roundtrip start\n");
+    mpp_logi("test_cfg_roundtrip [%s] start\n", tag);
 
-    /* 1. create obj with known data */
-    _mpp_ret = mpp_enc_ref_cfg_setup(&obj, 1, 4);
+    /* 1. create obj with known data (schema access, valid for uobj and kobj) */
+    _mpp_ret = ref_cfg_setup(&obj, use_kobj, 1, 4);
     MPP_ASSERT_FALSEm("setup failed", _mpp_ret);
 
-    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(obj);
-    cfg->keep_cpb = 1;
+    kmpp_obj_set_s32(obj, "keep_cpb", 1);
 
-    MppEncRefStFrmCfg *st_arr = MPP_REF_ST_ARR(cfg);
-    st_arr[0].is_non_ref   = 0;
-    st_arr[0].temporal_id  = 0;
-    st_arr[0].ref_arg      = 10;
-    st_arr[1].is_non_ref   = 1;
-    st_arr[1].temporal_id  = 3;
-    st_arr[1].ref_arg      = 20;
-    st_arr[2].is_non_ref   = 0;
-    st_arr[2].temporal_id  = 1;
-    st_arr[2].ref_arg      = 30;
-    st_arr[3].is_non_ref   = 1;
-    st_arr[3].temporal_id  = 2;
-    st_arr[3].ref_arg      = 40;
-    cfg->st_cfg_cnt = 4;
+    kmpp_obj_pos_init(&pos);
+    REF_TEST_ST_SEEK(obj, &pos, 0);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 0, is_non_ref,  0);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 0, temporal_id, 0);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 0, ref_arg,     10);
+    REF_TEST_ST_SEEK(obj, &pos, 1);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 1, is_non_ref,  1);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 1, temporal_id, 1);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 1, ref_arg,     20);
+    REF_TEST_ST_SEEK(obj, &pos, 2);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 2, is_non_ref,  0);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 2, temporal_id, 1);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 2, ref_arg,     30);
+    REF_TEST_ST_SEEK(obj, &pos, 3);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 3, is_non_ref,  0);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 3, temporal_id, 0);
+    REF_TEST_ST_SET_FIELD(obj, &pos, 3, ref_arg,     40);
+    kmpp_obj_set_s32(obj, "st_cfg_cnt", 4);
 
-    MppEncRefLtFrmCfg *lt_arr = MPP_REF_LT_ARR(cfg);
-    lt_arr[0].lt_idx = 2;
-    lt_arr[0].lt_gap = 100;
-    cfg->lt_cfg_cnt = 1;
+    kmpp_obj_pos_init(&pos);
+    REF_TEST_LT_SEEK(obj, &pos, 0);
+    REF_TEST_LT_SET_FIELD(obj, &pos, 0, lt_idx, 2);
+    REF_TEST_LT_SET_FIELD(obj, &pos, 0, lt_gap, 100);
+    kmpp_obj_set_s32(obj, "lt_cfg_cnt", 1);
 
     /* 2. extract: struct -> cfg tree -> JSON */
-    _mpp_ret = mpp_cfg_from_struct(&obj_from, cfg_root, cfg);
-    MPP_ASSERT_FALSEm("from_struct failed", _mpp_ret);
+    {
+        KmppObjDef def = kmpp_obj_to_objdef((KmppObj)obj);
+        MppCfgObj cfg_root = kmpp_objdef_get_cfg_root(def);
 
-    _mpp_ret = mpp_cfg_to_string(obj_from, MPP_CFG_STR_FMT_JSON, &json);
-    MPP_ASSERT_FALSEm("to_string failed", _mpp_ret);
-    mpp_logi("extracted JSON:\n%s\n", json);
+        _mpp_ret = mpp_cfg_from_struct(&obj_from, cfg_root,
+                                       kmpp_obj_to_entry(obj));
+        MPP_ASSERT_FALSEm("from_struct failed", _mpp_ret);
+
+        _mpp_ret = mpp_cfg_to_string(obj_from, MPP_CFG_STR_FMT_JSON, &json);
+        MPP_ASSERT_FALSEm("to_string failed", _mpp_ret);
+        mpp_logi("extracted JSON:\n%s\n", json);
+    }
 
     /* 3. apply: extracted cfg -> new struct */
     {
-        MppEncRefStFrmCfg *st_arr2;
-        MppEncRefLtFrmCfg *lt_arr2;
+        KmppObjDef def2;
+        MppCfgObj cfg_root2;
 
-        _mpp_ret = mpp_enc_ref_cfg_setup(&obj2, 1, 4);
+        _mpp_ret = ref_cfg_setup(&obj2, use_kobj, 1, 4);
         MPP_ASSERT_FALSEm("setup obj2 failed", _mpp_ret);
 
-        cfg2 = (MppEncRefCfgImpl *)kmpp_obj_to_entry(obj2);
+        def2 = kmpp_obj_to_objdef((KmppObj)obj2);
+        cfg_root2 = kmpp_objdef_get_cfg_root(def2);
 
-        _mpp_ret = mpp_cfg_to_struct(obj_from, cfg_root, cfg2);
+        _mpp_ret = mpp_cfg_to_struct(obj_from, cfg_root2,
+                                     kmpp_obj_to_entry(obj2));
         MPP_ASSERT_FALSEm("to_struct failed", _mpp_ret);
 
         /* verify scalars */
-        MPP_ASSERT_EQ(1, cfg2->keep_cpb);
-        MPP_ASSERT_EQ(4, cfg2->st_cfg_cnt);
-        MPP_ASSERT_EQ(1, cfg2->lt_cfg_cnt);
+        kmpp_obj_get_s32(obj2, "keep_cpb", &val);
+        MPP_ASSERT_EQm("keep_cpb", 1, val);
+        kmpp_obj_get_s32(obj2, "st_cfg_cnt", &val);
+        MPP_ASSERT_EQm("st_cfg_cnt", 4, val);
+        kmpp_obj_get_s32(obj2, "lt_cfg_cnt", &val);
+        MPP_ASSERT_EQm("lt_cfg_cnt", 1, val);
 
         /* verify VLA fields */
-        st_arr2 = MPP_REF_ST_ARR(cfg2);
-        MPP_ASSERT_EQ(0, st_arr2[0].is_non_ref);
-        MPP_ASSERT_EQ(10, st_arr2[0].ref_arg);
-        MPP_ASSERT_EQ(1, st_arr2[1].is_non_ref);
-        MPP_ASSERT_EQ(3, st_arr2[1].temporal_id);
-        MPP_ASSERT_EQ(20, st_arr2[1].ref_arg);
-        MPP_ASSERT_EQ(0, st_arr2[2].is_non_ref);
-        MPP_ASSERT_EQ(1, st_arr2[2].temporal_id);
-        MPP_ASSERT_EQ(30, st_arr2[2].ref_arg);
-        MPP_ASSERT_EQ(1, st_arr2[3].is_non_ref);
-        MPP_ASSERT_EQ(2, st_arr2[3].temporal_id);
-        MPP_ASSERT_EQ(40, st_arr2[3].ref_arg);
+        kmpp_obj_pos_init(&pos);
+        REF_TEST_ST_SEEK(obj2, &pos, 0);
+        REF_TEST_ST_GET_FIELD(obj2, &pos, 0, is_non_ref, &val);
+        MPP_ASSERT_EQm("st_cfg:0:is_non_ref", 0, val);
+        REF_TEST_ST_GET_FIELD(obj2, &pos, 0, ref_arg, &val);
+        MPP_ASSERT_EQm("st_cfg:0:ref_arg", 10, val);
+        REF_TEST_ST_SEEK(obj2, &pos, 1);
+        REF_TEST_ST_GET_FIELD(obj2, &pos, 1, is_non_ref, &val);
+        MPP_ASSERT_EQm("st_cfg:1:is_non_ref", 1, val);
+        REF_TEST_ST_GET_FIELD(obj2, &pos, 1, temporal_id, &val);
+        MPP_ASSERT_EQm("st_cfg:1:temporal_id", 1, val);
+        REF_TEST_ST_GET_FIELD(obj2, &pos, 1, ref_arg, &val);
+        MPP_ASSERT_EQm("st_cfg:1:ref_arg", 20, val);
+        REF_TEST_ST_SEEK(obj2, &pos, 2);
+        REF_TEST_ST_GET_FIELD(obj2, &pos, 2, is_non_ref, &val);
+        MPP_ASSERT_EQm("st_cfg:2:is_non_ref", 0, val);
+        REF_TEST_ST_GET_FIELD(obj2, &pos, 2, temporal_id, &val);
+        MPP_ASSERT_EQm("st_cfg:2:temporal_id", 1, val);
+        REF_TEST_ST_GET_FIELD(obj2, &pos, 2, ref_arg, &val);
+        MPP_ASSERT_EQm("st_cfg:2:ref_arg", 30, val);
+        REF_TEST_ST_SEEK(obj2, &pos, 3);
+        REF_TEST_ST_GET_FIELD(obj2, &pos, 3, is_non_ref, &val);
+        MPP_ASSERT_EQm("st_cfg:3:is_non_ref", 0, val);
+        REF_TEST_ST_GET_FIELD(obj2, &pos, 3, temporal_id, &val);
+        MPP_ASSERT_EQm("st_cfg:3:temporal_id", 0, val);
+        REF_TEST_ST_GET_FIELD(obj2, &pos, 3, ref_arg, &val);
+        MPP_ASSERT_EQm("st_cfg:3:ref_arg", 40, val);
 
-        lt_arr2 = MPP_REF_LT_ARR(cfg2);
-        MPP_ASSERT_EQ(2, lt_arr2[0].lt_idx);
-        MPP_ASSERT_EQ(100, lt_arr2[0].lt_gap);
+        kmpp_obj_pos_init(&pos);
+        REF_TEST_LT_SEEK(obj2, &pos, 0);
+        REF_TEST_LT_GET_FIELD(obj2, &pos, 0, lt_idx, &val);
+        MPP_ASSERT_EQm("lt_cfg:0:lt_idx", 2, val);
+        REF_TEST_LT_GET_FIELD(obj2, &pos, 0, lt_gap, &val);
+        MPP_ASSERT_EQm("lt_cfg:0:lt_gap", 100, val);
     }
 
     /* 4. JSON roundtrip: JSON -> cfg tree -> new struct -> compare */
     {
-        MppEncRefStFrmCfg *st_arr3;
-        MppEncRefLtFrmCfg *lt_arr3;
+        KmppObjDef def3;
+        MppCfgObj cfg_root3;
 
-        _mpp_ret = mpp_cfg_from_string(&obj_from_json, MPP_CFG_STR_FMT_JSON, json);
+        _mpp_ret = mpp_cfg_from_string(&obj_from_json, MPP_CFG_STR_FMT_JSON,
+                                       json);
         MPP_ASSERT_FALSEm("from_string failed", _mpp_ret);
 
-        _mpp_ret = mpp_enc_ref_cfg_setup(&obj3, 1, 4);
+        _mpp_ret = ref_cfg_setup(&obj3, use_kobj, 1, 4);
         MPP_ASSERT_FALSEm("setup obj3 failed", _mpp_ret);
 
-        cfg3 = (MppEncRefCfgImpl *)kmpp_obj_to_entry(obj3);
+        def3 = kmpp_obj_to_objdef((KmppObj)obj3);
+        cfg_root3 = kmpp_objdef_get_cfg_root(def3);
 
-        _mpp_ret = mpp_cfg_to_struct(obj_from_json, cfg_root, cfg3);
+        _mpp_ret = mpp_cfg_to_struct(obj_from_json, cfg_root3,
+                                     kmpp_obj_to_entry(obj3));
         MPP_ASSERT_FALSEm("to_struct from json failed", _mpp_ret);
 
         /* verify scalars */
-        MPP_ASSERT_EQ(1, cfg3->keep_cpb);
-        MPP_ASSERT_EQ(4, cfg3->st_cfg_cnt);
-        MPP_ASSERT_EQ(1, cfg3->lt_cfg_cnt);
+        kmpp_obj_get_s32(obj3, "keep_cpb", &val);
+        MPP_ASSERT_EQm("keep_cpb", 1, val);
+        kmpp_obj_get_s32(obj3, "st_cfg_cnt", &val);
+        MPP_ASSERT_EQm("st_cfg_cnt", 4, val);
+        kmpp_obj_get_s32(obj3, "lt_cfg_cnt", &val);
+        MPP_ASSERT_EQm("lt_cfg_cnt", 1, val);
 
         /* verify VLA fields */
-        st_arr3 = MPP_REF_ST_ARR(cfg3);
-        MPP_ASSERT_EQ(0, st_arr3[0].is_non_ref);
-        MPP_ASSERT_EQ(10, st_arr3[0].ref_arg);
-        MPP_ASSERT_EQ(1, st_arr3[1].is_non_ref);
-        MPP_ASSERT_EQ(3, st_arr3[1].temporal_id);
-        MPP_ASSERT_EQ(20, st_arr3[1].ref_arg);
-        MPP_ASSERT_EQ(0, st_arr3[2].is_non_ref);
-        MPP_ASSERT_EQ(1, st_arr3[2].temporal_id);
-        MPP_ASSERT_EQ(30, st_arr3[2].ref_arg);
-        MPP_ASSERT_EQ(1, st_arr3[3].is_non_ref);
-        MPP_ASSERT_EQ(2, st_arr3[3].temporal_id);
-        MPP_ASSERT_EQ(40, st_arr3[3].ref_arg);
+        kmpp_obj_pos_init(&pos);
+        REF_TEST_ST_SEEK(obj3, &pos, 0);
+        REF_TEST_ST_GET_FIELD(obj3, &pos, 0, is_non_ref, &val);
+        MPP_ASSERT_EQm("st_cfg:0:is_non_ref", 0, val);
+        REF_TEST_ST_GET_FIELD(obj3, &pos, 0, ref_arg, &val);
+        MPP_ASSERT_EQm("st_cfg:0:ref_arg", 10, val);
+        REF_TEST_ST_SEEK(obj3, &pos, 1);
+        REF_TEST_ST_GET_FIELD(obj3, &pos, 1, is_non_ref, &val);
+        MPP_ASSERT_EQm("st_cfg:1:is_non_ref", 1, val);
+        REF_TEST_ST_GET_FIELD(obj3, &pos, 1, temporal_id, &val);
+        MPP_ASSERT_EQm("st_cfg:1:temporal_id", 1, val);
+        REF_TEST_ST_GET_FIELD(obj3, &pos, 1, ref_arg, &val);
+        MPP_ASSERT_EQm("st_cfg:1:ref_arg", 20, val);
+        REF_TEST_ST_SEEK(obj3, &pos, 2);
+        REF_TEST_ST_GET_FIELD(obj3, &pos, 2, is_non_ref, &val);
+        MPP_ASSERT_EQm("st_cfg:2:is_non_ref", 0, val);
+        REF_TEST_ST_GET_FIELD(obj3, &pos, 2, temporal_id, &val);
+        MPP_ASSERT_EQm("st_cfg:2:temporal_id", 1, val);
+        REF_TEST_ST_GET_FIELD(obj3, &pos, 2, ref_arg, &val);
+        MPP_ASSERT_EQm("st_cfg:2:ref_arg", 30, val);
+        REF_TEST_ST_SEEK(obj3, &pos, 3);
+        REF_TEST_ST_GET_FIELD(obj3, &pos, 3, is_non_ref, &val);
+        MPP_ASSERT_EQm("st_cfg:3:is_non_ref", 0, val);
+        REF_TEST_ST_GET_FIELD(obj3, &pos, 3, temporal_id, &val);
+        MPP_ASSERT_EQm("st_cfg:3:temporal_id", 0, val);
+        REF_TEST_ST_GET_FIELD(obj3, &pos, 3, ref_arg, &val);
+        MPP_ASSERT_EQm("st_cfg:3:ref_arg", 40, val);
 
-        lt_arr3 = MPP_REF_LT_ARR(cfg3);
-        MPP_ASSERT_EQ(2, lt_arr3[0].lt_idx);
-        MPP_ASSERT_EQ(100, lt_arr3[0].lt_gap);
+        kmpp_obj_pos_init(&pos);
+        REF_TEST_LT_SEEK(obj3, &pos, 0);
+        REF_TEST_LT_GET_FIELD(obj3, &pos, 0, lt_idx, &val);
+        MPP_ASSERT_EQm("lt_cfg:0:lt_idx", 2, val);
+        REF_TEST_LT_GET_FIELD(obj3, &pos, 0, lt_gap, &val);
+        MPP_ASSERT_EQm("lt_cfg:0:lt_gap", 100, val);
     }
 
-    mpp_logi("test_cfg_roundtrip success\n");
+    /* 5. check: uobj local check / kobj ioctl to kernel */
+    _mpp_ret = mpp_enc_ref_cfg_check(obj);
+    if (_mpp_ret) {
+        mpp_loge("  FAIL: check ret %d at %s:%d\n",
+                 _mpp_ret, __FUNCTION__, __LINE__);
+        goto MPP_RET_LABEL;
+    }
+    mpp_logi("check ok\n");
+
+    mpp_logi("test_cfg_roundtrip [%s] success\n", tag);
     MPP_PASS();
 
 done:
@@ -759,70 +1008,15 @@ done:
     return _mpp_ret;
 }
 
-/*
- * test_ref_cfg_kobj — verify JSON apply + check on both kernel and
- * user-space ref_cfg objects.  Kernel path uses ioctl dispatch to
- * kernel; user-space path uses local struct access.
- */
-static rk_s32 test_ref_cfg_kobj(void)
+static rk_s32 test_cfg_roundtrip(void)
 {
-    const char *json =
-        "{ \"keep_cpb\" : 0, \"st_cfg_cnt\" : 5, \"lt_cfg_cnt\" : 0,"
-        "  \"st_cfg\" : ["
-        "    { \"is_non_ref\": 0, \"temporal_id\": 0, \"ref_mode\": 4, \"ref_arg\": 0, \"repeat\": 0 },"
-        "    { \"is_non_ref\": 1, \"temporal_id\": 2, \"ref_mode\": 0, \"ref_arg\": 0, \"repeat\": 0 },"
-        "    { \"is_non_ref\": 0, \"temporal_id\": 1, \"ref_mode\": 0, \"ref_arg\": 0, \"repeat\": 0 },"
-        "    { \"is_non_ref\": 1, \"temporal_id\": 2, \"ref_mode\": 0, \"ref_arg\": 0, \"repeat\": 0 },"
-        "    { \"is_non_ref\": 0, \"temporal_id\": 0, \"ref_mode\": 4, \"ref_arg\": 0, \"repeat\": 0 }"
-        "  ],"
-        "  \"lt_cfg\" : [] }";
-    rk_s32 ret = MPP_OK;
+    rk_s32 ret;
 
-    mpp_logi("test_ref_cfg_kobj start\n");
+    ret = test_cfg_roundtrip_impl("uobj", 0);
+    if (ret)
+        return ret;
 
-    /* path 1: kernel-side ref_cfg (ioctl check to kernel) */
-    {
-        MppEncRefCfg kref = NULL;
-
-        if (!mpp_venc_kcfg_init((MppVencKcfg *)&kref,
-                                MPP_VENC_KCFG_TYPE_REF_CFG) && kref) {
-            rk_s32 r = mpp_enc_ref_cfg_apply(kref, MPP_CFG_STR_FMT_JSON,
-                                             (char *)json);
-            if (!r)
-                r = kmpp_venc_ref_cfg_check((MppVencKcfg)kref);
-            mpp_enc_ref_cfg_deinit(&kref);
-            if (r) {
-                mpp_loge_f("kernel check FAILED\n");
-                ret = MPP_NOK;
-            } else {
-                mpp_logi("kernel check ok\n");
-            }
-        } else {
-            mpp_logi("kernel path skipped (no kmpp)\n");
-        }
-    }
-
-    /* path 2: user-space ref_cfg (local check) */
-    {
-        MppEncRefCfg uref = NULL;
-
-        mpp_enc_ref_cfg_init(&uref);
-        if (!uref) {
-            mpp_loge_f("create uref failed\n");
-            return MPP_NOK;
-        }
-
-        if (mpp_enc_ref_cfg_apply(uref, MPP_CFG_STR_FMT_JSON, (char *)json) ||
-            mpp_enc_ref_cfg_check(uref)) {
-            mpp_loge_f("mpp check FAILED\n");
-            ret = MPP_NOK;
-        } else {
-            mpp_logi("mpp check ok\n");
-        }
-        mpp_enc_ref_cfg_deinit(&uref);
-    }
-
-    return ret;
+    return test_cfg_roundtrip_impl("kobj", 1);
 }
 
 int main(void)
@@ -870,10 +1064,6 @@ int main(void)
         goto done;
 
     ret = test_cfg_roundtrip();
-    if (ret)
-        goto done;
-
-    ret = test_ref_cfg_kobj();
     if (ret)
         goto done;
 

@@ -16,6 +16,50 @@
 #include "mpp_enc_refs.h"
 #include "rk_venc_kcfg.h"
 
+#define ENC_REF_POS_SEEK(ref, pos, arr, idx, name) do {                      \
+    rk_s32 _r = kmpp_obj_pos_seek((ref), (pos), (name), (idx));              \
+    if (_r) {                                                                \
+        mpp_loge_f("kobj %s [%d] seek failed ret %d\n", (arr), (idx), _r);   \
+        return MPP_NOK;                                                      \
+    }                                                                        \
+} while (0)
+
+#define ENC_REF_ST_POS_GET_FIELD(ref, pos, idx, field, val) do {             \
+    rk_s32 _r = kmpp_obj_pos_get_s32((ref), (pos), #field, (val));           \
+    if (_r) {                                                                \
+        mpp_loge_f("kobj st_cfg [%d] get %s failed ret %d\n",                \
+                   (idx), #field, _r);                                       \
+        return MPP_NOK;                                                      \
+    }                                                                        \
+} while (0)
+
+#define ENC_REF_ST_POS_SET_FIELD(ref, pos, idx, field, val) do {             \
+    rk_s32 _r = kmpp_obj_pos_set_s32((ref), (pos), #field, (val));           \
+    if (_r) {                                                                \
+        mpp_loge_f("kobj st_cfg [%d] set %s failed ret %d\n",                \
+                   (idx), #field, _r);                                       \
+        return MPP_NOK;                                                      \
+    }                                                                        \
+} while (0)
+
+#define ENC_REF_LT_POS_GET_FIELD(ref, pos, idx, field, val) do {             \
+    rk_s32 _r = kmpp_obj_pos_get_s32((ref), (pos), #field, (val));           \
+    if (_r) {                                                                \
+        mpp_loge_f("kobj lt_cfg [%d] get %s failed ret %d\n",                \
+                   (idx), #field, _r);                                       \
+        return MPP_NOK;                                                      \
+    }                                                                        \
+} while (0)
+
+#define ENC_REF_LT_POS_SET_FIELD(ref, pos, idx, field, val) do {             \
+    rk_s32 _r = kmpp_obj_pos_set_s32((ref), (pos), #field, (val));           \
+    if (_r) {                                                                \
+        mpp_loge_f("kobj lt_cfg [%d] set %s failed ret %d\n",                \
+                   (idx), #field, _r);                                       \
+        return MPP_NOK;                                                      \
+    }                                                                        \
+} while (0)
+
 /*
  * kmpp_obj definition for MppEncRefCfgImpl
  */
@@ -132,35 +176,35 @@ static rk_s32 mpp_enc_ref_cfg_impl_resize(void *entry, KmppObj obj,
  * The resize callback commits new_* to actual cap fields.
  * On failure, clears new_* (old state unchanged since callback not called).
  */
-static rk_s32 ref_cfg_resize(MppEncRefCfgImpl *cfg, KmppObj obj,
-                             rk_s32 new_lt_cap, rk_s32 new_st_cap,
+static rk_s32 ref_cfg_resize(MppEncRefCfg obj, rk_s32 new_lt_cap, rk_s32 new_st_cap,
                              const char *caller)
 {
+    rk_s32 old_lt_cap;
+    rk_s32 old_st_cap;
     rk_s32 vla_size;
     rk_s32 ret;
 
-    cfg->new_lt_cfg_cap = new_lt_cap;
-    cfg->new_st_cfg_cap = new_st_cap;
+    kmpp_obj_get_s32(obj, "lt_cfg_cap", &old_lt_cap);
+    kmpp_obj_get_s32(obj, "st_cfg_cap", &old_st_cap);
+
+    kmpp_obj_set_s32(obj, "lt_cfg_cap", new_lt_cap);
+    kmpp_obj_set_s32(obj, "st_cfg_cap", new_st_cap);
 
     vla_size = new_st_cap * sizeof(MppEncRefStFrmCfg) + new_lt_cap * sizeof(MppEncRefLtFrmCfg);
 
     ret = kmpp_obj_resize(obj, vla_size, caller);
     if (ret) {
         mpp_loge("%s: resize to %d failed ret %d, revert to cap lt %d st %d\n",
-                 caller, vla_size, ret, cfg->lt_cfg_cap, cfg->st_cfg_cap);
-        cfg->new_lt_cfg_cap = cfg->lt_cfg_cap;
-        cfg->new_st_cfg_cap = cfg->st_cfg_cap;
+                 caller, vla_size, ret, old_lt_cap, old_st_cap);
+        kmpp_obj_set_s32(obj, "lt_cfg_cap", old_lt_cap);
+        kmpp_obj_set_s32(obj, "st_cfg_cap", old_st_cap);
     }
 
     return ret;
 }
 
-/*
- * mpp_enc_ref_cfg object init / deinit
- */
-MPP_RET mpp_enc_ref_cfg_setup(MppEncRefCfg *obj, RK_S32 lt_cnt, RK_S32 st_cnt)
+MPP_RET mpp_enc_ref_cfg_setup(MppEncRefCfg obj, RK_S32 lt_cnt, RK_S32 st_cnt)
 {
-    MppEncRefCfgImpl *cfg;
     rk_s32 ret;
 
     if (!obj || lt_cnt < 0 || st_cnt < 0) {
@@ -168,21 +212,15 @@ MPP_RET mpp_enc_ref_cfg_setup(MppEncRefCfg *obj, RK_S32 lt_cnt, RK_S32 st_cnt)
         return MPP_NOK;
     }
 
-    ret = mpp_enc_ref_cfg_get(obj);
+    if (!kmpp_obj_to_entry(obj))
+        return MPP_ERR_NULL_PTR;
+
+    ret = ref_cfg_resize(obj, lt_cnt, st_cnt, __FUNCTION__);
     if (ret)
         return ret;
 
-    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(*obj);
-    ret = ref_cfg_resize(cfg, *obj, lt_cnt, st_cnt, __FUNCTION__);
-    if (ret) {
-        kmpp_obj_put_f(*obj);
-        *obj = NULL;
-        return ret;
-    }
-
-    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(*obj);
-    cfg->lt_cfg_cnt = 0;
-    cfg->st_cfg_cnt = 0;
+    kmpp_obj_set_s32(obj, "lt_cfg_cnt", 0);
+    kmpp_obj_set_s32(obj, "st_cfg_cnt", 0);
 
     return MPP_OK;
 }
@@ -278,69 +316,100 @@ MPP_RET mpp_enc_ref_cfg_reset(MppEncRefCfg ref)
 
 MPP_RET mpp_enc_ref_cfg_set_cfg_cnt(MppEncRefCfg ref, RK_S32 lt_cnt, RK_S32 st_cnt)
 {
-    MppEncRefCfgImpl *cfg;
-    rk_s32 ret;
-
-    if (!ref || lt_cnt < 0 || st_cnt < 0)
-        return MPP_ERR_NULL_PTR;
-
-    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref);
-    if (!cfg)
-        return MPP_ERR_NULL_PTR;
-
-    ret = ref_cfg_resize(cfg, ref, lt_cnt, st_cnt, __FUNCTION__);
-    if (ret)
-        return ret;
-
-    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref);
-    cfg->lt_cfg_cnt = 0;
-    cfg->st_cfg_cnt = 0;
-
-    return MPP_OK;
+    return mpp_enc_ref_cfg_setup(ref, lt_cnt, st_cnt);
 }
 
 MPP_RET mpp_enc_ref_cfg_add_lt_cfg(MppEncRefCfg ref, RK_S32 cnt, MppEncRefLtFrmCfg *frm)
 {
-    MppEncRefCfgImpl *cfg;
+    rk_s32 lt_cnt;
+    rk_s32 lt_cap;
+    rk_s32 i;
+    rk_s32 j;
 
     if (!ref || !frm || cnt <= 0)
         return MPP_ERR_VALUE;
 
-    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref);
-    if (!cfg)
+    if (!kmpp_obj_to_entry(ref))
         return MPP_ERR_VALUE;
 
-    if (cfg->lt_cfg_cnt + cnt > cfg->lt_cfg_cap) {
-        mpp_loge_f("lt_cfg overflow cnt %d + add %d > cap %d\n",
-                   cfg->lt_cfg_cnt, cnt, cfg->lt_cfg_cap);
+    kmpp_obj_get_s32(ref, "lt_cfg_cnt", &lt_cnt);
+    kmpp_obj_get_s32(ref, "lt_cfg_cap", &lt_cap);
+
+    if (lt_cnt + cnt > lt_cap) {
+        mpp_loge_f("lt_cfg overflow cnt %d + add %d > cap %d\n", lt_cnt, cnt, lt_cap);
         return MPP_ERR_VALUE;
     }
 
-    memcpy(&MPP_REF_LT_ARR(cfg)[cfg->lt_cfg_cnt], frm, sizeof(*frm) * cnt);
-    cfg->lt_cfg_cnt += cnt;
+    if (kmpp_obj_is_kobj(ref)) {
+        KmppObjPos pos;
+
+        kmpp_obj_pos_init(&pos);
+
+        for (i = 0, j = lt_cnt; i < cnt; i++, j++) {
+            /* seek by name only on the first element; NULL reuses the same array */
+            ENC_REF_POS_SEEK(ref, &pos, "lt_cfg", j, (i == 0) ? "lt_cfg" : NULL);
+
+            ENC_REF_LT_POS_SET_FIELD(ref, &pos, j, lt_idx,      frm[i].lt_idx);
+            ENC_REF_LT_POS_SET_FIELD(ref, &pos, j, temporal_id, frm[i].temporal_id);
+            ENC_REF_LT_POS_SET_FIELD(ref, &pos, j, ref_mode,    frm[i].ref_mode);
+            ENC_REF_LT_POS_SET_FIELD(ref, &pos, j, ref_arg,     frm[i].ref_arg);
+            ENC_REF_LT_POS_SET_FIELD(ref, &pos, j, lt_gap,      frm[i].lt_gap);
+            ENC_REF_LT_POS_SET_FIELD(ref, &pos, j, lt_delay,    frm[i].lt_delay);
+        }
+        kmpp_obj_set_s32(ref, "lt_cfg_cnt", lt_cnt + cnt);
+    } else {
+        MppEncRefCfgImpl *cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref);
+
+        memcpy(&MPP_REF_LT_ARR(cfg)[cfg->lt_cfg_cnt], frm, sizeof(*frm) * cnt);
+        cfg->lt_cfg_cnt += cnt;
+    }
 
     return MPP_OK;
 }
 
 MPP_RET mpp_enc_ref_cfg_add_st_cfg(MppEncRefCfg ref, RK_S32 cnt, MppEncRefStFrmCfg *frm)
 {
-    MppEncRefCfgImpl *cfg;
+    rk_s32 st_cnt;
+    rk_s32 st_cap;
+    rk_s32 i;
+    rk_s32 j;
 
     if (!ref || !frm || cnt <= 0)
         return MPP_ERR_VALUE;
 
-    cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref);
-    if (!cfg)
+    if (!kmpp_obj_to_entry(ref))
         return MPP_ERR_VALUE;
 
-    if (cfg->st_cfg_cnt + cnt > cfg->st_cfg_cap) {
-        mpp_loge_f("st_cfg overflow cnt %d + add %d > cap %d\n",
-                   cfg->st_cfg_cnt, cnt, cfg->st_cfg_cap);
+    kmpp_obj_get_s32(ref, "st_cfg_cnt", &st_cnt);
+    kmpp_obj_get_s32(ref, "st_cfg_cap", &st_cap);
+
+    if (st_cnt + cnt > st_cap) {
+        mpp_loge_f("st_cfg overflow cnt %d + add %d > cap %d\n", st_cnt, cnt, st_cap);
         return MPP_ERR_VALUE;
     }
 
-    memcpy(&MPP_REF_ST_ARR(cfg)[cfg->st_cfg_cnt], frm, sizeof(*frm) * cnt);
-    cfg->st_cfg_cnt += cnt;
+    if (kmpp_obj_is_kobj(ref)) {
+        KmppObjPos pos;
+
+        kmpp_obj_pos_init(&pos);
+
+        for (i = 0, j = st_cnt; i < cnt; i++, j++) {
+            /* seek by name only on the first element; NULL reuses the same array */
+            ENC_REF_POS_SEEK(ref, &pos, "st_cfg", j, (i == 0) ? "st_cfg" : NULL);
+
+            ENC_REF_ST_POS_SET_FIELD(ref, &pos, j, is_non_ref,  frm[i].is_non_ref);
+            ENC_REF_ST_POS_SET_FIELD(ref, &pos, j, temporal_id, frm[i].temporal_id);
+            ENC_REF_ST_POS_SET_FIELD(ref, &pos, j, ref_mode,    frm[i].ref_mode);
+            ENC_REF_ST_POS_SET_FIELD(ref, &pos, j, ref_arg,     frm[i].ref_arg);
+            ENC_REF_ST_POS_SET_FIELD(ref, &pos, j, repeat,      frm[i].repeat);
+        }
+        kmpp_obj_set_s32(ref, "st_cfg_cnt", st_cnt + cnt);
+    } else {
+        MppEncRefCfgImpl *cfg = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref);
+
+        memcpy(&MPP_REF_ST_ARR(cfg)[cfg->st_cfg_cnt], frm, sizeof(*frm) * cnt);
+        cfg->st_cfg_cnt += cnt;
+    }
 
     return MPP_OK;
 }
@@ -576,29 +645,110 @@ void mpp_enc_ref_cfg_show(void)
     mpp_logi("dumping ref_cfg entries done\n");
 }
 
+static MPP_RET mpp_enc_ref_cfg_copy_k(MppEncRefCfg dst, MppEncRefCfg src)
+{
+    rk_s32 lt_cap;
+    rk_s32 st_cap;
+    rk_s32 lt_cnt;
+    rk_s32 st_cnt;
+    rk_s32 keep_cpb;
+    rk_s32 max_tlayers;
+    rk_s32 ready;
+    rk_s32 val;
+    KmppObjPos pos;
+    rk_s32 i;
+    rk_s32 ret;
+
+    /* read src caps and resize dst to match */
+    kmpp_obj_get_s32(src, "lt_cfg_cap", &lt_cap);
+    kmpp_obj_get_s32(src, "st_cfg_cap", &st_cap);
+    ret = ref_cfg_resize(dst, lt_cap, st_cap, __FUNCTION__);
+    if (ret)
+        return ret;
+
+    /* read remaining src header scalars to copy */
+    kmpp_obj_get_s32(src, "lt_cfg_cnt",  &lt_cnt);
+    kmpp_obj_get_s32(src, "st_cfg_cnt",  &st_cnt);
+    kmpp_obj_get_s32(src, "keep_cpb",    &keep_cpb);
+    kmpp_obj_get_s32(src, "max_tlayers", &max_tlayers);
+    kmpp_obj_get_s32(src, "ready",       &ready);
+
+    kmpp_obj_set_s32(dst, "lt_cfg_cnt",  lt_cnt);
+    kmpp_obj_set_s32(dst, "st_cfg_cnt",  st_cnt);
+    kmpp_obj_set_s32(dst, "keep_cpb",    keep_cpb);
+    kmpp_obj_set_s32(dst, "max_tlayers", max_tlayers);
+    kmpp_obj_set_s32(dst, "ready",       ready);
+
+    /* copy st_cfg array elements field by field via schema */
+    for (i = 0; i < st_cnt; i++) {
+        kmpp_obj_pos_init(&pos);
+        ENC_REF_POS_SEEK(src, &pos, "st_cfg", i, (i == 0) ? "st_cfg" : NULL);
+
+        ENC_REF_ST_POS_GET_FIELD(src, &pos, i, is_non_ref,  &val);
+        ENC_REF_ST_POS_SET_FIELD(dst, &pos, i, is_non_ref,  val);
+        ENC_REF_ST_POS_GET_FIELD(src, &pos, i, temporal_id, &val);
+        ENC_REF_ST_POS_SET_FIELD(dst, &pos, i, temporal_id, val);
+        ENC_REF_ST_POS_GET_FIELD(src, &pos, i, ref_mode,    &val);
+        ENC_REF_ST_POS_SET_FIELD(dst, &pos, i, ref_mode,    val);
+        ENC_REF_ST_POS_GET_FIELD(src, &pos, i, ref_arg,     &val);
+        ENC_REF_ST_POS_SET_FIELD(dst, &pos, i, ref_arg,     val);
+        ENC_REF_ST_POS_GET_FIELD(src, &pos, i, repeat,      &val);
+        ENC_REF_ST_POS_SET_FIELD(dst, &pos, i, repeat,      val);
+    }
+
+    /* copy lt_cfg array elements field by field via schema */
+    for (i = 0; i < lt_cnt; i++) {
+        kmpp_obj_pos_init(&pos);
+        ENC_REF_POS_SEEK(src, &pos, "lt_cfg", i, (i == 0) ? "lt_cfg" : NULL);
+
+        ENC_REF_LT_POS_GET_FIELD(src, &pos, i, lt_idx,      &val);
+        ENC_REF_LT_POS_SET_FIELD(dst, &pos, i, lt_idx,      val);
+        ENC_REF_LT_POS_GET_FIELD(src, &pos, i, temporal_id, &val);
+        ENC_REF_LT_POS_SET_FIELD(dst, &pos, i, temporal_id, val);
+        ENC_REF_LT_POS_GET_FIELD(src, &pos, i, ref_mode,    &val);
+        ENC_REF_LT_POS_SET_FIELD(dst, &pos, i, ref_mode,    val);
+        ENC_REF_LT_POS_GET_FIELD(src, &pos, i, ref_arg,     &val);
+        ENC_REF_LT_POS_SET_FIELD(dst, &pos, i, ref_arg,     val);
+        ENC_REF_LT_POS_GET_FIELD(src, &pos, i, lt_gap,      &val);
+        ENC_REF_LT_POS_SET_FIELD(dst, &pos, i, lt_gap,      val);
+        ENC_REF_LT_POS_GET_FIELD(src, &pos, i, lt_delay,    &val);
+        ENC_REF_LT_POS_SET_FIELD(dst, &pos, i, lt_delay,    val);
+    }
+
+    return MPP_OK;
+}
+
 MPP_RET mpp_enc_ref_cfg_copy(MppEncRefCfg dst, MppEncRefCfg src)
 {
+    rk_s32 src_kobj;
+    rk_s32 dst_kobj;
+
     if (!dst || !src)
         return MPP_ERR_VALUE;
 
+    if (!kmpp_obj_to_entry(src) || !kmpp_obj_to_entry(dst))
+        return MPP_ERR_VALUE;
+
+    src_kobj = kmpp_obj_is_kobj((KmppObj)src);
+    dst_kobj = kmpp_obj_is_kobj((KmppObj)dst);
+    if (src_kobj != dst_kobj) {
+        mpp_loge_f("src/dst kind mismatch: src_kobj %d dst_kobj %d\n",
+                   src_kobj, dst_kobj);
+        return MPP_ERR_VALUE;
+    }
+
+    if (src_kobj)
+        return mpp_enc_ref_cfg_copy_k(dst, src);
+
     MppEncRefCfgImpl *s = (MppEncRefCfgImpl *)kmpp_obj_to_entry(src);
-    MppEncRefCfgImpl *d;
+    MppEncRefCfgImpl *d = (MppEncRefCfgImpl *)kmpp_obj_to_entry(dst);
     rk_s32 ret;
 
-    if (!s)
-        return MPP_ERR_VALUE;
-
-    d = (MppEncRefCfgImpl *)kmpp_obj_to_entry(dst);
-    if (!d)
-        return MPP_ERR_VALUE;
-
-    ret = ref_cfg_resize(d, dst, s->lt_cfg_cap, s->st_cfg_cap, __FUNCTION__);
+    ret = ref_cfg_resize(dst, s->lt_cfg_cap, s->st_cfg_cap, __FUNCTION__);
     if (ret)
         return ret;
 
     d = (MppEncRefCfgImpl *)kmpp_obj_to_entry(dst);
-    if (!d)
-        return MPP_ERR_VALUE;
 
     /* copy header (offsets will be the same, overwrite is harmless) */
     *d = *s;
@@ -693,7 +843,7 @@ MPP_RET mpp_enc_ref_cfg_apply(MppEncRefCfg ref, MppCfgStrFmt fmt, char *buf)
 
     /* resize VLA to count from config */
     if (st_cnt > impl->st_cfg_cap || lt_cnt > impl->lt_cfg_cap) {
-        if (ref_cfg_resize(impl, ref, lt_cnt, st_cnt, __FUNCTION__))
+        if (ref_cfg_resize(ref, lt_cnt, st_cnt, __FUNCTION__))
             goto done;
 
         impl = (MppEncRefCfgImpl *)kmpp_obj_to_entry(ref);
