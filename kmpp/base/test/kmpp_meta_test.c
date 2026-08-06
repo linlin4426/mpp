@@ -202,7 +202,7 @@ static void test_flex_order(rk_u8 *ud_data)
     KmppMeta meta = NULL;
     MppEncUserDataShm ud = {0};
     rk_u8 data_buf[64];
-    rk_u8 uuid_buf[] = "uuid-0";
+    rk_u8 uuid_buf[16] = "uuid-0";
     void *ptr = NULL;
 
     mpp_log(MODULE_TAG " test_flex_order start\n");
