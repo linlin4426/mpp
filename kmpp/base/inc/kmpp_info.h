@@ -13,11 +13,17 @@ extern "C" {
 #endif
 
 typedef enum {
-    KMPP_INFO_VENC_CTRL_CFG = 0,   /* venc/feat :: ctrl_cfg */
-    KMPP_INFO_BUTT,
-} KmppInfoId;
+    KMPP_CAP_VENC_CTRL_CFG = 0,     /* venc/feat :: ctrl_cfg */
+    KMPP_CAP_BUTT,
+} KmppCapId;
 
-rk_s32 kmpp_info_flag(KmppInfoId id);
+/*
+ * Return the version of a kernel capability:
+ *   0     - capability not supported
+ *   >= 1  - kernel declared version (versions start at 1)
+ * Callers compare against the version they require.
+ */
+rk_u32 kmpp_cap_version(KmppCapId id);
 
 #ifdef __cplusplus
 }

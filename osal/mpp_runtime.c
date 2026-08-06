@@ -23,7 +23,7 @@
 #define MPP_RT_DBG_RW_PATH     (0x00000002)  /* read-write path probing */
 #define MPP_RT_DBG_ALLOC       (0x00000004)  /* allocator detection */
 
-#define rt_dbg_kmpp(fmt, ...)  mpp_dbg(mpp_rt_debug, MPP_RT_DBG_CAP, fmt, ## __VA_ARGS__)
+#define rt_dbg_cap(fmt, ...)   mpp_dbg(mpp_rt_debug, MPP_RT_DBG_CAP, fmt, ## __VA_ARGS__)
 #define rt_dbg_path(fmt, ...)  mpp_dbg(mpp_rt_debug, MPP_RT_DBG_RW_PATH, fmt, ## __VA_ARGS__)
 #define rt_dbg_heap(fmt, ...)  mpp_dbg(mpp_rt_debug, MPP_RT_DBG_ALLOC, fmt, ## __VA_ARGS__)
 
@@ -85,49 +85,45 @@ static const char *mpp_rw_candidate_paths[] = {
 #define PROC_KMPP_PATH_LEN      64
 #define PROC_KMPP_LINE_LEN      128
 
-/* read /proc/kmpp/<module>/<kind>, match the leading name before the colon */
-rk_s32 mpp_rt_kmpp_cap_check(const char *module, const char *kind, const char *name)
+/* read /proc/kmpp/<module>/<group>, match the leading name before the colon.
+ * returns the capability version (>= 1) on match, 0 on not supported
+ * (including a missing proc node, treated as a normal "unsupported"). */
+rk_u32 mpp_rt_get_kmpp_cap(const char *module, const char *group, const char *name)
 {
     char path[PROC_KMPP_PATH_LEN];
     char line[PROC_KMPP_LINE_LEN];
     FILE *fp;
-    size_t name_len;
-    rk_s32 ret = rk_nok;
+    rk_u32 ret = 0;
 
-    if (!module || !kind || !name)
-        return rk_nok;
+    if (!module || !group || !name)
+        return 0;
 
-    name_len = strlen(name);
-    rt_dbg_kmpp("kmpp cap check %s/%s :: %s\n", module, kind, name);
+    rt_dbg_cap("kmpp cap %s/%s :: %s\n", module, group, name);
 
-    snprintf(path, sizeof(path), "/proc/kmpp/%s/%s", module, kind);
+    snprintf(path, sizeof(path), "/proc/kmpp/%s/%s", module, group);
 
     fp = fopen(path, "r");
     if (!fp) {
-        rt_dbg_kmpp("kmpp cap %s not available\n", path);
-        return rk_nok;
+        rt_dbg_cap("kmpp cap %s/%s :: %s not available\n", module, group, name);
+        return 0;
     }
 
     while (fgets(line, sizeof(line), fp)) {
-        char *p = line;
-        size_t len;
+        char cap_name[64];
+        rk_u32 ver;
 
-        while (*p == ' ' || *p == '\t')
-            p++;
-
-        len = strcspn(p, ":\n\r");
-        while (len > 0 && (p[len - 1] == ' ' || p[len - 1] == '\t'))
-            len--;
-
-        if (len == name_len && !strncmp(p, name, name_len)) {
-            ret = rk_ok;
+        /* "name : version : desc" — %s stops at the padding after the
+         * left-aligned name, %u reads the version */
+        if (sscanf(line, "%63s : %u", cap_name, &ver) == 2 &&
+            !strcmp(cap_name, name)) {
+            ret = ver;
             break;
         }
     }
 
     fclose(fp);
 
-    rt_dbg_kmpp("kmpp cap %s %s in %s\n", name, ret ? "not found" : "found", path);
+    rt_dbg_cap("kmpp cap %s/%s :: %s ver %u\n", module, group, name, ret);
 
     return ret;
 }
