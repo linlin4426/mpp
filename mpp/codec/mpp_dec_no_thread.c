@@ -424,7 +424,7 @@ MPP_RET mpp_dec_reset_no_thread(MppDecImpl *dec)
 MPP_RET mpp_dec_notify_no_thread(MppDecImpl *dec, RK_U32 flag)
 {
     // Only notify buffer group control
-    if (flag == (MPP_DEC_NOTIFY_BUFFER_VALID | MPP_DEC_NOTIFY_BUFFER_MATCH)) {
+    if (flag & (MPP_DEC_NOTIFY_BUFFER_VALID | MPP_DEC_NOTIFY_BUFFER_MATCH)) {
         mpp_mutex_cond_signal(&dec->cmd_lock);
         return MPP_OK;
     }
