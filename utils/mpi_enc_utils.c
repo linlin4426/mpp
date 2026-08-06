@@ -182,15 +182,19 @@ static RK_S32 mpi_enc_utils_load_file(MppEncTestObjSet *obj_set)
     enc_cfg_pos = strstr(buf, str_enc_cfg);
     if (enc_cfg_pos != NULL) {
         enc_cfg_pos += strlen(str_enc_cfg);
-        mpp_enc_cfg_apply(cfg_obj, MPP_CFG_STR_FMT_JSON, enc_cfg_pos);
-        ret = MPP_OK;
+        if (mpp_enc_cfg_apply(cfg_obj, MPP_CFG_STR_FMT_JSON, enc_cfg_pos))
+            mpp_err_f("apply enc_cfg from %s failed\n", name);
+        else
+            ret = MPP_OK;
     }
 
     enc_args_pos = strstr(buf, str_enc_args);
     if (enc_args_pos != NULL) {
         enc_args_pos += strlen(str_enc_args);
-        mpp_enc_args_apply(cmd_obj, MPP_CFG_STR_FMT_JSON, enc_args_pos);
-        ret = MPP_OK;
+        if (mpp_enc_args_apply(cmd_obj, MPP_CFG_STR_FMT_JSON, enc_args_pos))
+            mpp_err_f("apply enc_args from %s failed\n", name);
+        else
+            ret = MPP_OK;
     }
 
 error:
