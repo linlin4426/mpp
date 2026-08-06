@@ -1004,6 +1004,14 @@ The mpi_dec_test printing indicates that max memory of decoding is 19.92 MB.
 
 See the test/mpi_dec_test.c for detailed decoder demo source code.
 
+### MJPEG decoder notes
+
+MJPEG decode uses a single-threaded processing path (advanced mode), which differs from stream formats like H.264/H.265. Note the following two points:
+
+1. **Output frame must be provided by the caller**: When using the high-level `decode_put_packet` interface, the output frame must be attached to the packet meta first (`mpp_packet_get_meta` to obtain meta, then `mpp_meta_set_frame(KEY_OUTPUT_FRAME, frame)`). The decode thread will retrieve the output frame from packet meta; otherwise the task will be dropped and no decoded frame will be produced.
+
+2. **Older versions (around 2022) have additional limitations**: Older MJPEG decode contexts allocated only 1 input job ticket. The first `put_packet` call reserved a ticket for eos, exhausting the task pool and causing subsequent calls to return `MPP_ERR_BUFFER_FULL`. Additionally, older versions did not support attaching output frames to packet meta (the current develop branch has fixed these issues). For older versions, it is recommended to use the low-level task interface: `poll -> dequeue -> meta_set_packet(KEY_INPUT_PACKET) + meta_set_frame(KEY_OUTPUT_FRAME) -> enqueue`. See the advanced mode in `test/mpi_dec_test.c` for the detailed flow.
+
 # 4.2 Encoder demo
 
 The encoder demo is the mpi_enc_test series programs, including single-threaded mpi_enc_test and multi-threaded mpi_enc_mt_test.
