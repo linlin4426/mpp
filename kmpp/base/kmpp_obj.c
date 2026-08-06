@@ -197,6 +197,7 @@ typedef struct KmppObjs_t {
     rk_s32              entry_offset;
     rk_s32              priv_offset;
     rk_s32              name_offset;
+    rk_s32              flex_size_offset;
     KmppObjDefImpl      defs[0];
 } KmppObjs;
 
@@ -477,9 +478,12 @@ static void kmpp_objs_init(void)
     info = mpp_trie_get_info(trie, "__name_offset");
     offset = info ? *(rk_s32 *)mpp_trie_info_ctx(info) : 0;
     p->name_offset = offset;
+    info = mpp_trie_get_info(trie, "__flex_size");
+    offset = info ? *(rk_s32 *)mpp_trie_info_ctx(info) : 0;
+    p->flex_size_offset = offset;
 
-    obj_dbg_share("count %d object offsets - priv %d name %d entry %d\n", count,
-                  p->priv_offset, p->name_offset, p->entry_offset);
+    obj_dbg_share("count %d object offsets - priv %d name %d entry %d flex_size %d\n", count,
+                  p->priv_offset, p->name_offset, p->entry_offset, p->flex_size_offset);
 
     info = mpp_trie_get_info_first(trie);
 
@@ -1085,11 +1089,15 @@ static KmppObjImpl *_get_obj_from_def(KmppObjs *p, KmppObjDefImpl *def, KmppShmP
         /* kernel object: entry from shared memory */
         impl->shm = shm;
         impl->entry = (void *)(shm->uptr + p->entry_offset);
-        impl->entry_buf_size = def->entry_size;
+        if (def->flex_entry && p->flex_size_offset)
+            impl->entry_buf_size = *(rk_s32 *)(shm->uptr + p->flex_size_offset);
+        else
+            impl->entry_buf_size = def->entry_size;
+
         *(RK_U64 *)(shm->uptr + p->priv_offset) = (RK_U64)(intptr_t)impl;
 
-        obj_dbg_flow("%s get kobj %-16s - %p entry [u:k] %llx:%llx at %s\n", func,
-                     def->name, impl, shm->uaddr, shm->kaddr, caller);
+        obj_dbg_flow("%s get kobj %-16s - %p entry [u:k] %llx:%llx buf_size %d at %s\n", func,
+                     def->name, impl, shm->uaddr, shm->kaddr, impl->entry_buf_size, caller);
     } else if (def->flex_entry) {
         /* flexible entry: allocate entry + flags separately */
         impl->shm = NULL;
@@ -1404,7 +1412,11 @@ rk_s32 kmpp_obj_resize(KmppObj obj, rk_s32 vla_size, const char *caller)
 
         impl->shm = (KmppShmPtr *)sptr.uptr;
         impl->entry = (void *)(sptr.uptr + p->entry_offset);
-        impl->entry_buf_size = buf_size;
+        if (p->flex_size_offset)
+            impl->entry_buf_size = *(rk_s32 *)(sptr.uptr + p->flex_size_offset);
+        else
+            impl->entry_buf_size = buf_size;
+
         *(rk_u64 *)(sptr.uptr + p->priv_offset) = (rk_u64)(intptr_t)impl;
     } else {
         /* local flex entry: realloc entry buffer, handle stays stable */
