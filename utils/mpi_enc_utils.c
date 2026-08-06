@@ -33,6 +33,7 @@
 #include "mpi_enc_utils.h"
 
 #include "kmpp_obj.h"
+#include "kmpp_info.h"
 #include "mpp_enc_ref.h"
 
 #define MAX_FILE_NAME_LENGTH        256
@@ -1129,11 +1130,28 @@ RK_S32 mpi_enc_opt_kmpp(void *ctx, const char *next)
 
     if (next) {
         cmd->kmpp_mode = atoi(next);
-        if (cmd->kmpp_mode) {
-            if (access("/dev/vcodec", F_OK | R_OK | W_OK)) {
-                mpp_err("failed to access /dev/vcodec, check kmpp devices\n");
+        switch (cmd->kmpp_mode) {
+        case 0 : {
+            /* pure userspace path (kmpp disabled), no capability check */
+        } break;
+        case 2 : {
+            /* venc_obj path */
+            if (!kmpp_cap_version(KMPP_CAP_VENC_CTRL_CFG)) {
+                mpp_err("kmpp_mode 2 not supported: kernel has no ctrl_cfg cap\n");
                 return -1;
             }
+        } break;
+        case 1 : {
+            /* legacy path */
+            if (access("/dev/vcodec", F_OK)) {
+                mpp_err("kmpp_mode 1 not supported: no /dev/vcodec\n");
+                return -1;
+            }
+        } break;
+        default : {
+            mpp_err("invalid kmpp_mode %d\n", cmd->kmpp_mode);
+            return -1;
+        } break;
         }
         return 1;
     }
