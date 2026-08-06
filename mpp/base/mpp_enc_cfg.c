@@ -532,16 +532,21 @@ MPP_RET mpp_enc_cfg_apply(MppEncCfg cfg, MppCfgStrFmt fmt, char *buf)
     MppEncCfgSet *cfg_impl = kmpp_obj_to_entry(cfg);
     MppCfgObj obj = NULL;
     MppCfgObj root = NULL;
+    MPP_RET ret;
 
     root = kmpp_objdef_get_cfg_root(kmpp_obj_to_objdef((KmppObj)cfg));
     if (!root)
         root = kmpp_objdef_get_cfg_root(mpp_enc_cfg_def);
 
-    mpp_cfg_from_string(&obj, fmt, buf);
-    if (obj) {
-        mpp_cfg_to_struct(obj, root, cfg_impl);
-        mpp_cfg_put_all(obj);
+    ret = mpp_cfg_from_string(&obj, fmt, buf);
+    if (ret || !obj) {
+        if (obj)
+            mpp_cfg_put_all(obj);
+        return MPP_NOK;
     }
+
+    mpp_cfg_to_struct(obj, root, cfg_impl);
+    mpp_cfg_put_all(obj);
 
     return MPP_OK;
 }

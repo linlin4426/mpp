@@ -1460,7 +1460,7 @@ static rk_s32 mpp_cfg_format_leaf_value(MppCfgIoImpl *impl, char *buf, rk_s32 to
         len += snprintf(buf + len, total - len, "\"%s\"", (char *)impl->val.str);
     } break;
     default : {
-        mpp_loge("invalid type %d\n", impl->type);
+        mpp_loge("invalid type %d name %s\n", impl->type, impl->name);
     } break;
     }
 
@@ -1539,6 +1539,9 @@ static rk_s32 mpp_cfg_to_log(MppCfgIoImpl *impl, MppCfgStrBuf *str)
     rk_s32 is_array_elem = impl->parent && impl->parent->type == MPP_CFG_TYPE_ARRAY;
     rk_s32 is_array = impl->type == MPP_CFG_TYPE_ARRAY;
     rk_s32 skip_indent = 0;  /* Flag to skip indent for array elements */
+
+    if (impl->type == MPP_CFG_TYPE_INVALID)
+        return rk_ok;
 
     /* For simple array elements, skip indent - parent will handle it */
     if (is_array_elem && impl->type < MPP_CFG_TYPE_OBJECT)
@@ -1720,6 +1723,9 @@ static rk_s32 mpp_cfg_to_json(MppCfgIoImpl *impl, MppCfgStrBuf *str)
     rk_s32 is_array_elem = impl->parent && impl->parent->type == MPP_CFG_TYPE_ARRAY;
     rk_s32 is_array = impl->type == MPP_CFG_TYPE_ARRAY;
     rk_s32 skip_indent = 0;  /* Flag to skip indent for array elements */
+
+    if (impl->type == MPP_CFG_TYPE_INVALID)
+        return rk_ok;
 
     /* For simple array elements, skip indent - parent will handle it */
     if (is_array_elem && impl->type < MPP_CFG_TYPE_OBJECT)
@@ -1985,6 +1991,9 @@ static rk_s32 mpp_cfg_to_toml(MppCfgIoImpl *impl, MppCfgStrBuf *str)
     rk_s32 total = sizeof(buf) - 1;
     rk_s32 ret = rk_ok;
 
+    if (impl->type == MPP_CFG_TYPE_INVALID)
+        return rk_ok;
+
     /* leaf node write once and finish */
     if (impl->type < MPP_CFG_TYPE_OBJECT) {
         cfg_io_dbg_to("depth %2d leaf write name %s type %d\n", str->depth, impl->name, impl->type);
@@ -2034,7 +2043,7 @@ static rk_s32 mpp_cfg_to_toml(MppCfgIoImpl *impl, MppCfgStrBuf *str)
             len += snprintf(buf + len, total - len, "\"%s\"", (char *)impl->val.str);
         } break;
         default : {
-            mpp_loge("invalid type %d\n", impl->type);
+            mpp_loge("invalid type %d name %s\n", impl->type, impl->name);
         } break;
         }
 
