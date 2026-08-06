@@ -358,8 +358,7 @@ MPP_RET hal_dbg_load_data(HalDbgCtx *ctx, const char *fname, void *buf,
         skipped = 0;
     }
 
-    strncpy(ctx->load_fname, load_fname_path, sizeof(ctx->load_fname) - 1);
-    ctx->load_fname[sizeof(ctx->load_fname) - 1] = '\0';
+    snprintf(ctx->load_fname, sizeof(ctx->load_fname), "%s", load_fname_path);
     fp = fopen(load_fname_path, "r");
     if (!fp)
         return MPP_NOK;
