@@ -1,6 +1,7 @@
 # directory setting
 --exclude=../build
 --exclude=../osal/linux/drm.h
+--exclude=../kmpp-develop
 
 # bracket style setting
 --style=linux
