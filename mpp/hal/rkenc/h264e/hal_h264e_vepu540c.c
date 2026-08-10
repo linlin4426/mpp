@@ -1600,6 +1600,16 @@ static MPP_RET hal_h264e_vepu540c_start(void *hal, HalEncTask *task)
             break;
         }
 
+        rd_cfg.reg = &ctx->regs_set->reg_ctl.common.int_sta;
+        rd_cfg.size = sizeof(RK_U32);
+        rd_cfg.offset = VEPU540C_REG_BASE_HW_STATUS;
+
+        ret = mpp_dev_ioctl(ctx->dev, MPP_DEV_REG_RD, &rd_cfg);
+        if (ret) {
+            mpp_err_f("set register read failed %d\n", ret);
+            break;
+        }
+
         if (hal_dbg_flag_en(ctx->dbg_ctx, HAL_DBG_GET_REG)) {
             RK_S32 ret_dbg = 0;
             vepu540c_get_dbg_regs(ctx->dev, ctx->regs_set, reg_s3, ret_dbg);
