@@ -1,3 +1,147 @@
+## 1.1.0 (2026-08-11)
+### Feature
+- [kmpp_obj]: Get flex entry size from shm
+- [utils]: Validate kmpp_mode in opt_kmpp
+- [kmpp]: Add kmpp_cap_version query
+- [utils]: Add ud_uuid to frame cfg
+- [kmpp_obj]: Add flags on objdef init
+- [mpp_cfg_io]: Add mpp_cfg_from_trie function
+- [mpp_trie]: Add for each info callback
+- [ref_cfg]: Add kmpp ref_ref_check function
+- [utils]: Add mpp_enc_frm_cfg module
+- [vepu51x]: Update madi_b16 and madp_ctu info
+- [kmpp]: Add kmpp_info module
+- [kmpp]: Add kmpp_venc_obj path
+- [kmpp]: Add mpp_enc_ref_cfg_create unified API
+- [vepu580]: Add meta madi_b16 and madp_ctu
+- [kmpp_obj]: Add object cache mechanism
+- [kmpp_meta]: Add peek_ptr and osd wrappers
+- [utils]: Add ref_cfg json loader
+- [kmpp_venc]: Add REF_CFG to kcfg type
+- [hal_dbg]: add raw buffer dump helper
+- [hal_dbg]: Add printf-style log API for per-frame ref info
+- [vdpu383/vdpu384b]: Dump cabac segid data for AV1D
+- [kmpp]: Support frame/packet kmpp meta access
+- [kmpp_meta]: Add flex data support
+- [av1d]: Store order_hint via mpp_frame poc field
+- [hal_dbg]: Support appending data load across multiple calls
+- [hal_dbg]: Disable hal_dbg in fast mode
+- [mpp_rt]: Add kmpp module cap query
+- [mpp_cfg_io]: Support VLA for parse and write
+- [mpp_cfg_io]: Add VLA parse support
+- [hal_vepu]: Integrate hal_dbg dump for VEPU HAL
+
+### Fix
+- [hal_info]: Align elems array to 8 bytes
+- [kmpp_obj]: Align uobj entry buffer to 8 bytes
+- [mpp_trie]: Align info ctx area to 8 bytes
+- [hal_h264e]: Read back int_sta on vepu540c
+- [mpp_dec]: Handle combined buffer notifications
+- [enc_ref]: Fix max_tlayers not updated on check
+- [test]: Fix uuid buf size in meta test
+- [utils]: Check cfg apply/extract ret
+- [mpp_cfg_io]: Skip invalid type on format
+- [hal_dbg]: Fix compile warning
+- [utils]: Restrict test userdata to 1-2 frames
+- [mpp_cfg_io]: Fix uninit vars in from_trie
+- [rc]: Fix rt_bits error
+- [kmpp_obj]: Fix resize kobj
+- [test]: Fix mpp_enc_frm_cfg_test warning
+- [mpp_cfg_io]: Fix store_vla_complex error
+- [enc_ref]: Fix ref vla count and shrink move
+- [osal]: Freeze sgln registration after init
+- [mpi_enc_utils]: Restore ref_cfg setup
+- [enc_impl]: Fix encoder async wait condition
+- [h265d]: Fix PPS update on ID switch
+- [mpp_meta]: Fix compile warning
+- [h264d]: Scan trailing RPU with configured window
+- [vdpu384]: Enable RPS update for RV1126B
+- [h264d]: Fix head offset not cleared after reset
+- [mpp_buf]: Correct scale-down frame fmt for 422/444
+- [kmpp_obj]: Detect double-put and stale cache
+- [h265d]: Fix rpus and frame mismatch issue
+- [mpp_env]: Avoid repeated debug property reads
+- [h265d]: Fix hdr meta size with start code
+- [kmpp_obj]: Add resize new ptr check
+- [build]: enable cmake parallel build for ver 4.x
+- [h265d]: Check alternative_transfer value on TRC override
+- [hal_vepu]: dump fbc buffers as raw data
+- [h265d]: Fix P frame drop after wrong CRA handling
+- [vepu511a]: Distinguish between qpmap_en and deblur_en
+- [kmpp_obj]: Clear ioc entry when putting ioc obj
+- [osal]: Fix pthread_setname_np failure
+- [kmpp_obj]: Fix update error on vla case
+- [mpp_cfg_io]: Fix mpp_enc_ref_test error
+- [avsp]: Fix bistream offset for hardware
+- [osal/test]: Fix mpp_runtime_test compile warning
+- [mpp_hal]: Add null check for p->api in error path
+- [mpp_cfg_io]: Fix update flags after write
+- [mpp_cfg_io]: Fix output format for arrays
+- [osal/test]: Fix GCC 15.2 compilation error
+- [mpp_trie]: Fix kernel trie import with subroot
+- [h265e_vepu511]: Fix smear buffer size error
+- [h264d/h265d]: Fix wrong ver_stride causing extra infochange
+- [vdpu384]: Fix vdpu384 RPS configuration issue
+- [test]: Add failure return value
+- [hal_h265d]: Fix cmodel cfg loading invalid issue
+- [hal_av1d]: Fix dump global config data with wrong offset
+- [h265d]: Fix PPS update flag not set on change
+- [hal_rkenc]: Optimize the hw encoder status check
+- [build]: Fix build err for linux arm
+- [hal_dbg]: Fix inaccurate frame index in debug dump
+- [hal_vepu]: fix hal_dbg usage across vepu hals
+
+### Docs
+- Update 1.1.0 CHANGELOG.md
+- add MJPEG decode note about output frame requirement
+
+### Refactor
+- [enc_ref]: Use kmpp_obj accessors
+- [mpp_meta]: Use objdef implement
+- [kmpp]: Extract legacy path
+- [sys_cfg]: Remove unused MppSysDecBufCkhChange enum
+- [vdpu34x]: Vdpu34x Register Simplification
+- [vdpu382]: Vdpu382 Register Simplification
+- [hal_vepu]: Unify vepu51x shared regs
+- [hal_vepu]: Unify vepu580 shared regs
+- [hal_vepu]: Unify vepu540c shared regs
+- [hal_vepu]: Unify vepu_hal tab/func/struct
+- [kmpp_obj]: Refactor vla pos support
+
+### Test
+- [kmpp]: Add ref_cfg and meta to venc test
+- [kmpp]: Add kmpp_ctrl_test module
+- [kmpp]: Add kmpp_venc_utils module
+- [mpp]: Fix obj pos seek fail
+- [utils]: Add mpp_enc_frm_cfg_test
+- [kmpp]: Add kmpp_obj_helper_test
+
+### Chore
+- [kmpp]: Add legacy and object mode switch
+- [h264d]: Avoid NALU buffer reallocations
+- [tools]: Add kmpp-develop to astyle exclude
+- [test]: Add obj cfg file roundtrip test
+- [mpp_trie]: Add mpp_trie_get_name
+- [enc_utils]: Add legacy MppEncRefParam support
+- [args]: Change kmpp_en to kmpp_mode
+- [enc_cfg]: Remove redundant parameter
+- [venc_kcfg]: Add KMPP_CTRL_FLAG define
+- [venc_kcfg]: Add ctrl_cfg flex functions
+- [kmpp_venc_kcfg]: Add kcfg cache mode info
+- [kmpp_meta]: Disable mismatch log
+- [mpp_buffer]: Disable verbose debug flag
+- [mpp_mem_pool]: Add caller print on loge path
+- [kmpp_buffer]: remove kernel-only entry
+- [kmpp_meta]: Add OSD_DATA4
+- Code and docs cleanup
+- [h264d]: Check hdr_meta info on frame mode
+- [test]: Fix helper_test leak
+- [kmpp_obj]: Add __buf_size implement
+- [kmpp_obj]: Add shm resize implement
+- [kmpp_obj]: Add fix array access path
+- [base/test]: Add meta test input args
+- [kmpp]: Add KmppVencCtrlCfg objdef
+
 ## 1.0.12 (2026-05-29)
 ### Feature
 - [mpi_enc]: Support load ref_cfg json file
