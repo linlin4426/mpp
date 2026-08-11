@@ -42,13 +42,15 @@ MPP_RET hal_info_init(HalInfo *ctx, MppCtxType type, MppCodingType coding)
 
     MPP_RET ret = MPP_NOK;
     RK_U32 elem_nb = (type == MPP_CTX_DEC) ? (ENC_INFO_BUTT) : (DEC_INFO_BUTT);
-    HalInfoImpl *impl = mpp_calloc_size(HalInfoImpl, sizeof(HalInfoImpl) +
-                                        sizeof(MppDevInfoCfg) * elem_nb);
+    /* keep the elems array 8-byte aligned: MppDevInfoCfg has 64-bit
+     * members but 32-bit sizeof(HalInfoImpl) is 20 (4 mod 8) */
+    RK_U32 head_size = MPP_ALIGN8(sizeof(HalInfoImpl));
+    HalInfoImpl *impl = mpp_calloc_size(HalInfoImpl, head_size + sizeof(MppDevInfoCfg) * elem_nb);
     if (impl) {
         impl->type = type;
         impl->coding = coding;
         impl->elem_nb = elem_nb;
-        impl->elems = (MppDevInfoCfg *)(impl + 1);
+        impl->elems = (MppDevInfoCfg *)((char *)impl + head_size);
         ret = MPP_OK;
     }
 
