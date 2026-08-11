@@ -781,10 +781,12 @@ rk_s32 mpp_trie_add_info(MppTrie trie, const char *name, void *ctx, rk_u32 ctx_l
         return mpp_trie_last_info(p);
 
     str_real = strnlen(name, MPP_TRIE_NAME_MAX) + 1;
-    str_len = MPP_ALIGN(str_real, 4);
-    /* NOTE: align all ctx_len to four bytes */
+    /* pad name so the ctx area behind it stays 8-byte aligned;
+     * ctx holds KmppEntry with 64-bit members */
+    str_len = MPP_ALIGN8(str_real + sizeof(MppTrieInfo)) - sizeof(MppTrieInfo);
+    /* NOTE: align all ctx_len to eight bytes */
     ctx_real = ctx_len;
-    ctx_len = MPP_ALIGN(ctx_real, 4);
+    ctx_len = MPP_ALIGN8(ctx_real);
     info_size = sizeof(MppTrieInfo) + str_len + ctx_len;
 
     if (str_len >= MPP_TRIE_NAME_MAX) {
@@ -879,7 +881,8 @@ rk_s32 mpp_trie_add_entry(MppTrie trie, MppTrieStatus *st,
     /* Attach info payload to node */
     if (node->id < 0 && entry) {
         rk_s32 str_real = name_len + 1;
-        rk_s32 str_len = MPP_ALIGN(str_real, 4);
+        rk_s32 str_len = MPP_ALIGN8(str_real + sizeof(MppTrieInfo)) -
+                         sizeof(MppTrieInfo);
         rk_s32 info_size = sizeof(MppTrieInfo) + str_len + sizeof(*entry);
 
         if (trie_prepare_buf(p, info_size))
