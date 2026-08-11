@@ -647,7 +647,7 @@ rk_s32 kmpp_objdef_register(KmppObjDef *def, rk_s32 priv_size, rk_s32 size,
     memcpy(buf, name, name_len);
     buf[name_len] = '\0';
     impl->name = buf;
-    impl->priv_size = MPP_ALIGN(priv_size, sizeof(void *));
+    impl->priv_size = MPP_ALIGN8(priv_size);
     impl->entry_size = size;
     impl->buf_size = size;
     impl->ref_cnt = 1;
@@ -717,7 +717,8 @@ static rk_s32 create_objdef_mem_pool(KmppObjDefImpl *impl)
         impl->buf_size = impl->entry_size + flag_size;
     }
 
-    impl->all_size = sizeof(KmppObjImpl) + impl->priv_size +
+    /* keep the entry buffer (placed right after the header) aligned */
+    impl->all_size = MPP_ALIGN8(sizeof(KmppObjImpl)) + impl->priv_size +
                      (impl->flex_entry ? 0 : impl->buf_size);
 
     obj_dbg_pool("objdef %-16s entry size %4d buf size %4d -> %4d%s\n", impl->name,
@@ -746,7 +747,7 @@ rk_s32 kmpp_objdef_get(KmppObjDef *def, rk_s32 priv_size, const char *name, rk_u
     }
 
     mpp_assert(impl);
-    impl->priv_size = priv_size;
+    impl->priv_size = MPP_ALIGN8(priv_size);
     impl->flags = flags;
     impl->cached = (flags & KMPP_OBJDEF_CACHED) ? 1 : 0;
     impl->disable_mismatch_log = (flags & KMPP_OBJDEF_MISMATCH_LOG_DISABLE) ? 1 : 0;
@@ -1075,7 +1076,7 @@ static KmppObjImpl *_get_obj_from_def(KmppObjs *p, KmppObjDefImpl *def, KmppShmP
         return NULL;
     }
 
-    base = (rk_u8 *)(impl + 1);
+    base = (rk_u8 *)impl + MPP_ALIGN8(sizeof(KmppObjImpl));
     impl->name = def->name;
     impl->def = def;
     impl->trie = def->trie;
