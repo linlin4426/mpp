@@ -124,7 +124,11 @@ static MPP_RET init(Kmpp *ctx, MppCtxType type, MppCodingType coding)
     /* create init config and copy from mVencInitKcfg */
     mpp_venc_kcfg_init(&kcfg, MPP_VENC_KCFG_TYPE_INIT);
 
-    kmpp_obj_copy(kcfg, ctx->mVencInitKcfg);
+    ret = kmpp_obj_copy(kcfg, ctx->mVencInitKcfg);
+    if (ret) {
+        mpp_loge("kmpp_obj_copy failed ret %d\n", ret);
+        goto done;
+    }
 
     kmpp_obj_get_u32(ctx->mVencInitKcfg, "chan_dup", &ctx->mChanDup);
 
