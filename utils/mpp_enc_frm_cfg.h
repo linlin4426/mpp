@@ -35,7 +35,10 @@ typedef void *MppEncFrmCfgObj;
  * Non-coordinate fields (intra/quality/abs_qp_en, stride/fmt/enable, etc.)
  * keep their original semantics.
  */
-#define MPP_ENC_FRM_CFG_COORD_MAX   (1 << 16)
+#define MPP_ENC_FRM_CFG_COORD_MAX       (1 << 16)
+#define MPP_ENC_FRM_ROI_MAX_NUM         8
+#define MPP_ENC_FRM_OSD_MAX_NUM         8
+#define MPP_ENC_FRM_JPEG_ROI_MAX_NUM    16
 
 typedef struct MppEncFrmRoi_t {
     rk_s32  x;              /* Q16 ratio: left edge position */
@@ -46,6 +49,15 @@ typedef struct MppEncFrmRoi_t {
     rk_s32  quality;
     rk_s32  abs_qp_en;
 } MppEncFrmRoi;
+
+typedef struct MppEncFrmJpegRoi_t {
+    rk_s32  x;              /* Q16 ratio: left edge position */
+    rk_s32  y;              /* Q16 ratio: top edge position */
+    rk_s32  w;              /* Q16 ratio: region width */
+    rk_s32  h;              /* Q16 ratio: region height */
+    rk_s32  level;
+    rk_s32  roi_en;
+} MppEncFrmJpegRoi;
 
 typedef struct MppEncFrmOsd_t {
     rk_u32  enable;
@@ -66,6 +78,15 @@ typedef struct MppEncFrmOsd_t {
 typedef struct MppEncFrmCfg_t {
     rk_s32  frame_idx;
     rk_s32  repeat;
+    rk_s32  input_idr_req;
+    rk_s32  input_pskip;
+    rk_s32  input_pskip_non_ref;
+    rk_s32  input_pskip_num;
+    rk_s32  enc_mark_ltr;
+    rk_s32  enc_use_ltr;
+    rk_s32  enc_frame_qp;
+    rk_s32  enc_base_layer_pid;
+    rk_s32  temporal_id;
     rk_u32  userdata;
     rk_u32  userdatas;
 
@@ -74,18 +95,26 @@ typedef struct MppEncFrmCfg_t {
     rk_s32  new_roi_cap;
     rk_s32  roi_cap;
 
+    rk_u32  jpeg_roi_cnt;
+    rk_u32  jpeg_roi_off;
+    rk_s32  new_jpeg_roi_cap;
+    rk_s32  jpeg_roi_cap;
+    rk_u32  jpeg_non_roi_level;
+    rk_u32  jpeg_non_roi_en;
+
     rk_u32  osd_cnt;
     rk_u32  osd_off;
     rk_s32  new_osd_cap;
     rk_s32  osd_cap;
 
-    rk_u8   *ud_uuid;
+    rk_u8  *ud_uuid;
     rk_u8   *ud_buf;
     rk_u32  ud_buf_size;
 } MppEncFrmCfg;
 
 #define MPP_ENC_FRM_ROI_ARR(e)  ((MppEncFrmRoi *)((rk_u8 *)(e) + (e)->roi_off))
 #define MPP_ENC_FRM_OSD_ARR(e)  ((MppEncFrmOsd *)((rk_u8 *)(e) + (e)->osd_off))
+#define MPP_ENC_FRM_JPEG_ROI_ARR(e) ((MppEncFrmJpegRoi *)((rk_u8 *)(e) + (e)->jpeg_roi_off))
 
 typedef struct MppEncFrmCfgSet_t {
     rk_u32              count;
@@ -98,6 +127,7 @@ rk_s32 mpp_enc_frm_cfg_put(MppEncFrmCfgObj obj);
 MPP_RET mpp_enc_frm_cfg_apply(MppEncFrmCfgObj obj, MppCfgStrFmt fmt, char *buf);
 MPP_RET mpp_enc_frm_cfg_extract(MppEncFrmCfgObj obj, MppCfgStrFmt fmt, char **buf);
 
+const MppEncFrmCfg *mpp_enc_frm_cfg_get_entry(MppEncFrmCfgObj obj);
 const MppEncFrmCfg *mpp_enc_frm_cfg_lookup(const MppEncFrmCfgSet *cfgs, rk_s32 frame_idx);
 
 extern const MppEncFrmCfgSet mpp_enc_test_frm_cfg;
