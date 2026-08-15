@@ -8,6 +8,8 @@
 
 #include "rk_venc_cmd.h"
 #include "mpp_enc_frm_cfg.h"
+#include "mpp_meta.h"
+#include "kmpp_buffer.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -66,6 +68,62 @@ MPP_RET kmpp_venc_gen_frame_meta(KmppMeta meta, RK_U32 w, RK_U32 h,
  * Returns 1 if payload matches 'expect', 0 otherwise.
  */
 RK_S32 kmpp_venc_scan_sei_userdata(const RK_U8 *data, RK_S32 len, const char *expect, RK_S32 expect_len);
+
+/*
+ * Persistent test resources referenced by ordinary MppMeta.
+ * Zero-initialize before first use and release with
+ * mpp_venc_frm_meta_deinit after the last frame is consumed.
+ */
+typedef struct MppEncFrmMetaData_t {
+    RK_U8               *ud_buf;
+    RK_U32              ud_buf_size;
+    MppEncROICfg        roi;
+    MppEncROIRegion     roi_regions[8];
+    MppJpegROICfg       jpeg_roi;
+    MppEncOSDData3      osd;
+    KmppBuffer          osd_buffers[8];
+} MppEncFrmMetaData;
+
+/* Set USER_DATA into ordinary MppMeta. The payload is deep-copied by MppMeta. */
+MPP_RET mpp_venc_gen_userdata(MppMeta meta, RK_U8 *ud_buf, RK_U32 ud_buf_size);
+
+/* Set USER_DATAS (uuid + data) into ordinary MppMeta with a deep copy. */
+MPP_RET mpp_venc_gen_userdatas(MppMeta meta, const RK_U8 *uuid,
+                               RK_U8 *ud_buf, RK_U32 ud_buf_size);
+
+/*
+ * Set ROI regions into ordinary MppMeta after converting Q16 ratios to
+ * pixel coordinates. data owns the object referenced by MppMeta.
+ */
+MPP_RET mpp_venc_gen_roi(MppMeta meta, RK_U32 w, RK_U32 h,
+                         RK_U32 roi_cnt, const MppEncFrmRoi *roi,
+                         MppEncFrmMetaData *data);
+
+/*
+ * Set OSD regions into ordinary MppMeta and create test pixel buffers.
+ * data owns the objects and buffers referenced by MppMeta.
+ */
+MPP_RET mpp_venc_gen_osd(MppMeta meta, RK_U32 w, RK_U32 h,
+                         RK_U32 osd_cnt, const MppEncFrmOsd *osd,
+                         MppEncFrmMetaData *data);
+
+/*
+ * Set JPEG ROI regions into ordinary MppMeta after converting Q16 ratios
+ * to pixel coordinates. data owns the object referenced by MppMeta.
+ */
+MPP_RET mpp_venc_gen_jpeg_roi(MppMeta meta, RK_U32 w, RK_U32 h,
+                              RK_U32 jpeg_roi_cnt,
+                              const MppEncFrmJpegRoi *jpeg_roi,
+                              RK_U32 non_roi_level, RK_U32 non_roi_en,
+                              MppEncFrmMetaData *data);
+
+/* Apply one frame config entry to ordinary MppMeta. */
+MPP_RET mpp_venc_gen_frame_meta(MppMeta meta, RK_U32 w, RK_U32 h,
+                                const MppEncFrmCfg *entry,
+                                MppEncFrmMetaData *data);
+
+/* Release buffers owned by MppEncFrmMetaData. */
+void mpp_venc_frm_meta_deinit(MppEncFrmMetaData *data);
 
 #ifdef __cplusplus
 }
