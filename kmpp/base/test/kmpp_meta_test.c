@@ -17,6 +17,7 @@
 
 #include "kmpp_obj.h"
 #include "kmpp_meta_impl.h"
+#include "kmpp_venc_utils.h"
 
 #define THRD_DEFAULT    4
 #define LOOP_DEFAULT    10
@@ -29,6 +30,44 @@ typedef struct {
     RK_S64          time_avg;
     rk_u8           *ud_data;
 } MetaTestCtx;
+
+static MPP_RET test_user_datas_uuid(void)
+{
+    static const rk_u8 uuid[MPP_ENC_USER_DATA_UUID_LEN] = {
+        0x66, 0x72, 0x6d, 0x00, 0x63, 0x66, 0x67, 0x2d,
+        0x75, 0x64, 0x73, 0x00, 0xa5, 0x5a, 0x19, 0x26,
+    };
+    static const rk_u8 payload[] = "kmpp-meta-uuid";
+    MPP_ENC_UDS1(src);
+    MppEncUserDataSetShm *get = NULL;
+    KmppMeta meta = NULL;
+    MPP_RET ret;
+
+    memset(&src, 0, sizeof(src));
+    src.set.count = 1;
+    src.set.data[0].len = sizeof(payload) - 1;
+    src.set.data[0].uuid.uptr = (rk_u8 *)uuid;
+    src.set.data[0].data.uptr = (rk_u8 *)payload;
+
+    ret = kmpp_meta_get_f(&meta);
+    if (ret)
+        return ret;
+
+    ret = kmpp_meta_set_ptr(meta, KEY_USER_DATAS, &src.set);
+    if (!ret)
+        ret = kmpp_meta_get_ptr(meta, KEY_USER_DATAS, (void **)&get);
+
+    if (!ret && (!get || get->count != 1 ||
+                 !get->data[0].uuid.uptr || !get->data[0].data.uptr ||
+                 get->data[0].len != src.set.data[0].len ||
+                 memcmp(get->data[0].uuid.uptr, uuid, sizeof(uuid)) ||
+                 memcmp(get->data[0].data.uptr, payload, src.set.data[0].len)))
+        ret = MPP_NOK;
+
+    kmpp_meta_put_f(meta);
+
+    return ret;
+}
 
 static MPP_RET meta_set(KmppMeta meta, rk_u8 *ud_data)
 {
@@ -52,6 +91,7 @@ static MPP_RET meta_set(KmppMeta meta, rk_u8 *ud_data)
     ret |= kmpp_meta_set_s32(meta, KEY_INPUT_BLOCK, 0);
     ret |= kmpp_meta_set_s32(meta, KEY_OUTPUT_BLOCK, 0);
     ret |= kmpp_meta_set_s32(meta, KEY_INPUT_IDR_REQ, 0);
+    ret |= kmpp_meta_set_s32(meta, KEY_INPUT_PSKIP_NUM, 0);
     ret |= kmpp_meta_set_s32(meta, KEY_OUTPUT_INTRA, 0);
 
     ret |= kmpp_meta_set_s32(meta, KEY_TEMPORAL_ID, 0);
@@ -95,6 +135,7 @@ static MPP_RET meta_get(KmppMeta meta)
     ret |= kmpp_meta_get_s32(meta, KEY_INPUT_BLOCK, &val);
     ret |= kmpp_meta_get_s32(meta, KEY_OUTPUT_BLOCK, &val);
     ret |= kmpp_meta_get_s32(meta, KEY_INPUT_IDR_REQ, &val);
+    ret |= kmpp_meta_get_s32(meta, KEY_INPUT_PSKIP_NUM, &val);
     ret |= kmpp_meta_get_s32(meta, KEY_OUTPUT_INTRA, &val);
 
     ret |= kmpp_meta_get_s32(meta, KEY_TEMPORAL_ID, &val);
@@ -445,6 +486,13 @@ int main(int argc, char **argv)
     }
 
     test_resize_rebind(ctxs[0].ud_data);
+
+    ret = test_user_datas_uuid();
+    if (ret) {
+        mpp_loge(MODULE_TAG " binary uuid failed ret %d\n", ret);
+        goto done;
+    }
+
     test_flex_order(ctxs[0].ud_data);
     test_flex_grow(ctxs[0].ud_data);
     test_fixed_only();

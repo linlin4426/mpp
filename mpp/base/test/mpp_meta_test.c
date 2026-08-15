@@ -23,6 +23,36 @@ typedef struct {
     RK_S64          time_avg;
 } MetaTestCtx;
 
+static MPP_RET test_user_datas_uuid(MppMeta meta)
+{
+    static const RK_U8 uuid[MPP_ENC_USER_DATA_UUID_LEN] = {
+        0x66, 0x72, 0x6d, 0x00, 0x63, 0x66, 0x67, 0x2d,
+        0x75, 0x64, 0x73, 0x00, 0xa5, 0x5a, 0x19, 0x26,
+    };
+    static const RK_U8 payload[] = "mpp-meta-uuid";
+    MppEncUserDataFull src = {
+        .len = sizeof(payload) - 1,
+        .uuid = (RK_U8 *)uuid,
+        .pdata = (void *)payload,
+    };
+    MppEncUserDataSet set = { .count = 1, .datas = &src };
+    MppEncUserDataSet *get = NULL;
+    MPP_RET ret;
+
+    ret = mpp_meta_set_ptr(meta, KEY_USER_DATAS, &set);
+    if (!ret)
+        ret = mpp_meta_get_ptr(meta, KEY_USER_DATAS, (void **)&get);
+
+    if (!ret && (!get || get->count != 1 || !get->datas ||
+                 !get->datas[0].uuid || !get->datas[0].pdata ||
+                 get->datas[0].len != src.len ||
+                 memcmp(get->datas[0].uuid, uuid, sizeof(uuid)) ||
+                 memcmp(get->datas[0].pdata, payload, src.len)))
+        ret = MPP_NOK;
+
+    return ret;
+}
+
 static MPP_RET meta_set(MppMeta meta)
 {
     MPP_RET ret = MPP_OK;
@@ -38,6 +68,8 @@ static MPP_RET meta_set(MppMeta meta)
     ret |= mpp_meta_set_s32(meta, KEY_INPUT_BLOCK, 0);
     ret |= mpp_meta_set_s32(meta, KEY_OUTPUT_BLOCK, 0);
     ret |= mpp_meta_set_s32(meta, KEY_INPUT_IDR_REQ, 0);
+    ret |= mpp_meta_set_s32(meta, KEY_INPUT_PSKIP_NON_REF, 0);
+    ret |= mpp_meta_set_s32(meta, KEY_INPUT_PSKIP_NUM, 0);
     ret |= mpp_meta_set_s32(meta, KEY_OUTPUT_INTRA, 0);
 
     ret |= mpp_meta_set_s32(meta, KEY_TEMPORAL_ID, 0);
@@ -81,6 +113,8 @@ static MPP_RET meta_get(MppMeta meta)
     ret |= mpp_meta_get_s32(meta, KEY_INPUT_BLOCK, &val);
     ret |= mpp_meta_get_s32(meta, KEY_OUTPUT_BLOCK, &val);
     ret |= mpp_meta_get_s32(meta, KEY_INPUT_IDR_REQ, &val);
+    ret |= mpp_meta_get_s32(meta, KEY_INPUT_PSKIP_NON_REF, &val);
+    ret |= mpp_meta_get_s32(meta, KEY_INPUT_PSKIP_NUM, &val);
     ret |= mpp_meta_get_s32(meta, KEY_OUTPUT_INTRA, &val);
 
     ret |= mpp_meta_get_s32(meta, KEY_TEMPORAL_ID, &val);
@@ -173,6 +207,12 @@ int main(int argc, char **argv)
 
     mpp_meta_get(&meta);
     if (meta) {
+        ret = test_user_datas_uuid(meta);
+        if (ret) {
+            mpp_loge("mpp_meta_test binary uuid failed ret %d\n", ret);
+            mpp_meta_put(meta);
+            goto done;
+        }
         meta_set(meta);
         mpp_meta_dump(meta);
         mpp_meta_put(meta);
