@@ -6,18 +6,22 @@
 #define MODULE_TAG "kmpp_venc_utils"
 
 #include <string.h>
+#include <limits.h>
 
 #include "mpp_log.h"
 #include "mpp_env.h"
 #include "rk_venc_cmd.h"
 
 #include "kmpp_meta.h"
+#include "mpp_common.h"
 #include "kmpp_venc_utils.h"
 
 static RK_U32 venc_utils_debug = 0;
 
 #define venc_utils_dbg(fmt, ...) \
     mpp_logi_c(venc_utils_debug, fmt, ## __VA_ARGS__)
+
+#define MPP_ENC_FRM_JPEG_ROI_LEVEL_MAX  63
 
 /* Standard test UUID for unregistered user data SEI */
 RK_U8 venc_test_uuid[16] = {
@@ -112,14 +116,15 @@ MPP_RET kmpp_venc_gen_userdata(KmppMeta meta, RK_U8 *ud_buf, RK_U32 ud_buf_size)
 {
     MppEncUserDataShm ud;
 
-    if (!meta)
+    if (!meta || !ud_buf || !ud_buf_size)
         return MPP_ERR_NULL_PTR;
 
     memset(&ud, 0, sizeof(ud));
     ud.len = ud_buf_size;
     ud.data.uptr = ud_buf;
 
-    kmpp_meta_set_ptr(meta, KEY_USER_DATA, &ud);
+    if (kmpp_meta_set_ptr(meta, KEY_USER_DATA, &ud))
+        mpp_loge("KEY_USER_DATA not set, skipped\n");
     venc_utils_dbg("set KEY_USER_DATA len %d\n", ud_buf_size);
 
     return MPP_OK;
@@ -132,7 +137,7 @@ MPP_RET kmpp_venc_gen_userdatas(KmppMeta meta, const RK_U8 *uuid,
     MppEncUserDataFullShm *entry = uds_s.set.data;
     RK_U8 uuid_buf[MPP_ENC_USER_DATA_UUID_LEN];
 
-    if (!meta)
+    if (!meta || !ud_buf || !ud_buf_size)
         return MPP_ERR_NULL_PTR;
 
     memset(&uds_s, 0, sizeof(uds_s));
@@ -144,7 +149,8 @@ MPP_RET kmpp_venc_gen_userdatas(KmppMeta meta, const RK_U8 *uuid,
     }
     entry->data.uptr = ud_buf;
 
-    kmpp_meta_set_ptr(meta, KEY_USER_DATAS, &uds_s.set);
+    if (kmpp_meta_set_ptr(meta, KEY_USER_DATAS, &uds_s.set))
+        mpp_loge("KEY_USER_DATAS not set, skipped\n");
     venc_utils_dbg("set KEY_USER_DATAS len %d\n", ud_buf_size);
 
     return MPP_OK;
@@ -189,6 +195,14 @@ MPP_RET kmpp_venc_gen_roi(KmppMeta meta, RK_U32 w, RK_U32 h,
 
     cfg.number = roi_cnt;
     for (i = 0; i < roi_cnt; i++) {
+        if (roi[i].x < 0 || roi[i].x > MPP_ENC_FRM_CFG_COORD_MAX ||
+            roi[i].y < 0 || roi[i].y > MPP_ENC_FRM_CFG_COORD_MAX ||
+            roi[i].w <= 0 || roi[i].w > MPP_ENC_FRM_CFG_COORD_MAX ||
+            roi[i].h <= 0 || roi[i].h > MPP_ENC_FRM_CFG_COORD_MAX ||
+            roi[i].intra < 0 || roi[i].intra > USHRT_MAX ||
+            roi[i].quality < SHRT_MIN || roi[i].quality > SHRT_MAX ||
+            roi[i].abs_qp_en < 0 || roi[i].abs_qp_en > UCHAR_MAX)
+            return MPP_ERR_VALUE;
         RK_U32 x = frm_cfg_px(roi[i].x, w);
         RK_U32 y = frm_cfg_px(roi[i].y, h);
         RK_U32 rw = frm_cfg_px(roi[i].w, w);
@@ -290,26 +304,138 @@ MPP_RET kmpp_venc_gen_osd(KmppMeta meta, RK_U32 w, RK_U32 h,
     return MPP_OK;
 }
 
+static void set_scalar_or_skip(KmppMeta meta, RK_S32 key, RK_S32 val)
+{
+    if (val >= 0 && kmpp_meta_set_s32(meta, key, val))
+        venc_utils_dbg("frame scalar key %#08x not set, skipped\n", key);
+}
+
+static MPP_RET mpp_venc_check_frame_scalars(const MppEncFrmCfg *entry)
+{
+    if (entry->input_idr_req < -1 || entry->input_idr_req > 1 ||
+        entry->input_pskip < -1 || entry->input_pskip > 1 ||
+        entry->input_pskip_non_ref < -1 || entry->input_pskip_non_ref > 1 ||
+        entry->input_pskip_num < -1 ||
+        entry->enc_mark_ltr < -1 || entry->enc_use_ltr < -1 ||
+        entry->enc_frame_qp < -1 || entry->enc_frame_qp > 51 ||
+        entry->enc_base_layer_pid < -1 || entry->temporal_id < -1 ||
+        (entry->input_pskip > 0 && entry->input_pskip_non_ref > 0))
+        return MPP_ERR_VALUE;
+
+    return MPP_OK;
+}
+
+static MPP_RET kmpp_venc_set_frame_scalars(KmppMeta meta, const MppEncFrmCfg *entry)
+{
+    if (entry->input_pskip > 0 && entry->input_pskip_non_ref > 0) {
+        mpp_loge_f("pskip and pskip_non_ref cannot coexist\n");
+        return MPP_ERR_VALUE;
+    }
+
+    set_scalar_or_skip(meta, KEY_INPUT_IDR_REQ, entry->input_idr_req);
+    set_scalar_or_skip(meta, KEY_INPUT_PSKIP, entry->input_pskip);
+    set_scalar_or_skip(meta, KEY_INPUT_PSKIP_NON_REF, entry->input_pskip_non_ref);
+    set_scalar_or_skip(meta, KEY_INPUT_PSKIP_NUM, entry->input_pskip_num);
+    set_scalar_or_skip(meta, KEY_ENC_MARK_LTR, entry->enc_mark_ltr);
+    set_scalar_or_skip(meta, KEY_ENC_USE_LTR, entry->enc_use_ltr);
+    set_scalar_or_skip(meta, KEY_ENC_FRAME_QP, entry->enc_frame_qp);
+    set_scalar_or_skip(meta, KEY_ENC_BASE_LAYER_PID, entry->enc_base_layer_pid);
+    set_scalar_or_skip(meta, KEY_TEMPORAL_ID, entry->temporal_id);
+
+    return MPP_OK;
+}
+
+static MPP_RET kmpp_venc_gen_jpeg_roi(KmppMeta meta, RK_U32 w, RK_U32 h,
+                                      RK_U32 jpeg_roi_cnt,
+                                      const MppEncFrmJpegRoi *jpeg_roi,
+                                      RK_U32 non_roi_level, RK_U32 non_roi_en)
+{
+    MppJpegROICfg cfg = { .change = 1 };
+    RK_U32 i;
+
+    if (!meta || !jpeg_roi || !jpeg_roi_cnt)
+        return MPP_ERR_NULL_PTR;
+    if (jpeg_roi_cnt > MPP_ARRAY_ELEMS(cfg.regions) ||
+        non_roi_level > MPP_ENC_FRM_JPEG_ROI_LEVEL_MAX ||
+        non_roi_en > 1)
+        return MPP_ERR_VALUE;
+
+    cfg.non_roi_level = non_roi_level;
+    cfg.non_roi_en = non_roi_en;
+    for (i = 0; i < jpeg_roi_cnt; i++) {
+        const MppEncFrmJpegRoi *src = &jpeg_roi[i];
+
+        if (src->x < 0 || src->x > MPP_ENC_FRM_CFG_COORD_MAX ||
+            src->y < 0 || src->y > MPP_ENC_FRM_CFG_COORD_MAX ||
+            src->w <= 0 || src->w > MPP_ENC_FRM_CFG_COORD_MAX ||
+            src->h <= 0 || src->h > MPP_ENC_FRM_CFG_COORD_MAX ||
+            src->level < 0 ||
+            src->level > MPP_ENC_FRM_JPEG_ROI_LEVEL_MAX ||
+            src->roi_en < 0 || src->roi_en > 1)
+            return MPP_ERR_VALUE;
+
+        cfg.regions[i].x = frm_cfg_px(src->x, w);
+        cfg.regions[i].y = frm_cfg_px(src->y, h);
+        cfg.regions[i].w = frm_cfg_px(src->w, w);
+        cfg.regions[i].h = frm_cfg_px(src->h, h);
+        cfg.regions[i].level = src->level;
+        cfg.regions[i].roi_en = src->roi_en;
+    }
+
+    return kmpp_meta_set_ptr(meta, KEY_JPEG_ROI_DATA, &cfg);
+}
+
 MPP_RET kmpp_venc_gen_frame_meta(KmppMeta meta, RK_U32 w, RK_U32 h,
                                  const MppEncFrmCfg *entry)
 {
+    MPP_RET ret = MPP_OK;
+
     if (!meta || !entry)
         return MPP_ERR_NULL_PTR;
 
     mpp_env_get_u32("kmpp_venc_utils_debug", &venc_utils_debug, 0);
 
-    if (entry->userdatas)
-        kmpp_venc_gen_userdatas(meta, entry->ud_uuid,
-                                entry->ud_buf, entry->ud_buf_size);
+    ret = mpp_venc_check_frame_scalars(entry);
+    if (ret)
+        return ret;
+    ret = kmpp_venc_set_frame_scalars(meta, entry);
+    if (ret)
+        return ret;
 
-    if (entry->userdata)
-        kmpp_venc_gen_userdata(meta, entry->ud_buf, entry->ud_buf_size);
+    if (entry->userdatas) {
+        const RK_U8 *uds_uuid = entry->ud_uuid ? entry->ud_uuid : venc_test_uuid;
 
-    if (entry->roi_cnt)
-        kmpp_venc_gen_roi(meta, w, h, entry->roi_cnt, MPP_ENC_FRM_ROI_ARR(entry));
+        ret = kmpp_venc_gen_userdatas(meta, uds_uuid, entry->ud_buf, entry->ud_buf_size);
+        if (ret)
+            return ret;
+    }
 
-    if (entry->osd_cnt)
-        kmpp_venc_gen_osd(meta, w, h, entry->osd_cnt, MPP_ENC_FRM_OSD_ARR(entry));
+    if (entry->userdata) {
+        ret = kmpp_venc_gen_userdata(meta, entry->ud_buf, entry->ud_buf_size);
+        if (ret)
+            return ret;
+    }
+
+    if (entry->roi_cnt) {
+        ret = kmpp_venc_gen_roi(meta, w, h, entry->roi_cnt, MPP_ENC_FRM_ROI_ARR(entry));
+        if (ret)
+            return ret;
+    }
+
+    if (entry->osd_cnt) {
+        ret = kmpp_venc_gen_osd(meta, w, h, entry->osd_cnt, MPP_ENC_FRM_OSD_ARR(entry));
+        if (ret)
+            return ret;
+    }
+
+    if (entry->jpeg_roi_cnt) {
+        ret = kmpp_venc_gen_jpeg_roi(meta, w, h, entry->jpeg_roi_cnt,
+                                     MPP_ENC_FRM_JPEG_ROI_ARR(entry),
+                                     entry->jpeg_non_roi_level,
+                                     entry->jpeg_non_roi_en);
+        if (ret)
+            return ret;
+    }
 
     return MPP_OK;
 }

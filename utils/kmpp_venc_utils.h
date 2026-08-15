@@ -54,8 +54,8 @@ MPP_RET kmpp_venc_gen_osd(KmppMeta meta, RK_U32 w, RK_U32 h,
                           RK_U32 osd_cnt, const MppEncFrmOsd *osd);
 
 /*
- * Apply a single frame config entry to frame meta.
- * Dispatches to gen_userdata/userdatas/roi/osd based on entry flags.
+ * Apply a single frame config entry to KMPP frame meta.
+ * Dispatches to scalar, userdata/userdatas, ROI, OSD and JPEG ROI
  * w/h are the frame dimensions, used for ratio-to-pixel conversion.
  */
 MPP_RET kmpp_venc_gen_frame_meta(KmppMeta meta, RK_U32 w, RK_U32 h,
