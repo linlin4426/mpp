@@ -85,6 +85,7 @@ typedef enum MppMetaKey_e {
      */
     KEY_INPUT_PSKIP             = FOURCC_META('i', 'p', 's', 'p'),
     KEY_INPUT_PSKIP_NON_REF     = FOURCC_META('i', 'p', 'n', 'r'),
+    KEY_INPUT_PSKIP_NUM         = FOURCC_META('i', 'p', 's', 'n'),
     KEY_ENC_SSE                 = FOURCC_META('e', 's', 's', 'e'),
 
     /*

@@ -19,6 +19,7 @@
 
 #include "kmpp_obj.h"
 #include "kmpp_meta.h"
+#include "rk_venc_cmd.h"
 
 #define META_DBG_FLOW               (0x00000001)
 #define META_DBG_KEYS               (0x00000002)
@@ -157,6 +158,7 @@ static inline RK_U64 META_KEY_TO_U64(RK_U32 key, RK_U32 type)
     ENTRY(KEY_INPUT_PSKIP,          TYPE_VAL_32) \
     ENTRY(KEY_OUTPUT_PSKIP,         TYPE_VAL_32) \
     ENTRY(KEY_INPUT_PSKIP_NON_REF,  TYPE_VAL_32) \
+    ENTRY(KEY_INPUT_PSKIP_NUM,      TYPE_VAL_32) \
     ENTRY(KEY_ENC_SSE,              TYPE_VAL_64) \
     \
     ENTRY(KEY_ENC_MARK_LTR,         TYPE_VAL_32) \
@@ -527,7 +529,7 @@ static MPP_RET set_user_datas(MppMetaPriv *priv, void *user_data)
         MppEncUserDataFull *src = &src_set->datas[i];
 
         if (src->uuid)
-            data_size += strlen((const char *)src->uuid) + 1;
+            data_size += MPP_ENC_USER_DATA_UUID_LEN;
         data_size += src->len;
     }
     buf_size = struct_size + data_size;
@@ -553,11 +555,9 @@ static MPP_RET set_user_datas(MppMetaPriv *priv, void *user_data)
 
         dst->len = src->len;
         if (src->uuid) {
-            size_t uuid_len = strlen((const char *)src->uuid) + 1;
-
             dst->uuid = (RK_U8 *)buf_ptr;
-            memcpy(buf_ptr, src->uuid, uuid_len);
-            buf_ptr += uuid_len;
+            memcpy(buf_ptr, src->uuid, MPP_ENC_USER_DATA_UUID_LEN);
+            buf_ptr += MPP_ENC_USER_DATA_UUID_LEN;
         } else {
             dst->uuid = NULL;
         }
