@@ -6,16 +6,40 @@
 #define MODULE_TAG "mpp_frame"
 
 #include <string.h>
+#include <stddef.h>
 
 #include "mpp_debug.h"
+#include "mpp_mem.h"
 #include "mpp_mem_pool.h"
 #include "mpp_singleton.h"
+#include "mpp_lock.h"
 
 #include "mpp_meta_impl.h"
 #include "mpp_frame_impl.h"
 
 static const char *module_name = MODULE_TAG;
 static MppMemPool pool_frame = NULL;
+
+/* hdr dynamic meta is kept in a refcounted wrapper so that frame
+ * copies share it by reference instead of duplicating the payload */
+typedef struct MppHdrMetaRef_t {
+    RK_U32 ref;
+    MppFrameHdrDynamicMeta meta;
+} MppHdrMetaRef;
+
+#define HDR_META_REF(ptr) \
+    ((MppHdrMetaRef *)((char *)(ptr) - offsetof(MppHdrMetaRef, meta)))
+
+static void hdr_meta_ref_put(MppFrameImpl *p)
+{
+    if (p->hdr_dynamic_meta) {
+        MppHdrMetaRef *ref = HDR_META_REF(p->hdr_dynamic_meta);
+
+        if (MPP_SUB_FETCH(&ref->ref, 1) == 0)
+            mpp_free(ref);
+        p->hdr_dynamic_meta = NULL;
+    }
+}
 
 static void setup_mpp_frame_name(MppFrameImpl *frame)
 {
@@ -28,6 +52,7 @@ static void setup_mpp_frame_defaults(MppFrameImpl *frame)
     frame->color_primaries = MPP_FRAME_PRI_UNSPECIFIED;
     frame->color_trc = MPP_FRAME_TRC_UNSPECIFIED;
     frame->colorspace = MPP_FRAME_SPC_UNSPECIFIED;
+    frame->hdr_dynamic_meta = NULL;
 }
 
 #define check_is_mpp_frame(frame) _check_is_mpp_frame(__FUNCTION__, frame)
@@ -108,6 +133,8 @@ MPP_RET mpp_frame_deinit(MppFrame *frame)
 
     if (p->meta)
         mpp_meta_put(p->meta);
+
+    hdr_meta_ref_put(p);
 
     if (p->stopwatch)
         mpp_stopwatch_put(p->stopwatch);
@@ -256,10 +283,17 @@ MPP_RET mpp_frame_copy(MppFrame dst, MppFrame src)
     if (p->meta)
         mpp_meta_put(p->meta);
 
+    hdr_meta_ref_put(p);
+
     memcpy(dst, src, sizeof(MppFrameImpl));
     p = (MppFrameImpl *)src;
     if (p->meta)
         mpp_meta_inc_ref(p->meta);
+
+    /* share the refcounted hdr meta instead of duplicating it */
+    p = (MppFrameImpl *)dst;
+    if (p->hdr_dynamic_meta)
+        MPP_FETCH_ADD(&HDR_META_REF(p->hdr_dynamic_meta)->ref, 1);
 
     return MPP_OK;
 }
@@ -319,6 +353,32 @@ RK_U32 mpp_frame_get_fbc_stride(MppFrame frame)
     return MPP_ALIGN(p->width, 16);
 }
 
+MppFrameHdrDynamicMeta *mpp_frame_get_hdr_dynamic_meta(const MppFrame s)
+{
+    check_is_mpp_frame((MppFrameImpl*)s);
+    return ((MppFrameImpl*)s)->hdr_dynamic_meta;
+}
+
+void mpp_frame_set_hdr_dynamic_meta(MppFrame s, MppFrameHdrDynamicMeta *vivi_data)
+{
+    MppFrameImpl *p = (MppFrameImpl *)s;
+
+    check_is_mpp_frame(p);
+    /* copy the meta into a refcounted wrapper shared by frame copies */
+    hdr_meta_ref_put(p);
+    if (vivi_data) {
+        MppHdrMetaRef *ref = mpp_malloc_size(MppHdrMetaRef,
+                                             sizeof(MppHdrMetaRef) + vivi_data->size);
+
+        if (ref) {
+            ref->ref = 1;
+            memcpy(&ref->meta, vivi_data, sizeof(MppFrameHdrDynamicMeta) + vivi_data->size);
+            p->hdr_dynamic_meta = &ref->meta;
+        } else
+            mpp_loge_f("failed to dup hdr dynamic meta size %u\n", vivi_data->size);
+    }
+}
+
 /*
  * object access function macro
  */
@@ -359,7 +419,6 @@ MPP_FRAME_ACCESSORS(MppFrameFormat, fmt)
 MPP_FRAME_ACCESSORS(MppFrameRational, sar)
 MPP_FRAME_ACCESSORS(MppFrameMasteringDisplayMetadata, mastering_display)
 MPP_FRAME_ACCESSORS(MppFrameContentLightMetadata, content_light)
-MPP_FRAME_ACCESSORS(MppFrameHdrDynamicMeta*, hdr_dynamic_meta)
 MPP_FRAME_ACCESSORS(size_t, buf_size)
 MPP_FRAME_ACCESSORS(RK_U32, errinfo)
 MPP_FRAME_ACCESSORS(MppTask, task)
