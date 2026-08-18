@@ -11,7 +11,6 @@
 #include "mpp_bit.h"
 #include "mpp_packet_impl.h"
 #include "rk_hdr_meta_com.h"
-#include "mpp_ref_pool.h"
 
 #include "mpp_parser.h"
 #include "h265d_debug.h"
@@ -1184,23 +1183,23 @@ typedef union {
 
 void h265d_fill_dynamic_meta(H265dPrs *p, const RK_U8 *data, RK_U32 size, RK_U32 hdr_fmt)
 {
-    MppRefPool *pool = &p->hdr_meta_pool;
-    RK_S32 idx;
-    MppFrameHdrDynamicMeta *meta;
+    MppFrameHdrDynamicMeta *meta = p->hdr_meta_cur;
     RK_U8 start_code[4] = {0, 0, 0, 1};
     RK_U32 extra_size = (hdr_fmt == DLBY) ? sizeof(start_code) : 0;
+    RK_U32 need = size + extra_size;
 
-    /* Cleanup unused slots in pool */
-    mpp_ref_pool_cleanup(pool);
-
-    /* Allocate a new slot from pool (include struct header size) */
-    idx = mpp_ref_pool_get(pool, sizeof(MppFrameHdrDynamicMeta) + size + extra_size);
-    if (idx < 0) {
-        mpp_loge_f("failed to allocate hdr meta slot\n");
-        return;
+    /* grow the reusable buffer if needed */
+    if (!meta || p->hdr_meta_cur_size < need) {
+        meta = mpp_malloc_size(MppFrameHdrDynamicMeta, sizeof(MppFrameHdrDynamicMeta) + need);
+        if (!meta) {
+            mpp_loge_f("failed to allocate hdr meta size %u\n", need);
+            return;
+        }
+        MPP_FREE(p->hdr_meta_cur);
+        p->hdr_meta_cur = meta;
+        p->hdr_meta_cur_size = need;
     }
 
-    meta = (MppFrameHdrDynamicMeta *)mpp_ref_pool_ptr(pool, idx);
     if (size && data) {
         switch (hdr_fmt) {
         case DLBY: {
@@ -1218,8 +1217,6 @@ void h265d_fill_dynamic_meta(H265dPrs *p, const RK_U8 *data, RK_U32 size, RK_U32
         meta->size = size;
         meta->hdr_fmt = hdr_fmt;
     }
-    /* Update current active meta index */
-    p->hdr_meta_current = idx;
     p->hdr_dynamic = 1;
     p->is_hdr = 1;
 
@@ -1589,7 +1586,6 @@ RK_S32 h265d_parser_init(H265dParser *s, H265dCtx* ctx)
     H265dPrs *p = NULL;
     RK_U8 *buf = NULL;
     RK_S32 size = SZ_512K;
-    RK_S32 ret = MPP_OK;
     RK_U32 i;
 
     if (NULL == s || NULL == ctx) {
@@ -1660,14 +1656,6 @@ RK_S32 h265d_parser_init(H265dParser *s, H265dCtx* ctx)
     p->vps_pool = mpp_mem_pool_init_f("h265d_vps", sizeof(H265dVps));
     p->sps_pool = mpp_mem_pool_init_f("h265d_sps", sizeof(H265dSps));
 
-    /* Initialize HDR metadata pool */
-    ret = mpp_ref_pool_init(&p->hdr_meta_pool, 4);
-    if (ret != MPP_OK) {
-        mpp_loge_f("failed to init hdr meta pool\n");
-        return ret;
-    }
-    p->hdr_meta_current = -1;
-
     *s = p;
 
     return MPP_OK;
@@ -1725,8 +1713,7 @@ RK_S32 h265d_parser_deinit(H265dParser ctx)
     if (p->sps_pool)
         mpp_mem_pool_deinit_f(p->sps_pool);
 
-    /* Deinitialize HDR metadata pool */
-    mpp_ref_pool_deinit(&p->hdr_meta_pool);
+    MPP_FREE(p->hdr_meta_cur);
 
     mpp_free(p);
 

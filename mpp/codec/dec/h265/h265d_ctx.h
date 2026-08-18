@@ -12,7 +12,6 @@
 #include "mpp_bitread.h"
 #include "mpp_buf_slot.h"
 #include "mpp_mem_pool.h"
-#include "mpp_ref_pool.h"
 
 #include "parser_api.h"
 
@@ -73,7 +72,6 @@ typedef struct H265dFrame_t {
 
     RK_S32 poc;
     RK_S32 slot_index;
-    RK_S32 hdr_meta_index;          /* HDR metadata index in pool (-1 = none) */
 
     RK_U16 sequence;
     H265dFrmRefStatus ref_status;   /* Reference/output status */
@@ -165,8 +163,8 @@ typedef struct H265dPrs_t {
 
     MppFrameMasteringDisplayMetadata mastering_display;
     MppFrameContentLightMetadata content_light;
-    MppRefPool hdr_meta_pool;       /* HDR dynamic metadata pool */
-    RK_S32 hdr_meta_current;            /* current active meta index in pool */
+    MppFrameHdrDynamicMeta *hdr_meta_cur;   /* current HDR dynamic metadata */
+    RK_U32 hdr_meta_cur_size;               /* allocated payload capacity */
     HEVCSEIAlternativeTransfer alternative_transfer;
 
     RK_S64 pts;
