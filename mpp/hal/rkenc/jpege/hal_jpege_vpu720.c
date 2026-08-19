@@ -786,6 +786,7 @@ const MppEncHalApi hal_jpege_vpu720 = {
     .soc_type   = {
         ROCKCHIP_SOC_RK3576,
         ROCKCHIP_SOC_RK3572,
+        ROCKCHIP_SOC_RK182X,
         ROCKCHIP_SOC_BUTT
     },
 };

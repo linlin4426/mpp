@@ -615,9 +615,9 @@ static MPP_RET hal_jpegd_rkv_control(void *hal, MpiCmd cmd_type, void *param)
 
         if (MPP_FRAME_FMT_IS_RGB(output_fmt)) {
             // The new JPEG decoder defaults to no RGB support.
-            if (soc_type >= ROCKCHIP_SOC_RK3576) {
+            if (soc_type >= ROCKCHIP_SOC_RK3576 && soc_type != ROCKCHIP_SOC_RK182X) {
                 ret = MPP_ERR_VALUE;
-            } else if (soc_type >= ROCKCHIP_SOC_RK3588) {
+            } else if (soc_type >= ROCKCHIP_SOC_RK3588 && soc_type != ROCKCHIP_SOC_RK182X) {
                 // only rgb565be and rgb888 supported
                 if (output_fmt != MPP_FMT_RGB555 && output_fmt != MPP_FMT_RGB888 ) {
                     ret = MPP_ERR_VALUE;
@@ -672,6 +672,7 @@ const MppHalApi hal_jpegd_rkv = {
         ROCKCHIP_SOC_RK3562,
         ROCKCHIP_SOC_RK3576,
         ROCKCHIP_SOC_RV1126B,
+        ROCKCHIP_SOC_RK182X,
         ROCKCHIP_SOC_BUTT
     },
 };

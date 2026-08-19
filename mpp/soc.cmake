@@ -202,6 +202,11 @@ add_soc_config("RK3572"
     "H264D,H265D,JPEGD,VP9D,AV1D,AVS2D"
     "H264E,H265E,JPEGE")
 
+add_soc_config("RK182X"
+    "VDPU720,VEPU720"
+    "JPEGD"
+    "JPEGE")
+
 # Helper macro to set all codec defaults
 macro(set_all_codec_defaults value)
     foreach(codec ${MPP_CODEC_TYPES})

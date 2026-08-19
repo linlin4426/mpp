@@ -1092,6 +1092,16 @@ static const MppSocInfo mpp_soc_infos[] = {
         {   &vdpu384b_no_avs2, &rkjpegd, &vdpu2, NULL, NULL, NULL},
         {   NULL, NULL, NULL, NULL},
     },
+    {   /*
+         * rk182x has codec:
+         * 1 - RK jpeg decoder/encoder
+         */
+        "rk182x",
+        ROCKCHIP_SOC_RK182X,
+        HAVE_JPEG_DEC | HAVE_JPEG_ENC,
+        {   &rkjpegd, NULL, NULL, NULL, NULL, NULL},
+        {   &rkjpege_vpu720, NULL, NULL, NULL},
+    },
 };
 
 static const MppSocInfo mpp_soc_default = {
