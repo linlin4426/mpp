@@ -255,6 +255,8 @@ static MPP_RET hal_h264e_vepu511_init(void *hal, MppEncHalCfg *cfg)
         goto DONE;
     }
 
+    p->osd_cfg.reg_base = &p->regs_set->reg_osd.osd;
+
     p->reorder = mpp_malloc(H264eReorderInfo, 1);
     if (NULL == p->reorder) {
         ret = MPP_ERR_MALLOC;

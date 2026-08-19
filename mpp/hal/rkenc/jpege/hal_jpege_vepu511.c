@@ -93,6 +93,7 @@ MPP_RET hal_jpege_vepu511_init(void *hal, MppEncHalCfg *cfg)
     ctx->regs           = mpp_calloc(JpegV511RegSet, 1);
     ctx->input_fmt      = mpp_calloc(VepuFmtCfg, 1);
     ctx->cfg            = cfg->cfg;
+    ctx->osd_cfg.reg_base = &((JpegV511RegSet *)ctx->regs)->reg_osd;
     ctx->frame_cnt = 0;
     ctx->enc_mode = 1;
     cfg->type = VPU_CLIENT_RKVENC;

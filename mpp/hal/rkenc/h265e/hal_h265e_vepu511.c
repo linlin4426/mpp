@@ -366,6 +366,7 @@ MPP_RET hal_h265e_vepu511_init(void *hal, MppEncHalCfg *cfg)
     ctx->frm->regs_set = mpp_calloc(H265eV511RegSet, 1);
     ctx->frm->regs_ret = mpp_calloc(H265eV511StatusElem, 1);
     ctx->frm->frame_type = INTRA_FRAME;
+    ctx->osd_cfg.reg_base = &ctx->frm->regs_set->reg_osd.osd;
 
     ctx->input_fmt      = mpp_calloc(VepuFmtCfg, 1);
     ctx->cfg            = cfg->cfg;
