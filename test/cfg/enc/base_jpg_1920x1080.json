@@ -1,4 +1,4 @@
-"enc_cfg" : {
+{
     "codec" : {
         "type" : 8
     },
@@ -155,24 +155,4 @@
         "fg_area" : 0,
         "qpmap_en" : 0
     }
-}
-"enc_args" : {
-    "type_src" : 0,
-    "frame_num" : 3,
-    "loop_cnt" : 0,
-    "nthreads" : 1,
-    "frm_step" : 1,
-    "gop_mode" : 0,
-    "vi_len" : 0,
-    "quiet" : 0,
-    "trace_fps" : 0,
-    "kmpp_mode" : 0,
-    "osd_enable" : 0,
-    "osd_mode" : 0,
-    "user_data_enable" : 0,
-    "roi_enable" : 0,
-    "roi_jpeg_enable" : 0,
-    "jpeg_osd_case" : 0,
-    "constraint_set" : 0,
-    "sei_mode" : 0
 }

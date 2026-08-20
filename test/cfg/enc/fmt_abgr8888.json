@@ -1,7 +1,5 @@
 {
-    "enc_cfg" : {
-        "prep" : {
-            "format" : 65547
-        }
+    "prep" : {
+        "format" : 65547
     }
 }

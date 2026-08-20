@@ -1,7 +1,5 @@
 {
-    "enc_cfg" : {
-        "prep" : {
-            "format" : 1
-        }
+    "prep" : {
+        "format" : 1
     }
 }

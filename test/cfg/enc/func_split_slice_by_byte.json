@@ -1,4 +1,4 @@
-"enc_cfg" : {
+{
     "split" : {
         "mode" : 1,
         "arg" : 1024,
