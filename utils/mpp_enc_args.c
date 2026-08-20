@@ -41,6 +41,7 @@ static rk_s32 mpp_enc_args_impl_deinit(void *entry, KmppObj obj, const char *cal
 
     MPP_FREE(args->file_input);
     MPP_FREE(args->file_output);
+    MPP_FREE(args->file_args);
     MPP_FREE(args->file_cfg);
     MPP_FREE(args->file_ref_cfg);
     MPP_FREE(args->file_slt);

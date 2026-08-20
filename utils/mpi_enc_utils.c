@@ -38,6 +38,8 @@
 
 #define MAX_FILE_NAME_LENGTH        256
 
+static const char *enc_opt_prio[] = {"-args", "-kmpp_mode", "-kmpp", "-cfg", "-ref_cfg", NULL};
+
 static RK_S32 qbias_arr_hevc[18] = {
     3, 6, 13, 171, 171, 171, 171,
     3, 6, 13, 171, 171, 220, 171, 85, 85, 85, 85
@@ -143,82 +145,130 @@ RK_S32 mpi_enc_width_default_stride(RK_S32 width, MppFrameFormat fmt)
     return stride;
 }
 
-static RK_S32 mpi_enc_utils_load_file(MppEncTestObjSet *obj_set)
+static RK_S32 mpi_enc_kmpp_mode_check(RK_S32 mode)
 {
-    MpiEncTestArgs *cmd = (MpiEncTestArgs *)obj_set->cmd;
-    MppEncCfg cfg_obj = obj_set->cfg_obj;
-    MppEncArgs cmd_obj = obj_set->cmd_obj;
-    char *name = cmd->file_cfg;
-    char *enc_cfg_pos = NULL;
-    char *enc_args_pos = NULL;
-    const char str_enc_cfg[] = "\"enc_cfg\" :";
-    const char str_enc_args[] = "\"enc_args\" :";
-    RK_S32 ret = MPP_NOK;
-    RK_S32 fd = -1;
-    RK_S32 size = 0;
-    void *buf = NULL;
-
-    fd = open(name, O_RDWR);
-    if (fd < 0) {
-        mpp_err_f("cfg file %s open failed for %s\n", name, strerror(errno));
-        goto error;
+    switch (mode) {
+    case 0 : {
+        /* pure userspace path (kmpp disabled), no capability check */
+    } break;
+    case 2 : {
+        /* venc_obj path */
+        if (!kmpp_cap_version(KMPP_CAP_VENC_CTRL_CFG)) {
+            mpp_loge("kmpp_mode 2 not supported: kernel has no ctrl_cfg cap\n");
+            return MPP_NOK;
+        }
+    } break;
+    case 1 : {
+        /* legacy path */
+        if (access("/dev/vcodec", F_OK)) {
+            mpp_loge("kmpp_mode 1 not supported: no /dev/vcodec\n");
+            return MPP_NOK;
+        }
+    } break;
+    default : {
+        mpp_loge("invalid kmpp_mode %d\n", mode);
+        return MPP_NOK;
+    } break;
     }
 
-    size = lseek(fd, 0, SEEK_END);
-    if (size < 0) {
-        mpp_err_f("lseek %s failed for %s\n", name, strerror(errno));
-        goto error;
+    return MPP_OK;
+}
+
+static MppCfgStrFmt mpi_enc_utils_cfg_fmt(const char *path)
+{
+    const char *ext = strrchr(path, '.');
+
+    return (ext && !strcmp(ext, ".toml")) ? MPP_CFG_STR_FMT_TOML : MPP_CFG_STR_FMT_JSON;
+}
+
+static RK_S32 mpi_enc_utils_read_file(const char *path, void **buf, RK_S32 *size)
+{
+    RK_S32 fd = -1;
+    RK_S32 file_size = 0;
+    RK_S32 ret = MPP_NOK;
+
+    fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        mpp_loge("open file %s failed for %s\n", path, strerror(errno));
+        goto done;
+    }
+
+    file_size = lseek(fd, 0, SEEK_END);
+    if (file_size < 0) {
+        mpp_loge("lseek %s failed for %s\n", path, strerror(errno));
+        goto done;
     }
 
     lseek(fd, 0, SEEK_SET);
-    mpp_logi("load cfg file %s size %d\n", name, size);
 
-    buf = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
-    if (buf == MAP_FAILED) {
-        mpp_err_f("mmap fd %d size %d failed\n", fd, size);
-        buf = NULL;
-        goto error;
+    *buf = mmap(NULL, file_size, PROT_READ, MAP_SHARED, fd, 0);
+    if (*buf == MAP_FAILED) {
+        mpp_loge("mmap file %s size %d failed\n", path, file_size);
+        *buf = NULL;
+        goto done;
     }
 
-    enc_cfg_pos = strstr(buf, str_enc_cfg);
-    if (enc_cfg_pos != NULL) {
-        enc_cfg_pos += strlen(str_enc_cfg);
-        if (mpp_enc_cfg_apply(cfg_obj, MPP_CFG_STR_FMT_JSON, enc_cfg_pos))
-            mpp_err_f("apply enc_cfg from %s failed\n", name);
-        else
-            ret = MPP_OK;
-    }
+    *size = file_size;
+    ret = MPP_OK;
 
-    enc_args_pos = strstr(buf, str_enc_args);
-    if (enc_args_pos != NULL) {
-        enc_args_pos += strlen(str_enc_args);
-        if (mpp_enc_args_apply(cmd_obj, MPP_CFG_STR_FMT_JSON, enc_args_pos))
-            mpp_err_f("apply enc_args from %s failed\n", name);
-        else
-            ret = MPP_OK;
-    }
-
-error:
-    if (buf) {
-        munmap(buf, size);
-        buf = NULL;
-    }
-    if (fd >= 0) {
+done:
+    if (fd >= 0)
         close(fd);
-        fd = -1;
-    }
+
+    return ret;
+}
+
+static MPP_RET mpi_enc_utils_load_args(MppEncTestObjSet *obj_set)
+{
+    MpiEncTestArgs *cmd = (MpiEncTestArgs *)obj_set->cmd;
+    char *path = cmd->file_args;
+    MPP_RET ret;
+    RK_S32 size = 0;
+    void *buf = NULL;
+
+    ret = mpi_enc_utils_read_file(path, &buf, &size);
+    if (ret)
+        return MPP_NOK;
+
+    mpp_logi("load args file %s size %d\n", path, size);
+
+    ret = mpp_enc_args_apply(obj_set->cmd_obj, mpi_enc_utils_cfg_fmt(path), buf);
+    if (ret)
+        mpp_loge("apply enc_args from %s failed\n", path);
+
+    munmap(buf, size);
+
+    return ret;
+}
+
+static MPP_RET mpi_enc_utils_load_cfg(MppEncTestObjSet *obj_set)
+{
+    MpiEncTestArgs *cmd = (MpiEncTestArgs *)obj_set->cmd;
+    char *path = cmd->file_cfg;
+    MPP_RET ret;
+    RK_S32 size = 0;
+    void *buf = NULL;
+
+    ret = mpi_enc_utils_read_file(path, &buf, &size);
+    if (ret)
+        return MPP_NOK;
+
+    mpp_logi("load cfg file %s size %d\n", path, size);
+
+    ret = mpp_enc_cfg_apply(obj_set->cfg_obj, mpi_enc_utils_cfg_fmt(path), buf);
+    if (ret)
+        mpp_loge("apply enc_cfg from %s failed\n", path);
+
+    munmap(buf, size);
 
     return ret;
 }
 
 MPP_RET mpi_enc_load_ref_cfg(MppEncRefCfg ref, const char *path)
 {
-    MPP_RET ret = MPP_OK;
-    MppCfgStrFmt fmt = MPP_CFG_STR_FMT_JSON;
-    RK_S32 fd = -1;
+    MPP_RET ret;
     RK_S32 size = 0;
-    char *buf = NULL;
-    const char *ext;
+    void *buf = NULL;
 
     if (!ref)
         return MPP_ERR_NULL_PTR;
@@ -226,42 +276,17 @@ MPP_RET mpi_enc_load_ref_cfg(MppEncRefCfg ref, const char *path)
     if (!path)
         return MPP_OK;
 
-    ext = strrchr(path, '.');
-    if (ext) {
-        if (!strcmp(ext, ".toml"))
-            fmt = MPP_CFG_STR_FMT_TOML;
-        else
-            fmt = MPP_CFG_STR_FMT_JSON;
-    }
-
-    fd = open(path, O_RDONLY);
-    if (fd < 0) {
-        mpp_err_f("ref_cfg file %s open failed: %s\n", path, strerror(errno));
+    ret = mpi_enc_utils_read_file(path, &buf, &size);
+    if (ret)
         return MPP_NOK;
-    }
 
-    size = lseek(fd, 0, SEEK_END);
-    if (size <= 0)
-        goto done;
+    mpp_logi("load ref_cfg file %s size %d\n", path, size);
 
-    buf = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
-    if (buf == MAP_FAILED) {
-        mpp_err_f("mmap fd %d size %d failed\n", fd, size);
-        buf = NULL;
-        goto done;
-    }
+    ret = mpp_enc_ref_cfg_apply(ref, mpi_enc_utils_cfg_fmt(path), buf);
+    if (ret)
+        mpp_loge("apply ref_cfg from %s failed\n", path);
 
-    ret = mpp_enc_ref_cfg_apply(ref, fmt, buf);
-
-done:
-    if (buf) {
-        munmap(buf, size);
-        buf = NULL;
-    }
-    if (fd >= 0) {
-        close(fd);
-        fd = -1;
-    }
+    munmap(buf, size);
 
     return ret;
 }
@@ -733,11 +758,38 @@ RK_S32 mpi_enc_opt_v(void *ctx, const char *next)
     return 0;
 }
 
+RK_S32 mpi_enc_opt_args(void *ctx, const char *next)
+{
+    MppEncTestObjSet* obj_set = (MppEncTestObjSet *)ctx;
+    MpiEncTestArgs *cmd = (MpiEncTestArgs *)obj_set->cmd;
+
+    if (next) {
+        size_t len = strnlen(next, MAX_FILE_NAME_LENGTH);
+        if (len) {
+            if (cmd->file_args) {
+                mpp_free(cmd->file_args);
+                cmd->file_args = NULL;
+            }
+
+            cmd->file_args = mpp_calloc(char, len + 1);
+            strncpy(cmd->file_args, next, len);
+
+            if (mpi_enc_utils_load_args(obj_set))
+                return -1;
+
+            return 1;
+        }
+    }
+
+    mpp_err("invalid encoder args file\n");
+
+    return 0;
+}
+
 RK_S32 mpi_enc_opt_cfg(void *ctx, const char *next)
 {
     MppEncTestObjSet* obj_set = (MppEncTestObjSet *)ctx;
     MpiEncTestArgs *cmd = (MpiEncTestArgs *)obj_set->cmd;
-    MppEncCfg cfg_obj = NULL;
     RK_S32 ret;
 
     if (next) {
@@ -751,13 +803,18 @@ RK_S32 mpi_enc_opt_cfg(void *ctx, const char *next)
             cmd->file_cfg = mpp_calloc(char, len + 1);
             strncpy(cmd->file_cfg, next, len);
 
+            if (mpi_enc_kmpp_mode_check((RK_S32)cmd->kmpp_mode))
+                return -1;
+
             if (obj_set->cfg_obj == NULL) {
-                mpp_enc_cfg_init(&cfg_obj);
-                obj_set->cfg_obj = cfg_obj;
+                ret = mpp_enc_cfg_create(&obj_set->cfg_obj, cmd->kmpp_mode);
+                if (ret || !obj_set->cfg_obj) {
+                    mpp_err_f("create enc cfg obj failed\n");
+                    return -1;
+                }
             }
 
-            ret = mpi_enc_utils_load_file(obj_set);
-            if (ret)
+            if (mpi_enc_utils_load_cfg(obj_set))
                 return -1;
 
             mpi_enc_sync_cmd(cmd, obj_set->cfg_obj);
@@ -1127,37 +1184,20 @@ RK_S32 mpi_enc_opt_kmpp(void *ctx, const char *next)
 {
     MppEncTestObjSet* obj_set = (MppEncTestObjSet *)ctx;
     MpiEncTestArgs *cmd = (MpiEncTestArgs *)obj_set->cmd;
+    RK_S32 mode;
 
-    if (next) {
-        cmd->kmpp_mode = atoi(next);
-        switch (cmd->kmpp_mode) {
-        case 0 : {
-            /* pure userspace path (kmpp disabled), no capability check */
-        } break;
-        case 2 : {
-            /* venc_obj path */
-            if (!kmpp_cap_version(KMPP_CAP_VENC_CTRL_CFG)) {
-                mpp_err("kmpp_mode 2 not supported: kernel has no ctrl_cfg cap\n");
-                return -1;
-            }
-        } break;
-        case 1 : {
-            /* legacy path */
-            if (access("/dev/vcodec", F_OK)) {
-                mpp_err("kmpp_mode 1 not supported: no /dev/vcodec\n");
-                return -1;
-            }
-        } break;
-        default : {
-            mpp_err("invalid kmpp_mode %d\n", cmd->kmpp_mode);
-            return -1;
-        } break;
-        }
-        return 1;
+    if (!next) {
+        mpp_err("invalid kmpp enable\n");
+        return 0;
     }
 
-    mpp_err("invalid kmpp enable\n");
-    return 0;
+    mode = atoi(next);
+    if (mpi_enc_kmpp_mode_check(mode))
+        return -1;
+
+    cmd->kmpp_mode = mode;
+
+    return 1;
 }
 
 static MppOptInfo enc_opts[] = {
@@ -1180,7 +1220,8 @@ static MppOptInfo enc_opts[] = {
     {"s",       "instance_nb",          "number of instances",                      mpi_enc_opt_s},
     {"v",       "trace option",         "q - quiet f - show fps",                   mpi_enc_opt_v},
     {"l",       "loop count",           "loop encoding times for each frame",       mpi_enc_opt_l},
-    {"cfg",     "cfg_file",             "enc cfg file",                             mpi_enc_opt_cfg},
+    {"args",    "args_file",            "enc test args json/toml file",             mpi_enc_opt_args},
+    {"cfg",     "cfg_file",             "enc cfg json/toml file",                   mpi_enc_opt_cfg},
     {"ref_cfg", "ref_cfg json file",    "ref_cfg json file",                        mpi_enc_opt_ref_cfg},
     {"slt",     "slt file",             "slt verify data file",                     mpi_enc_opt_slt},
     {"step",    "frame step",           "frame step, only for NV12 in slt test",    mpi_enc_opt_step},
@@ -1306,11 +1347,16 @@ MPP_RET mpi_enc_test_objset_update_by_args(MppEncTestObjSet *obj_set, int argc, 
 
     /* mark option end */
     mpp_opt_add(opts, NULL);
-    ret = mpp_opt_parse(opts, argc, argv);
+    ret = mpp_opt_parse(opts, argc, argv, enc_opt_prio);
     if (ret)
         goto done;
 
     mpi_enc_cmd_env_get(cmd);
+
+    if (mpi_enc_kmpp_mode_check((RK_S32)cmd->kmpp_mode)) {
+        ret = MPP_NOK;
+        goto done;
+    }
 
     if (cmd->type <= MPP_VIDEO_CodingAutoDetect) {
         mpp_err("invalid type %d\n", cmd->type);
@@ -1355,17 +1401,6 @@ MPP_RET mpi_enc_test_objset_update_by_args(MppEncTestObjSet *obj_set, int argc, 
                 cmd->qp_init = 26;
             if (obj_set->cfg_obj)
                 mpp_enc_cfg_set_s32(obj_set->cfg_obj, "rc:qp_init", cmd->qp_init);
-        }
-    }
-
-    if (cmd->file_cfg) {
-        if (cmd->kmpp_mode) {
-            mpp_err("file_cfg and kmpp_mode can not be set at the same time\n");
-            ret = MPP_NOK;
-            goto done;
-        } else {
-            ret = MPP_OK;
-            goto done;
         }
     }
 
@@ -2104,7 +2139,11 @@ MPP_RET mpi_enc_cfg_setup(MpiEncTestData *p, MpiEncTestArgs *cmd, MppEncCfg cfg_
         cmd->bps_target = p->width * p->height / 8 * (cmd->fps_out_num / cmd->fps_out_den);
 
     if (cfg_obj) {
-        kmpp_obj_copy(p->cfg, cfg_obj);
+        ret = kmpp_obj_copy(p->cfg, cfg_obj);
+        if (ret) {
+            mpp_err_f("copy cfg obj to encoder cfg failed ret %d\n", ret);
+            return ret;
+        }
     } else {
         mpp_enc_cfg_set_s32(cfg, "codec:type", p->type);
 

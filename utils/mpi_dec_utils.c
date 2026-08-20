@@ -704,7 +704,7 @@ RK_S32 mpi_dec_test_cmd_init(MpiDecTestCmd* cmd, int argc, char **argv)
     /* mark option end */
     mpp_opt_add(opts, NULL);
 
-    ret = mpp_opt_parse(opts, argc, argv);
+    ret = mpp_opt_parse(opts, argc, argv, NULL);
 
     if (cmd->have_input) {
         reader_init(&cmd->reader, cmd->file_input, cmd->type);

@@ -373,6 +373,17 @@ RK_S32 mpp_enc_cfg_init_k(MppEncCfg *cfg)
     return mpp_venc_kcfg_init(cfg, MPP_VENC_KCFG_TYPE_ST_CFG);
 }
 
+MPP_RET mpp_enc_cfg_create(MppEncCfg *cfg, RK_U32 mode)
+{
+    if (NULL == cfg)
+        return MPP_ERR_NULL_PTR;
+
+    if (mode)
+        return mpp_enc_cfg_init_k(cfg);
+
+    return mpp_enc_cfg_init(cfg);
+}
+
 RK_S32 mpp_enc_cfg_deinit(MppEncCfg cfg)
 {
     return kmpp_obj_put_f(cfg);

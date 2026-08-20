@@ -580,10 +580,7 @@ void *enc_test(void *arg)
         goto MPP_TEST_OUT;
     }
 
-    if (cmd->kmpp_mode)
-        ret = mpp_enc_cfg_init_k(&p->cfg);
-    else
-        ret = mpp_enc_cfg_init(&p->cfg);
+    ret = mpp_enc_cfg_create(&p->cfg, cmd->kmpp_mode);
     if (ret) {
         mpp_err_f("mpp_enc_cfg_init failed ret %d\n", ret);
         goto MPP_TEST_OUT;

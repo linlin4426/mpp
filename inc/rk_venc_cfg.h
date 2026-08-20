@@ -18,6 +18,8 @@ extern "C" {
 MPP_RET mpp_enc_cfg_init(MppEncCfg *cfg);
 /* kernel encoder config init */
 MPP_RET mpp_enc_cfg_init_k(MppEncCfg *cfg);
+/* unified encoder config creation */
+MPP_RET mpp_enc_cfg_create(MppEncCfg *cfg, RK_U32 mode);
 /* common config deinit */
 MPP_RET mpp_enc_cfg_deinit(MppEncCfg cfg);
 

@@ -45,7 +45,7 @@ MPP_RET mpp_opt_setup(MppOpt opt, void *ctx);
 /* Add NULL info to mark end of options */
 MPP_RET mpp_opt_add(MppOpt opt, MppOptInfo *info);
 
-MPP_RET mpp_opt_parse(MppOpt opt, int argc, char **argv);
+MPP_RET mpp_opt_parse(MppOpt opt, int argc, char **argv, const char **prio);
 
 #ifdef __cplusplus
 }

@@ -84,10 +84,23 @@ MPP_RET mpp_opt_add(MppOpt opt, MppOptInfo *info)
     return mpp_trie_add_info(impl->trie, info->name, info, sizeof(*info));
 }
 
-MPP_RET mpp_opt_parse(MppOpt opt, int argc, char **argv)
+static RK_S32 match_prio_opt(const char **prio, const char *arg)
+{
+    const char **p;
+
+    for (p = prio; p && *p; p++) {
+        if (strcmp(arg, *p) == 0)
+            return MPP_OK;
+    }
+
+    return MPP_NOK;
+}
+
+MPP_RET mpp_opt_parse(MppOpt opt, int argc, char **argv, const char **prio)
 {
     MppOptImpl *impl = (MppOptImpl *)opt;
     char **cfg_argv = NULL;
+    const char **p = NULL;
     RK_S32 cfg_argc_idx = 0;
     MPP_RET ret = MPP_NOK;
     RK_S32 opt_idx = 0;
@@ -105,18 +118,20 @@ MPP_RET mpp_opt_parse(MppOpt opt, int argc, char **argv)
     /* 1. put the program name at the first position of the new array */
     cfg_argv[cfg_argc_idx++] = argv[0];
 
-    /* 2. then put -cfg and its argument */
-    for (i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-cfg") == 0) {
-            cfg_argv[cfg_argc_idx++] = argv[i++];
-            if (i < argc)
-                cfg_argv[cfg_argc_idx++] = argv[i];
+    /* 2. put prio options and their arguments first, in prio list order */
+    for (p = prio; p && *p; p++) {
+        for (i = 1; i < argc; i++) {
+            if (strcmp(argv[i], *p) == 0) {
+                cfg_argv[cfg_argc_idx++] = argv[i++];
+                if (i < argc)
+                    cfg_argv[cfg_argc_idx++] = argv[i];
+            }
         }
     }
 
     /* 3. finally put other command arguments */
     for (i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-cfg") == 0)
+        if (match_prio_opt(prio, argv[i]) == MPP_OK)
             i++;
         else
             cfg_argv[cfg_argc_idx++] = argv[i];
