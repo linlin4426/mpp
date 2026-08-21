@@ -22,8 +22,8 @@ typedef void* MppSysCfg;
 extern "C" {
 #endif
 
-MPP_RET mpp_sys_cfg_get(MppSysCfg *cfg);
-MPP_RET mpp_sys_cfg_put(MppSysCfg cfg);
+rk_s32 mpp_sys_cfg_get(MppSysCfg *cfg);
+rk_s32 mpp_sys_cfg_put(MppSysCfg cfg);
 MPP_RET mpp_sys_cfg_ioctl(MppSysCfg cfg);
 
 MPP_RET mpp_sys_cfg_set_s32(MppSysCfg cfg, const char *name, RK_S32 val);
