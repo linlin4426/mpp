@@ -264,13 +264,12 @@ static MPP_RET get_packet(Kmpp *ctx, MppPacket *packet)
             memcpy(dst, pos.uptr, len);
         }
 
-        kmpp_packet_put(kmpp_pkt);
         mpp_packet_set_length(pkt, len);
     } else {
         mpp_packet_init(&pkt, pos.uptr, len);
-        mpp_packet_set_release(pkt, kmpp_release_venc_packet, ctx, kmpp_pkt);
     }
 
+    mpp_packet_set_release(pkt, kmpp_release_venc_packet, ctx, kmpp_pkt);
     mpp_packet_set_dts(pkt, dts);
     mpp_packet_set_pts(pkt, pts);
     mpp_packet_set_flag(pkt, flag);
