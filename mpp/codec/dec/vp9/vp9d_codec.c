@@ -1176,7 +1176,7 @@ RK_S32 vp9d_diff_update_prob(Vp9dReader *r, RK_S32 prob, RK_U8 *delta)
     }
     *delta = delp;
     if (prob <= 128) {
-        delp = inv_recenter_nonneg(inv_map_table[delp], prob - 1);
+        delp = 1 + inv_recenter_nonneg(inv_map_table[delp], prob - 1);
     } else {
         delp = 255 - inv_recenter_nonneg(inv_map_table[delp], 255 - prob);
     }
