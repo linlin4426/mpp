@@ -607,8 +607,8 @@ static iep_com_ops iep_ops = {
 
 iep_com_ctx* rockchip_iep_api_alloc_ctx(void)
 {
-    iep_com_ctx *com_ctx = (iep_com_ctx *)calloc(sizeof(*com_ctx), 1);
-    void *iep_ctx = calloc(sizeof(sizeof(void*)), 1);
+    iep_com_ctx *com_ctx = (iep_com_ctx *)calloc(1, sizeof(*com_ctx));
+    void *iep_ctx = calloc(1, sizeof(void *));
 
     mpp_assert(com_ctx && iep_ctx);
 
